@@ -1684,9 +1684,9 @@ interface HttpRouteParams {
 
 | Document | Relationship |
 |----------|-------------|
-| `03a` Literature Library | Defines the 12 literature tools and 18 `rc.lit.*` RPC methods aggregated here |
-| `03b` Task System | Defines the 6 task tools, 8 `rc.task.*` RPC methods, and 3 `rc.cron.presets.*` methods |
-| `03c` Workspace & Git | Defines the 6 workspace tools and 6 `rc.ws.*` RPC methods |
+| `03a` Literature Library | Defines the 12 literature tools and 26 `rc.lit.*` RPC methods aggregated here |
+| `03b` Task System | Defines the 6 task tools, 10 `rc.task.*` RPC methods, and 3 `rc.cron.presets.*` methods |
+| `03c` Workspace & Git | Defines the 6 workspace tools and 7 `rc.ws.*` RPC methods (+ 1 HTTP upload) |
 | `03d` Message Card Protocol | Defines card types (`paper_card`, `task_card`, etc.) rendered in dashboard |
 | `05` Plugin Integration Guide | Full Plugin SDK reference, plugin development workflow |
 | `02` Engineering Architecture | Gateway protocol, coupling tiers, overall system design |

@@ -235,16 +235,16 @@ The `pnpm health` script includes a bootstrap budget report:
 ```
 Bootstrap Budget Report
 ========================
-SOUL.md        2,847 / 20,000 chars  (14.2%)
-AGENTS.md      4,923 / 20,000 chars  (24.6%)
-HEARTBEAT.md   1,876 / 20,000 chars  ( 9.4%)
-BOOTSTRAP.md   1,942 / 20,000 chars  ( 9.7%)
-IDENTITY.md      487 / 20,000 chars  ( 2.4%)
-USER.md          463 / 20,000 chars  ( 2.3%)
-TOOLS.md       1,891 / 20,000 chars  ( 9.5%)
-MEMORY.md        412 / 20,000 chars  ( 2.1%)
+SOUL.md        3,877 / 20,000 chars  (19.4%)
+AGENTS.md      8,149 / 20,000 chars  (40.7%)
+HEARTBEAT.md   3,081 / 20,000 chars  (15.4%)
+BOOTSTRAP.md   3,735 / 20,000 chars  (18.7%)
+IDENTITY.md      703 / 20,000 chars  ( 3.5%)
+USER.md          827 / 20,000 chars  ( 4.1%)
+TOOLS.md       3,615 / 20,000 chars  (18.1%)
+MEMORY.md        964 / 20,000 chars  ( 4.8%)
 ────────────────────────────────────────────
-Total         14,841 / 150,000 chars  ( 9.9%)
+Total         24,951 / 150,000 chars  (16.6%)
 Status: OK — all files within budget
 ```
 
