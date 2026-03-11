@@ -1,0 +1,78 @@
+diff --git a/dist/cli/daemon-cli.js b/dist/cli/daemon-cli.js
+index d8b27557529110039cfce25ff2238eef30de19b9..e87cbf62767b3a4d5ea7a5caacf09a8604503142 100644
+--- a/dist/cli/daemon-cli.js
++++ b/dist/cli/daemon-cli.js
+@@ -3,7 +3,7 @@ import * as daemonCli from "../daemon-cli-C4fOQroR.js";
+ export const registerDaemonCli = daemonCli.t.registerDaemonCli;
+ export const runDaemonInstall = daemonCli.l;
+ export const runDaemonRestart = daemonCli.r;
+-export const runDaemonStart = async () => { throw new Error("Legacy daemon CLI export \"runDaemonStart\" is unavailable in this build. Please upgrade OpenClaw."); };
+-export const runDaemonStatus = async () => { throw new Error("Legacy daemon CLI export \"runDaemonStatus\" is unavailable in this build. Please upgrade OpenClaw."); };
+-export const runDaemonStop = async () => { throw new Error("Legacy daemon CLI export \"runDaemonStop\" is unavailable in this build. Please upgrade OpenClaw."); };
+-export const runDaemonUninstall = async () => { throw new Error("Legacy daemon CLI export \"runDaemonUninstall\" is unavailable in this build. Please upgrade OpenClaw."); };
++export const runDaemonStart = async () => { throw new Error("Legacy daemon CLI export \"runDaemonStart\" is unavailable in this build. Please upgrade Research-Claw."); };
++export const runDaemonStatus = async () => { throw new Error("Legacy daemon CLI export \"runDaemonStatus\" is unavailable in this build. Please upgrade Research-Claw."); };
++export const runDaemonStop = async () => { throw new Error("Legacy daemon CLI export \"runDaemonStop\" is unavailable in this build. Please upgrade Research-Claw."); };
++export const runDaemonUninstall = async () => { throw new Error("Legacy daemon CLI export \"runDaemonUninstall\" is unavailable in this build. Please upgrade Research-Claw."); };
+diff --git a/dist/entry.js b/dist/entry.js
+index c7ae98a77a73b672ecb378df756bb867a6965f68..e2b8fc72a8853cf411ee8cbb738950ed4ddd9634 100755
+--- a/dist/entry.js
++++ b/dist/entry.js
+@@ -303,7 +303,7 @@ if (!isMainModule({
+ 	currentFile: fileURLToPath(import.meta.url),
+ 	wrapperEntryPairs: [...ENTRY_WRAPPER_PAIRS]
+ })) {} else {
+-	process$1.title = "openclaw";
++	process$1.title = "research-claw";
+ 	installProcessWarningFilter();
+ 	normalizeEnv();
+ 	if (!isTruthyEnvValue(process$1.env.NODE_DISABLE_COMPILE_CACHE)) try {
+@@ -344,7 +344,7 @@ if (!isMainModule({
+ 			process$1.exit(code ?? 1);
+ 		});
+ 		child.once("error", (error) => {
+-			console.error("[openclaw] Failed to respawn CLI:", error instanceof Error ? error.stack ?? error.message : error);
++			console.error("[research-claw] Failed to respawn CLI:", error instanceof Error ? error.stack ?? error.message : error);
+ 			process$1.exit(1);
+ 		});
+ 		return true;
+@@ -353,10 +353,10 @@ if (!isMainModule({
+ 		if (!isRootVersionInvocation(argv)) return false;
+ 		Promise.all([import("./version-Bxx5bg6l.js").then((n) => n.r), import("./git-commit-Z4N0ntjy.js").then((n) => n.t)]).then(([{ VERSION }, { resolveCommitHash }]) => {
+ 			const commit = resolveCommitHash({ moduleUrl: import.meta.url });
+-			console.log(commit ? `OpenClaw ${VERSION} (${commit})` : `OpenClaw ${VERSION}`);
++			console.log(commit ? `Research-Claw ${VERSION} (${commit})` : `Research-Claw ${VERSION}`);
+ 			process$1.exit(0);
+ 		}).catch((error) => {
+-			console.error("[openclaw] Failed to resolve version:", error instanceof Error ? error.stack ?? error.message : error);
++			console.error("[research-claw] Failed to resolve version:", error instanceof Error ? error.stack ?? error.message : error);
+ 			process$1.exitCode = 1;
+ 		});
+ 		return true;
+@@ -366,7 +366,7 @@ if (!isMainModule({
+ 		import("./program-BY--_6zJ.js").then(({ buildProgram }) => {
+ 			buildProgram().outputHelp();
+ 		}).catch((error) => {
+-			console.error("[openclaw] Failed to display help:", error instanceof Error ? error.stack ?? error.message : error);
++			console.error("[research-claw] Failed to display help:", error instanceof Error ? error.stack ?? error.message : error);
+ 			process$1.exitCode = 1;
+ 		});
+ 		return true;
+@@ -375,7 +375,7 @@ if (!isMainModule({
+ 	if (!ensureExperimentalWarningSuppressed()) {
+ 		const parsed = parseCliProfileArgs(process$1.argv);
+ 		if (!parsed.ok) {
+-			console.error(`[openclaw] ${parsed.error}`);
++			console.error(`[research-claw] ${parsed.error}`);
+ 			process$1.exit(2);
+ 		}
+ 		if (parsed.profile) {
+@@ -383,7 +383,7 @@ if (!isMainModule({
+ 			process$1.argv = parsed.argv;
+ 		}
+ 		if (!tryHandleRootVersionFastPath(process$1.argv) && !tryHandleRootHelpFastPath(process$1.argv)) import("./run-main-BcgwOk2p.js").then(({ runCli }) => runCli(process$1.argv)).catch((error) => {
+-			console.error("[openclaw] Failed to start CLI:", error instanceof Error ? error.stack ?? error.message : error);
++			console.error("[research-claw] Failed to start CLI:", error instanceof Error ? error.stack ?? error.message : error);
+ 			process$1.exitCode = 1;
+ 		});
+ 	}
