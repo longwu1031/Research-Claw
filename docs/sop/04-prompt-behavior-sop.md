@@ -21,15 +21,15 @@ This SOP governs all development on the **bootstrap file system** — the 8 mark
 
 | File | Chars | Purpose | Load Priority |
 |------|------:|---------|--------------|
-| `SOUL.md` | 3,877 | Research persona, core principles, red lines | Always |
-| `AGENTS.md` | 8,149 | Session workflow, SOP, HiL protocol, output formatting | Always |
-| `HEARTBEAT.md` | 3,081 | Periodic checks: deadlines, digest, reading reminders | Cron only (lightweight mode) |
-| `BOOTSTRAP.md` | 3,735 | First-run onboarding (self-renames to .done after setup) | First run only |
+| `SOUL.md` | 4,058 | Research persona, core principles, red lines (mock data exception) | Always |
+| `AGENTS.md` | 17,316 | Session workflow, SOP, HiL protocol, card JSON examples, discipline workflows | Always |
+| `HEARTBEAT.md` | 3,312 | Periodic checks: deadlines, digest, reading reminders, group meeting prep | Cron only (lightweight mode) |
+| `BOOTSTRAP.md` | 6,363 | First-run onboarding: IM, workspace, group meeting, honey demo (self-renames to .done) | First run only |
 | `IDENTITY.md` | 703 | Product identity, persona | Always |
-| `USER.md` | 827 | User profile template | Always |
-| `TOOLS.md` | 3,615 | API reference, local tools | Always |
-| `MEMORY.md` | ~800 | Persistent memory template | Always |
-| **Total** | **24,787** | | |
+| `USER.md` | 970 | User profile template (incl. group meeting) | Always |
+| `TOOLS.md` | 4,604 | API reference, 24 local tools | Always |
+| `MEMORY.md` | 964 | Persistent memory template (v1.1) | Always |
+| **Total** | **38,290** | | |
 
 **Limits:** 150,000 chars total, 20,000 chars per file.
 
@@ -241,6 +241,14 @@ Before editing any bootstrap file:
 
 - [2026-03-11] [Claude] Initial 8 bootstrap files created (24.5K chars total)
 - [2026-03-11] [Claude] MEMORY.md restructured to v1.1 (Global + Current Focus + Projects)
+- [2026-03-12] [Claude] Phase 2C: Complete rewrite of AGENTS.md (v2.0, 17.3K chars) -- JSON card examples, 6 card types (incl. radar_digest), discipline workflows, HiL nuances, cold start protocol
+- [2026-03-12] [Claude] Phase 2C: Complete rewrite of BOOTSTRAP.md (v2.0, 6.4K chars) -- IM setup, workspace folder, group meeting, honey feature demo
+- [2026-03-12] [Claude] Phase 2C: Complete rewrite of HEARTBEAT.md (v2.0, 3.3K chars) -- JSON output format, group meeting prep check
+- [2026-03-12] [Claude] Phase 2C: TOOLS.md updated (v2.0, 4.6K chars) -- 24 tools (was 18), added 6 extended library tools
+- [2026-03-12] [Claude] Phase 2C: SOUL.md updated (v2.0) -- added mock data exception to Red Line #4
+- [2026-03-12] [Claude] Phase 2C: USER.md updated (v2.0) -- added Group Meeting section
+- [2026-03-12] [Claude] Phase 2C: IDENTITY.md and MEMORY.md verified (no changes needed)
+- [2026-03-12] [Claude] Phase 2C: Total 38.3K chars across 8 files (budget: 150K)
 
 ### 6.2 Always-Loaded Skill
 

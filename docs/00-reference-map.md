@@ -109,7 +109,7 @@ All tables prefixed `rc_` to avoid collision with OpenClaw internals. Database l
 |-----------|------:|-------------|-------|
 | `rc.lit.*` | 26 | 03a §5 | Literature CRUD, search, tags, reading sessions, citations, notes, collections, batch/import/export |
 | `rc.task.*` | 10 | 03b §5 | Task CRUD, complete, upcoming, overdue, link, notes |
-| `rc.ws.*` | 7 | 03c §4 | Workspace tree, read, history, diff, restore, save (+ HTTP upload) |
+| `rc.ws.*` | 6 | 03c §4 | Workspace tree, read, history, diff, restore, save (upload is HTTP — see §3.6) |
 | `rc.cron.*` | 3 | 03b §5 | Cron preset list, activate, deactivate |
 
 **Full RPC method list** (canonical names from module docs):
@@ -183,16 +183,16 @@ Convention: fenced code blocks with card type as language tag. Standard code blo
 
 | File | Defining Doc | Chars | Purpose |
 |------|-------------|------:|---------|
-| `SOUL.md` | 04 §3 | 3,877 | Research persona, core principles, red lines |
-| `AGENTS.md` | 04 §4 | 8,149 | Session workflow, SOP, HiL protocol, output formatting |
-| `HEARTBEAT.md` | 04 §5 | 3,081 | Periodic checks: deadlines, digest, reading reminders |
-| `BOOTSTRAP.md` | 04 §6 | 3,735 | First-run onboarding (self-deletes after setup) |
+| `SOUL.md` | 04 §3 | 4,058 | Research persona, core principles, red lines |
+| `AGENTS.md` | 04 §4 | 17,316 | Session workflow, SOP, HiL protocol, output formatting, card examples |
+| `HEARTBEAT.md` | 04 §5 | 3,312 | Periodic checks: deadlines, digest, reading reminders |
+| `BOOTSTRAP.md` | 04 §6 | 6,363 | First-run onboarding (self-deletes after setup) |
 | `IDENTITY.md` | 04 §7 | 703 | Product identity, persona |
-| `USER.md` | 04 §8 | 827 | User profile template |
-| `TOOLS.md` | 04 §9 | 3,615 | API reference, local tools |
+| `USER.md` | 04 §8 | 970 | User profile template |
+| `TOOLS.md` | 04 §9 | 4,604 | API reference, local tools |
 | `MEMORY.md` | 04 §10 | 964 | Persistent memory template (v1.1: Global + Current Focus + Projects) |
 
-**Total:** ~24,951 chars (limit: 150K total, 20K per file).
+**Total:** ~38,290 chars (limit: 150K total, 20K per file).
 
 ### 3.6 HTTP Endpoints
 

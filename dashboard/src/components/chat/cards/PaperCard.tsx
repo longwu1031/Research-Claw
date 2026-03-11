@@ -1,7 +1,238 @@
-// PaperCard — Research-Claw Dashboard Component
-// TODO: Implement per docs/modules/03e-dashboard-ui.md
-import React from 'react';
+// Verified against spec 03d §3.1 + 01 §12.1
+import React, { useCallback } from 'react';
+import { Button, Tag, Typography, message } from 'antd';
+import { BookOutlined, CopyOutlined, FilePdfOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
+import CardContainer from './CardContainer';
+import { useConfigStore } from '@/stores/config';
+import { useGatewayStore } from '@/stores/gateway';
+import { getThemeTokens } from '@/styles/theme';
+import type { PaperCard as PaperCardType } from '@/types/cards';
 
-export default function PaperCard() {
-  return <div>TODO: PaperCard</div>;
+const { Text } = Typography;
+
+/** Status badge colors — spec 01 §12.1 */
+const STATUS_COLORS: Record<string, string> = {
+  unread: '#71717A',   // gray (muted)
+  reading: '#3B82F6',  // blue
+  read: '#22C55E',     // green
+  reviewed: '#A855F7', // purple
+};
+
+function StatusBadge({ status }: { status?: string }) {
+  if (!status) return null;
+  const color = STATUS_COLORS[status] ?? '#71717A';
+  const isFilled = status !== 'unread';
+
+  return (
+    <span
+      data-testid="status-badge"
+      style={{
+        display: 'inline-block',
+        width: 8,
+        height: 8,
+        borderRadius: '50%',
+        border: `2px solid ${color}`,
+        background: isFilled ? color : 'transparent',
+        marginRight: 8,
+        verticalAlign: 'middle',
+      }}
+    />
+  );
+}
+
+export default function PaperCard(props: PaperCardType) {
+  const { t } = useTranslation();
+  const theme = useConfigStore((s) => s.theme);
+  const tokens = getThemeTokens(theme);
+  const client = useGatewayStore((s) => s.client);
+
+  const borderColor = STATUS_COLORS[props.read_status ?? ''] ?? tokens.text.muted;
+
+  const handleAddToLibrary = useCallback(async () => {
+    if (!client) return;
+    try {
+      await client.request('rc.lit.add', {
+        title: props.title,
+        authors: props.authors,
+        venue: props.venue,
+        year: props.year,
+        doi: props.doi,
+        url: props.url,
+        arxiv_id: props.arxiv_id,
+      });
+    } catch {
+      // Error handled by gateway layer
+    }
+  }, [client, props]);
+
+  const handleCite = useCallback(async () => {
+    const bibtex = `@article{,
+  title={${props.title}},
+  author={${props.authors.join(' and ')}},${props.venue ? `\n  journal={${props.venue}},` : ''}${props.year ? `\n  year={${props.year}},` : ''}${props.doi ? `\n  doi={${props.doi}},` : ''}
+}`;
+    try {
+      await navigator.clipboard.writeText(bibtex);
+      message.success(t('card.paper.citationCopied'));
+    } catch {
+      // Clipboard not available
+    }
+  }, [props, t]);
+
+  const pdfUrl = props.url ?? (props.arxiv_id ? `https://arxiv.org/pdf/${props.arxiv_id}` : null);
+
+  return (
+    <CardContainer borderColor={borderColor}>
+      {/* Header: status badge + title */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 8 }}>
+        <StatusBadge status={props.read_status} />
+        <Text
+          strong
+          style={{
+            fontSize: 15,
+            color: tokens.text.primary,
+            lineHeight: 1.4,
+            flex: 1,
+          }}
+        >
+          {props.title}
+        </Text>
+      </div>
+
+      {/* Authors */}
+      <div style={{ marginBottom: 4 }}>
+        <Text style={{ fontSize: 12, color: tokens.text.muted }}>
+          {t('card.paper.authors')}:{' '}
+        </Text>
+        <Text style={{ fontSize: 12, color: tokens.text.secondary }}>
+          {props.authors.join(', ')}
+        </Text>
+      </div>
+
+      {/* Venue + Year */}
+      {(props.venue || props.year) && (
+        <div style={{ marginBottom: 4 }}>
+          {props.venue && (
+            <>
+              <Text style={{ fontSize: 12, color: tokens.text.muted }}>
+                {t('card.paper.venue')}:{' '}
+              </Text>
+              <Text style={{ fontSize: 12, color: tokens.text.secondary }}>
+                {props.venue}
+              </Text>
+            </>
+          )}
+          {props.venue && props.year && (
+            <Text style={{ fontSize: 12, color: tokens.text.muted }}> | </Text>
+          )}
+          {props.year && (
+            <>
+              <Text style={{ fontSize: 12, color: tokens.text.muted }}>
+                {t('card.paper.year')}:{' '}
+              </Text>
+              <Text style={{ fontSize: 12, color: tokens.text.secondary }}>
+                {props.year}
+              </Text>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* DOI */}
+      {props.doi && (
+        <div style={{ marginBottom: 4 }}>
+          <Text style={{ fontSize: 12, color: tokens.text.muted }}>
+            {t('card.paper.doi')}:{' '}
+          </Text>
+          <a
+            href={`https://doi.org/${props.doi}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: 12, color: tokens.accent.blue }}
+          >
+            {props.doi}
+          </a>
+        </div>
+      )}
+
+      {/* Abstract preview */}
+      {props.abstract_preview ? (
+        <Text
+          style={{
+            display: 'block',
+            fontSize: 13,
+            color: tokens.text.secondary,
+            marginTop: 8,
+            marginBottom: 8,
+            lineHeight: 1.5,
+          }}
+        >
+          {props.abstract_preview}
+        </Text>
+      ) : (
+        <Text
+          type="secondary"
+          style={{ display: 'block', fontSize: 12, marginTop: 8, marginBottom: 8, fontStyle: 'italic' }}
+        >
+          {t('card.paper.noAbstract')}
+        </Text>
+      )}
+
+      {/* Tags */}
+      {props.tags && props.tags.length > 0 && (
+        <div style={{ marginBottom: 8 }}>
+          <Text style={{ fontSize: 12, color: tokens.text.muted }}>
+            {t('card.paper.tags')}:{' '}
+          </Text>
+          {props.tags.map((tag) => (
+            <Tag key={tag} style={{ fontSize: 11 }}>
+              {tag}
+            </Tag>
+          ))}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <Button
+          size="small"
+          icon={<BookOutlined />}
+          disabled={!!props.library_id}
+          onClick={handleAddToLibrary}
+          style={{
+            borderColor: tokens.accent.blue,
+            color: props.library_id ? tokens.text.muted : tokens.accent.blue,
+          }}
+        >
+          {props.library_id ? t('card.paper.inLibrary') : t('card.paper.addToLibrary')}
+        </Button>
+
+        <Button
+          size="small"
+          icon={<CopyOutlined />}
+          onClick={handleCite}
+          style={{
+            borderColor: tokens.accent.blue,
+            color: tokens.accent.blue,
+          }}
+        >
+          {t('card.paper.cite')}
+        </Button>
+
+        {pdfUrl && (
+          <Button
+            size="small"
+            icon={<FilePdfOutlined />}
+            onClick={() => window.open(pdfUrl, '_blank', 'noopener,noreferrer')}
+            style={{
+              borderColor: tokens.accent.blue,
+              color: tokens.accent.blue,
+            }}
+          >
+            {t('card.paper.openPdf')}
+          </Button>
+        )}
+      </div>
+    </CardContainer>
+  );
 }

@@ -48,6 +48,20 @@
       "reading": "在读",
       "read": "已读",
       "reviewed": "已审阅"
+    },
+    "empty": "暂无论文。\n让助手为你查找论文，或拖放 PDF 文件添加。",
+    "paperActions": {
+      "openPdf": "打开 PDF",
+      "cite": "引用",
+      "remove": "移除",
+      "editTags": "编辑标签"
+    },
+    "filter": "筛选",
+    "sortBy": "排序方式",
+    "sortOptions": {
+      "addedAt": "添加日期",
+      "year": "年份",
+      "title": "标题"
     }
   },
   "tasks": {
@@ -60,6 +74,23 @@
       "all": "全部",
       "human": "我的任务",
       "agent": "助手任务"
+    },
+    "noDeadline": "无截止日期",
+    "completedCount": "已完成 ({{count}})",
+    "empty": "暂无任务。\n让助手帮你规划科研计划。",
+    "allDone": "所有任务已完成。",
+    "priority": {
+      "urgent": "紧急",
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    },
+    "status": {
+      "todo": "待办",
+      "in_progress": "进行中",
+      "blocked": "阻塞",
+      "done": "完成",
+      "cancelled": "已取消"
     }
   },
   "workspace": {
@@ -67,13 +98,24 @@
     "sources": "源文件",
     "outputs": "输出文件",
     "upload": "上传文件",
-    "history": "版本历史"
+    "history": "版本历史",
+    "recentChanges": "最近变更",
+    "fileTree": "文件树",
+    "empty": "工作区为空。\n文件将在你和助手创建时出现在此处。",
+    "filesChanged": "{{count}} 个文件已修改",
+    "dragDrop": "拖放文件到此上传"
   },
   "radar": {
     "title": "科研雷达",
     "keywords": "追踪关键词",
     "authors": "追踪作者",
-    "journals": "追踪期刊"
+    "journals": "追踪期刊",
+    "tracking": "追踪配置",
+    "editViaChat": "通过聊天编辑...",
+    "findings": "最新发现",
+    "refresh": "刷新",
+    "empty": "尚未配置雷达。\n告诉助手你想监控的主题、作者或期刊。",
+    "sources": "来源"
   },
   "settings": {
     "title": "设置",
@@ -90,7 +132,43 @@
       "label": "语言",
       "en": "English",
       "zhCN": "中文"
-    }
+    },
+    "notificationSound": "通知声音",
+    "autoScroll": "自动滚动聊天",
+    "timestampFormat": "时间戳格式",
+    "timestampRelative": "相对时间",
+    "timestampAbsolute": "绝对时间",
+    "timestampIso": "ISO 8601",
+    "fileOpenBehavior": "文件打开方式",
+    "fileOpenSystem": "系统默认",
+    "fileOpenInternal": "内置查看器",
+    "modelProvider": "服务商",
+    "modelSelection": "模型",
+    "apiKeyLabel": "API 密钥",
+    "temperature": "Temperature",
+    "maxTokens": "最大输出 tokens",
+    "systemPromptAppend": "附加系统提示",
+    "proxyEnabled": "启用代理",
+    "proxyProtocol": "协议",
+    "proxyHost": "主机",
+    "proxyPort": "端口",
+    "proxyAuth": "认证",
+    "proxyUsername": "用户名",
+    "proxyPassword": "密码",
+    "proxyTest": "测试连接",
+    "proxyTestSuccess": "代理工作正常",
+    "proxyTestFailed": "代理测试失败：{{error}}",
+    "aboutVersion": "Research-Claw v{{version}}",
+    "aboutOpenClaw": "OpenClaw v{{version}}",
+    "aboutGateway": "网关端点",
+    "aboutPlugins": "插件",
+    "aboutBootstrap": "引导文件",
+    "aboutLogs": "打开日志文件夹",
+    "aboutDiagnostics": "复制诊断信息",
+    "aboutDiagnosticsCopied": "诊断信息已复制到剪贴板",
+    "saved": "已保存",
+    "saveFailed": "保存失败",
+    "copyFailed": "复制失败"
   },
   "setup": {
     "title": "欢迎使用科研龙虾",
@@ -134,5 +212,103 @@
   },
   "panel": {
     "awaitingPlugin": "等待插件实现"
+  },
+  "card": {
+    "paper": {
+      "addToLibrary": "添加到文献库",
+      "inLibrary": "已在文献库中",
+      "cite": "引用",
+      "openPdf": "打开 PDF",
+      "citationCopied": "引用已复制到剪贴板",
+      "authors": "作者",
+      "venue": "发表于",
+      "year": "年份",
+      "doi": "DOI",
+      "tags": "标签",
+      "noAbstract": "无摘要"
+    },
+    "task": {
+      "viewInPanel": "在任务面板中查看",
+      "markComplete": "标记完成",
+      "deadline": "截止日期",
+      "priority": "优先级",
+      "status": "状态",
+      "relatedPaper": "关联论文",
+      "overdue": "已逾期",
+      "dueIn": "{{days}} 天后到期",
+      "noDl": "无截止日期"
+    },
+    "progress": {
+      "title": "科研进度",
+      "papersRead": "论文已读",
+      "papersAdded": "论文已添加",
+      "tasksCompleted": "任务已完成",
+      "tasksCreated": "任务已创建",
+      "writingWords": "写作字数",
+      "readingMinutes": "阅读时长（分钟）",
+      "highlights": "亮点"
+    },
+    "approval": {
+      "title": "需要审批",
+      "action": "操作",
+      "context": "背景",
+      "riskLevel": "风险等级",
+      "details": "详情",
+      "approve": "批准",
+      "reject": "拒绝",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "riskLow": "低",
+      "riskMedium": "中",
+      "riskHigh": "高"
+    },
+    "radar": {
+      "title": "雷达更新",
+      "source": "来源",
+      "query": "查询",
+      "period": "时间段",
+      "found": "发现 {{count}} 篇新论文",
+      "notablePapers": "值得关注的论文",
+      "relevance": "相关原因"
+    },
+    "file": {
+      "open": "打开",
+      "download": "下载",
+      "path": "路径",
+      "size": "大小",
+      "type": "类型",
+      "gitNew": "新文件",
+      "gitModified": "已修改",
+      "gitCommitted": "已提交"
+    }
+  },
+  "code": {
+    "copy": "复制",
+    "copied": "已复制！",
+    "save": "保存"
+  },
+  "notification": {
+    "markAllRead": "全部已读",
+    "noNotifications": "暂无通知",
+    "newNotification": "新通知"
+  },
+  "project": {
+    "newProject": "新建项目...",
+    "switchProject": "切换项目",
+    "allProjects": "所有项目"
+  },
+  "error": {
+    "title": "出了点问题",
+    "retry": "重试",
+    "details": "详情"
+  },
+  "a11y": {
+    "mainContent": "聊天区域",
+    "sidePanel": "侧边面板",
+    "navigation": "导航",
+    "notifications": "打开通知",
+    "collapseNav": "折叠导航",
+    "expandNav": "展开导航",
+    "closePanel": "关闭面板"
   }
 }

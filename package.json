@@ -22,6 +22,7 @@
     "sync-upstream": "bash scripts/sync-upstream.sh"
   },
   "dependencies": {
+    "@wentorai/research-plugins": "^1.0.0",
     "openclaw": "2026.3.8"
   },
   "devDependencies": {

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Button, Tooltip, Typography } from 'antd';
+import React, { useEffect, useMemo } from 'react';
+import { Button, Dropdown, Tooltip, Typography } from 'antd';
 import {
   BookOutlined,
   FolderOutlined,
@@ -9,9 +9,12 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   AppstoreOutlined,
+  PlusOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useUiStore, type PanelTab } from '../stores/ui';
+import { useSessionsStore } from '../stores/sessions';
+import { useChatStore } from '../stores/chat';
 
 const { Text } = Typography;
 
@@ -38,6 +41,18 @@ export default function LeftNav() {
   const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
   const toggleRightPanel = useUiStore((s) => s.toggleRightPanel);
 
+  const sessions = useSessionsStore((s) => s.sessions);
+  const activeSessionKey = useSessionsStore((s) => s.activeSessionKey);
+  const loadSessions = useSessionsStore((s) => s.loadSessions);
+  const switchSession = useSessionsStore((s) => s.switchSession);
+  const createSession = useSessionsStore((s) => s.createSession);
+  const send = useChatStore((s) => s.send);
+
+  useEffect(() => {
+    loadSessions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleNavClick = (tab: PanelTab) => {
     if (rightPanelTab === tab && rightPanelOpen) {
       toggleRightPanel();
@@ -45,6 +60,76 @@ export default function LeftNav() {
       setRightPanelTab(tab);
     }
   };
+
+  // Build project switcher dropdown items
+  const projectMenuItems = useMemo(() => {
+    const items: Array<{ key: string; label: React.ReactNode; onClick?: () => void }> = [];
+
+    // "All Projects" at top
+    items.push({
+      key: 'all',
+      label: (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <AppstoreOutlined style={{ fontSize: 12 }} />
+          <span>{t('project.allProjects')}</span>
+        </div>
+      ),
+      onClick: () => switchSession(''),
+    });
+
+    // Divider placeholder via type
+    if (sessions.length > 0) {
+      items.push({ key: 'divider', label: <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} /> });
+    }
+
+    // Session items
+    for (const session of sessions.slice(0, 10)) {
+      const isActive = session.key === activeSessionKey;
+      items.push({
+        key: session.key,
+        label: (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: isActive ? 'var(--accent-primary)' : 'var(--text-tertiary)',
+              }}
+            />
+            <span style={{ fontWeight: isActive ? 600 : 400 }}>
+              {session.label ?? `Session ${session.key.slice(0, 8)}`}
+            </span>
+          </div>
+        ),
+        onClick: () => switchSession(session.key),
+      });
+    }
+
+    // "New Project" at bottom
+    items.push({ key: 'divider2', label: <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} /> });
+    items.push({
+      key: 'new',
+      label: (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <PlusOutlined style={{ fontSize: 12 }} />
+          <span>{t('project.newProject')}</span>
+        </div>
+      ),
+      onClick: async () => {
+        const key = await createSession();
+        switchSession(key);
+      },
+    });
+
+    return items;
+  }, [sessions, activeSessionKey, switchSession, createSession, t]);
+
+  const activeSessionLabel = useMemo(() => {
+    if (!activeSessionKey) return t('nav.project.default');
+    const session = sessions.find((s) => s.key === activeSessionKey);
+    return session?.label ?? `Session ${activeSessionKey.slice(0, 8)}`;
+  }, [activeSessionKey, sessions, t]);
 
   return (
     <div
@@ -64,27 +149,39 @@ export default function LeftNav() {
         }}
       >
         {collapsed ? (
-          <Tooltip title={t('nav.project.switch')} placement="right">
-            <Button
-              type="text"
-              icon={<AppstoreOutlined />}
-              style={{ width: '100%', color: 'var(--text-secondary)' }}
-            />
+          <Tooltip title={t('project.switchProject')} placement="right">
+            <Dropdown menu={{ items: projectMenuItems }} trigger={['click']} placement="bottomLeft">
+              <Button
+                type="text"
+                icon={<AppstoreOutlined />}
+                style={{ width: '100%', color: 'var(--text-secondary)' }}
+              />
+            </Dropdown>
           </Tooltip>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <AppstoreOutlined style={{ color: 'var(--accent-secondary)', fontSize: 16 }} />
-            <Text
-              ellipsis
+          <Dropdown menu={{ items: projectMenuItems }} trigger={['click']} placement="bottomLeft">
+            <div
               style={{
-                flex: 1,
-                fontSize: 13,
-                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                cursor: 'pointer',
+                padding: '4px 0',
               }}
             >
-              {t('nav.project.default')}
-            </Text>
-          </div>
+              <AppstoreOutlined style={{ color: 'var(--accent-secondary)', fontSize: 16 }} />
+              <Text
+                ellipsis
+                style={{
+                  flex: 1,
+                  fontSize: 13,
+                  fontWeight: 500,
+                }}
+              >
+                {activeSessionLabel}
+              </Text>
+            </div>
+          </Dropdown>
         )}
       </div>
 
@@ -145,6 +242,7 @@ export default function LeftNav() {
             size="small"
             icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
             onClick={toggleLeftNav}
+            aria-label={collapsed ? t('a11y.expandNav') : t('a11y.collapseNav')}
             style={{ color: 'var(--text-tertiary)' }}
           />
         </Tooltip>

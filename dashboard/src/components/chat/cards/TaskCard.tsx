@@ -1,7 +1,196 @@
-// TaskCard — Research-Claw Dashboard Component
-// TODO: Implement per docs/modules/03e-dashboard-ui.md
-import React from 'react';
+// Verified against spec 03d §3.2 + 01 §12.2
+import React, { useCallback } from 'react';
+import { Button, Tag, Typography } from 'antd';
+import { CheckCircleOutlined, RightOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
+import CardContainer from './CardContainer';
+import { useConfigStore } from '@/stores/config';
+import { useGatewayStore } from '@/stores/gateway';
+import { useUiStore } from '@/stores/ui';
+import { getThemeTokens } from '@/styles/theme';
+import type { TaskCard as TaskCardType } from '@/types/cards';
 
-export default function TaskCard() {
-  return <div>TODO: TaskCard</div>;
+const { Text } = Typography;
+
+/** Priority border colors — spec 01 §7.4.4 + §12.2 */
+const PRIORITY_COLORS: Record<string, string> = {
+  urgent: '#EF4444',
+  high: '#F59E0B',
+  medium: '#3B82F6',
+  low: '#6B7280',
+};
+
+/** Status badge colors — spec 01 §12.2 */
+const STATUS_STYLES: Record<string, { color: string; strikethrough?: boolean }> = {
+  todo: { color: '#6B7280' },
+  in_progress: { color: '#3B82F6' },
+  done: { color: '#22C55E' },
+  blocked: { color: '#EF4444' },
+  cancelled: { color: '#6B7280', strikethrough: true },
+};
+
+function getDeadlineInfo(
+  deadline: string | undefined,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): { text: string; color?: string } {
+  if (!deadline) return { text: t('card.task.noDl') };
+
+  const now = new Date();
+  const dl = new Date(deadline);
+  const diffMs = dl.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    return { text: t('card.task.overdue'), color: '#EF4444' };
+  }
+  if (diffDays <= 3) {
+    return { text: t('card.task.dueIn', { days: diffDays }), color: '#F59E0B' };
+  }
+  return { text: dl.toLocaleDateString() };
+}
+
+export default function TaskCard(props: TaskCardType) {
+  const { t } = useTranslation();
+  const theme = useConfigStore((s) => s.theme);
+  const tokens = getThemeTokens(theme);
+  const client = useGatewayStore((s) => s.client);
+  const setRightPanelTab = useUiStore((s) => s.setRightPanelTab);
+
+  const borderColor = PRIORITY_COLORS[props.priority] ?? '#6B7280';
+  const statusStyle = STATUS_STYLES[props.status] ?? { color: '#6B7280' };
+  const deadlineInfo = getDeadlineInfo(props.deadline, t);
+
+  const canComplete = !!props.id && props.status !== 'done' && props.status !== 'cancelled';
+
+  const handleMarkComplete = useCallback(async () => {
+    if (!client || !props.id) return;
+    try {
+      await client.request('rc.task.complete', { id: props.id });
+    } catch {
+      // Error handled by gateway layer
+    }
+  }, [client, props.id]);
+
+  const handleViewInPanel = useCallback(() => {
+    setRightPanelTab('tasks');
+  }, [setRightPanelTab]);
+
+  return (
+    <CardContainer borderColor={borderColor}>
+      {/* Title */}
+      <Text
+        strong
+        style={{
+          fontSize: 15,
+          color: tokens.text.primary,
+          display: 'block',
+          marginBottom: 8,
+          textDecoration: statusStyle.strikethrough ? 'line-through' : undefined,
+        }}
+      >
+        {props.title}
+      </Text>
+
+      {/* Description */}
+      {props.description && (
+        <Text
+          style={{
+            fontSize: 13,
+            color: tokens.text.secondary,
+            display: 'block',
+            marginBottom: 8,
+            lineHeight: 1.5,
+          }}
+        >
+          {props.description}
+        </Text>
+      )}
+
+      {/* Metadata grid */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+        {/* Priority */}
+        <div>
+          <Text style={{ fontSize: 12, color: tokens.text.muted }}>
+            {t('card.task.priority')}:{' '}
+          </Text>
+          <Tag
+            color={borderColor}
+            style={{ fontSize: 11 }}
+          >
+            {props.priority}
+          </Tag>
+        </div>
+
+        {/* Status */}
+        <div>
+          <Text style={{ fontSize: 12, color: tokens.text.muted }}>
+            {t('card.task.status')}:{' '}
+          </Text>
+          <Tag
+            color={statusStyle.color}
+            style={{
+              fontSize: 11,
+              textDecoration: statusStyle.strikethrough ? 'line-through' : undefined,
+            }}
+          >
+            {props.status.replace('_', ' ')}
+          </Tag>
+        </div>
+
+        {/* Deadline */}
+        <div>
+          <Text style={{ fontSize: 12, color: tokens.text.muted }}>
+            {t('card.task.deadline')}:{' '}
+          </Text>
+          <Text
+            style={{
+              fontSize: 12,
+              color: deadlineInfo.color ?? tokens.text.secondary,
+              fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
+            }}
+          >
+            {deadlineInfo.text}
+          </Text>
+        </div>
+
+        {/* Related paper */}
+        {props.related_paper_title && (
+          <div>
+            <Text style={{ fontSize: 12, color: tokens.text.muted }}>
+              {t('card.task.relatedPaper')}:{' '}
+            </Text>
+            <Text style={{ fontSize: 12, color: tokens.text.secondary }}>
+              {props.related_paper_title}
+            </Text>
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <Button
+          type="link"
+          size="small"
+          onClick={handleViewInPanel}
+          style={{ color: tokens.accent.blue, paddingLeft: 0, fontSize: 12 }}
+        >
+          {t('card.task.viewInPanel')} <RightOutlined />
+        </Button>
+
+        {canComplete && (
+          <Button
+            size="small"
+            icon={<CheckCircleOutlined />}
+            onClick={handleMarkComplete}
+            style={{
+              borderColor: tokens.accent.green,
+              color: tokens.accent.green,
+            }}
+          >
+            {t('card.task.markComplete')}
+          </Button>
+        )}
+      </div>
+    </CardContainer>
+  );
 }

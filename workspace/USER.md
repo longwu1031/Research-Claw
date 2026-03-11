@@ -1,8 +1,7 @@
 ---
 file: USER.md
-version: 1.0
-updated: 2026-03-11
-chars: ~500
+version: 2.0
+updated: 2026-03-12
 ---
 
 # User Profile
@@ -12,6 +11,10 @@ chars: ~500
 - **Field:** (your primary research field)
 - **Career stage:** (undergraduate / graduate / postdoc / faculty / industry)
 - **Institution:** (your institution, optional)
+
+## Group Meeting
+- **Schedule:** (day and time, e.g., "Wednesday 14:00")
+- **Weekly prep:** (yes/no -- whether agent should prepare recap before meeting)
 
 ## Current Projects
 - (project title) — deadline: (date) — stage: (planning/review/writing/...)

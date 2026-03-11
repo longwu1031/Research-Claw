@@ -134,6 +134,7 @@ export default function RightPanel() {
           size="small"
           icon={<CloseOutlined />}
           onClick={toggleRightPanel}
+          aria-label={t('a11y.closePanel')}
           style={{ color: 'var(--text-tertiary)' }}
         />
       </div>

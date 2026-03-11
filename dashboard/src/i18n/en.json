@@ -48,6 +48,20 @@
       "reading": "Reading",
       "read": "Read",
       "reviewed": "Reviewed"
+    },
+    "empty": "No papers yet.\nAsk the agent to find papers for you, or drop a PDF here to add it.",
+    "paperActions": {
+      "openPdf": "Open PDF",
+      "cite": "Cite",
+      "remove": "Remove",
+      "editTags": "Edit tags"
+    },
+    "filter": "Filter",
+    "sortBy": "Sort by",
+    "sortOptions": {
+      "addedAt": "Date added",
+      "year": "Year",
+      "title": "Title"
     }
   },
   "tasks": {
@@ -60,6 +74,23 @@
       "all": "All",
       "human": "My Tasks",
       "agent": "Agent Tasks"
+    },
+    "noDeadline": "No Deadline",
+    "completedCount": "Completed ({{count}})",
+    "empty": "No tasks yet.\nAsk the agent to help you plan your research.",
+    "allDone": "All tasks completed.",
+    "priority": {
+      "urgent": "Urgent",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "status": {
+      "todo": "To Do",
+      "in_progress": "In Progress",
+      "blocked": "Blocked",
+      "done": "Done",
+      "cancelled": "Cancelled"
     }
   },
   "workspace": {
@@ -67,13 +98,24 @@
     "sources": "Sources",
     "outputs": "Outputs",
     "upload": "Upload File",
-    "history": "Version History"
+    "history": "Version History",
+    "recentChanges": "Recent Changes",
+    "fileTree": "File Tree",
+    "empty": "Workspace is empty.\nFiles will appear here as you and the agent create them.",
+    "filesChanged": "{{count}} files changed",
+    "dragDrop": "Drop files here to upload"
   },
   "radar": {
     "title": "Research Radar",
     "keywords": "Tracked Keywords",
     "authors": "Tracked Authors",
-    "journals": "Tracked Journals"
+    "journals": "Tracked Journals",
+    "tracking": "Tracking",
+    "editViaChat": "Edit via chat...",
+    "findings": "Recent Findings",
+    "refresh": "Refresh",
+    "empty": "No radar configured yet.\nTell the agent what topics, authors, or journals you want to monitor.",
+    "sources": "Sources"
   },
   "settings": {
     "title": "Settings",
@@ -90,7 +132,43 @@
       "label": "Language",
       "en": "English",
       "zhCN": "中文"
-    }
+    },
+    "notificationSound": "Notification sound",
+    "autoScroll": "Auto-scroll chat",
+    "timestampFormat": "Timestamp format",
+    "timestampRelative": "Relative",
+    "timestampAbsolute": "Absolute",
+    "timestampIso": "ISO 8601",
+    "fileOpenBehavior": "File open behavior",
+    "fileOpenSystem": "System default",
+    "fileOpenInternal": "Internal viewer",
+    "modelProvider": "Provider",
+    "modelSelection": "Model",
+    "apiKeyLabel": "API Key",
+    "temperature": "Temperature",
+    "maxTokens": "Max output tokens",
+    "systemPromptAppend": "Additional system prompt",
+    "proxyEnabled": "Proxy enabled",
+    "proxyProtocol": "Protocol",
+    "proxyHost": "Host",
+    "proxyPort": "Port",
+    "proxyAuth": "Authentication",
+    "proxyUsername": "Username",
+    "proxyPassword": "Password",
+    "proxyTest": "Test connection",
+    "proxyTestSuccess": "Proxy is working",
+    "proxyTestFailed": "Proxy test failed: {{error}}",
+    "aboutVersion": "Research-Claw v{{version}}",
+    "aboutOpenClaw": "OpenClaw v{{version}}",
+    "aboutGateway": "Gateway endpoint",
+    "aboutPlugins": "Plugins",
+    "aboutBootstrap": "Bootstrap files",
+    "aboutLogs": "Open logs folder",
+    "aboutDiagnostics": "Copy diagnostics",
+    "aboutDiagnosticsCopied": "Diagnostics copied to clipboard",
+    "saved": "Saved",
+    "saveFailed": "Failed to save",
+    "copyFailed": "Failed to copy"
   },
   "setup": {
     "title": "Welcome to Research-Claw",
@@ -134,5 +212,103 @@
   },
   "panel": {
     "awaitingPlugin": "Awaiting plugin implementation"
+  },
+  "card": {
+    "paper": {
+      "addToLibrary": "Add to Library",
+      "inLibrary": "In Library",
+      "cite": "Cite",
+      "openPdf": "Open PDF",
+      "citationCopied": "Citation copied to clipboard",
+      "authors": "Authors",
+      "venue": "Venue",
+      "year": "Year",
+      "doi": "DOI",
+      "tags": "Tags",
+      "noAbstract": "No abstract available"
+    },
+    "task": {
+      "viewInPanel": "View in Tasks Panel",
+      "markComplete": "Mark Complete",
+      "deadline": "Deadline",
+      "priority": "Priority",
+      "status": "Status",
+      "relatedPaper": "Related Paper",
+      "overdue": "Overdue",
+      "dueIn": "Due in {{days}} days",
+      "noDl": "No deadline"
+    },
+    "progress": {
+      "title": "Research Progress",
+      "papersRead": "Papers read",
+      "papersAdded": "Papers added",
+      "tasksCompleted": "Tasks completed",
+      "tasksCreated": "Tasks created",
+      "writingWords": "Words written",
+      "readingMinutes": "Reading time (min)",
+      "highlights": "Highlights"
+    },
+    "approval": {
+      "title": "Approval Required",
+      "action": "Action",
+      "context": "Context",
+      "riskLevel": "Risk Level",
+      "details": "Details",
+      "approve": "Approve",
+      "reject": "Reject",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "riskLow": "Low",
+      "riskMedium": "Medium",
+      "riskHigh": "High"
+    },
+    "radar": {
+      "title": "Radar Update",
+      "source": "Source",
+      "query": "Query",
+      "period": "Period",
+      "found": "{{count}} new papers found",
+      "notablePapers": "Notable Papers",
+      "relevance": "Why relevant"
+    },
+    "file": {
+      "open": "Open",
+      "download": "Download",
+      "path": "Path",
+      "size": "Size",
+      "type": "Type",
+      "gitNew": "New",
+      "gitModified": "Modified",
+      "gitCommitted": "Committed"
+    }
+  },
+  "code": {
+    "copy": "Copy",
+    "copied": "Copied!",
+    "save": "Save"
+  },
+  "notification": {
+    "markAllRead": "Mark all read",
+    "noNotifications": "No notifications yet",
+    "newNotification": "New notification"
+  },
+  "project": {
+    "newProject": "New Project...",
+    "switchProject": "Switch Project",
+    "allProjects": "All Projects"
+  },
+  "error": {
+    "title": "Something went wrong",
+    "retry": "Retry",
+    "details": "Details"
+  },
+  "a11y": {
+    "mainContent": "Chat area",
+    "sidePanel": "Side panel",
+    "navigation": "Navigation",
+    "notifications": "Open notifications",
+    "collapseNav": "Collapse navigation",
+    "expandNav": "Expand navigation",
+    "closePanel": "Close panel"
   }
 }

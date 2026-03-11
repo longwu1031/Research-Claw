@@ -4,82 +4,13 @@ import remarkGfm from 'remark-gfm';
 import { Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { ChatMessage } from '../../gateway/types';
+import CodeBlock from './CodeBlock';
 
 const { Text } = Typography;
-
-const CARD_TYPES = new Set([
-  'paper_card',
-  'task_card',
-  'progress_card',
-  'approval_card',
-  'radar_digest',
-  'file_card',
-]);
 
 interface MessageBubbleProps {
   message: ChatMessage;
   isStreaming?: boolean;
-}
-
-function CardFallback({ type, data }: { type: string; data: string }) {
-  const { t } = useTranslation();
-  return (
-    <div
-      style={{
-        background: 'var(--surface-hover)',
-        border: '1px solid var(--border)',
-        borderRadius: 8,
-        padding: 12,
-        margin: '8px 0',
-      }}
-    >
-      <Text type="secondary" style={{ fontSize: 11, fontFamily: "'Fira Code', 'JetBrains Mono', monospace" }}>
-        [{type}] {t('chat.cardFallback')}
-      </Text>
-      <pre
-        style={{
-          marginTop: 8,
-          padding: 8,
-          background: 'var(--surface)',
-          borderRadius: 4,
-          fontSize: 12,
-          fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
-          overflow: 'auto',
-          maxHeight: 200,
-          color: 'var(--text-secondary)',
-        }}
-      >
-        {data}
-      </pre>
-    </div>
-  );
-}
-
-function CodeBlock({ className, children }: { className?: string; children?: React.ReactNode }) {
-  const language = className?.replace('language-', '');
-  const code = String(children).replace(/\n$/, '');
-
-  if (language && CARD_TYPES.has(language)) {
-    return <CardFallback type={language} data={code} />;
-  }
-
-  return (
-    <pre
-      style={{
-        background: 'var(--surface-hover)',
-        border: '1px solid var(--border)',
-        borderRadius: 8,
-        padding: 12,
-        margin: '8px 0',
-        overflow: 'auto',
-        fontSize: 13,
-        fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
-        lineHeight: 1.5,
-      }}
-    >
-      <code>{code}</code>
-    </pre>
-  );
 }
 
 export default function MessageBubble({ message, isStreaming }: MessageBubbleProps) {

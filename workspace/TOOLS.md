@@ -1,8 +1,7 @@
 ---
 file: TOOLS.md
-version: 1.0
-updated: 2026-03-11
-chars: ~2000
+version: 2.0
+updated: 2026-03-12
 ---
 
 # Tool Reference
@@ -22,7 +21,7 @@ arXiv for preprints.
 | **PubMed / NCBI** | Biomedical literature | Medical, life sciences | 3 req/sec |
 | **Unpaywall** | OA availability for DOIs | Legal open-access full text | 100K/day |
 
-## Local Library Tools
+## Local Library Tools (12 tools)
 
 Provided by the `research-claw-core` plugin. Data stored in
 `.research-claw/library.db` (SQLite).
@@ -35,19 +34,25 @@ Provided by the `research-claw-core` plugin. Data stored in
 | `library_get_paper` | Retrieve full details of a specific paper | By DOI or internal ID |
 | `library_export_bibtex` | Export library or subset as BibTeX | Filter by tag, project, or list |
 | `library_reading_stats` | Reading activity summary | Papers read this week, total count |
+| `library_batch_add` | Batch import multiple papers at once | Provide array of DOIs or metadata objects |
+| `library_manage_collection` | Create, update, or delete paper collections | `library_manage_collection(action="create", name="Survey Papers")` |
+| `library_tag_paper` | Add or remove tags on a paper | `library_tag_paper(paper_id="...", add=["ml"], remove=["misc"])` |
+| `library_add_note` | Add an annotation note to a paper | `library_add_note(paper_id="...", note="Key insight on p.5", page=5)` |
+| `library_import_bibtex` | Import papers from a BibTeX file | `library_import_bibtex(path="refs.bib")` |
+| `library_citation_graph` | Query citation relationships between papers | `library_citation_graph(paper_id="...", direction="both", depth=1)` |
 
-## Task Management Tools
+## Task Management Tools (6 tools)
 
 | Tool | Purpose | Example |
 |:---|:---|:---|
-| `task_create` | Create a new task with optional deadline | `task_create(title="Review Ch.3", deadline="2026-03-15")` |
-| `task_list` | List tasks, filter by status/project/deadline | `task_list(status="pending", project="Survey")` |
+| `task_create` | Create a new task with optional deadline | `task_create(title="Review Ch.3", deadline="2026-03-15", task_type="human")` |
+| `task_list` | List tasks, filter by status/priority/deadline | `task_list(status="todo", priority="high")` |
 | `task_complete` | Mark a task as complete | `task_complete(id="t-001")` |
-| `task_update` | Update task details (title, deadline, priority) | `task_update(id="t-001", priority="high")` |
-| `task_link` | Link a task to papers or other tasks | `task_link(task="t-001", paper="doi:10.1234/x")` |
-| `task_note` | Add a note/comment to a task | `task_note(id="t-001", note="Methodology looks solid")` |
+| `task_update` | Update task details (title, deadline, priority, status) | `task_update(id="t-001", priority="urgent")` |
+| `task_link` | Link a task to a paper in the library | `task_link(task_id="t-001", paper_id="p-001")` |
+| `task_note` | Add a timestamped note to a task | `task_note(task_id="t-001", note="Methodology looks solid")` |
 
-## Workspace Tools
+## Workspace Tools (6 tools)
 
 For managing files in the research workspace.
 
@@ -55,12 +60,17 @@ For managing files in the research workspace.
 |:---|:---|:---|
 | `workspace_save` | Save content to a workspace file | `workspace_save(path="notes/ch3.md", content="...")` |
 | `workspace_read` | Read a workspace file | `workspace_read(path="notes/ch3.md")` |
-| `workspace_list` | List files in workspace | `workspace_list(dir="notes/")` |
-| `workspace_diff` | Show changes to a file | `workspace_diff(path="notes/ch3.md")` |
+| `workspace_list` | List files in workspace directory | `workspace_list(dir="notes/")` |
+| `workspace_diff` | Show changes to a file since last commit | `workspace_diff(path="notes/ch3.md")` |
 | `workspace_history` | Show file edit history | `workspace_history(path="notes/ch3.md")` |
-| `workspace_restore` | Restore a previous version | `workspace_restore(path="notes/ch3.md", version=3)` |
+| `workspace_restore` | Restore a previous version of a file | `workspace_restore(path="notes/ch3.md", version=3)` |
 
-## Citation & Export
+## Tool Count Summary
+
+Total: **24 tools** (12 library + 6 task + 6 workspace), all registered in
+`openclaw.json` under `tools.alsoAllow`.
+
+## Citation and Export
 
 - **Supported citation styles:** APA, MLA, Chicago, IEEE, Vancouver, Harvard,
   Nature, ACM, ACS, custom CSL
@@ -73,5 +83,5 @@ Citation style is configured in `openclaw.json` at
 `plugins.entries.research-claw-core.config.defaultCitationStyle`.
 
 Tool availability depends on the `tools.profile` setting:
-- `"full"` — All built-in tools + research tools (default)
-- `"minimal"` — Built-in tools only, no research-specific tools
+- `"full"` -- All built-in tools + research tools (default)
+- `"minimal"` -- Built-in tools only, no research-specific tools

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useGatewayStore } from './gateway';
 
 export interface Session {
   key: string;
@@ -13,21 +14,27 @@ interface SessionsState {
   activeSessionKey: string | null;
   loading: boolean;
 
-  // Skeleton — awaiting S2 plugin implementation
   loadSessions: () => Promise<void>;
   switchSession: (key: string) => void;
   createSession: () => Promise<string>;
   deleteSession: (key: string) => Promise<void>;
 }
 
-export const useSessionsStore = create<SessionsState>()((set) => ({
+export const useSessionsStore = create<SessionsState>()((set, get) => ({
   sessions: [],
   activeSessionKey: null,
   loading: false,
 
   loadSessions: async () => {
-    // TODO: S2 — call sessions.list via gateway
-    set({ loading: false });
+    const client = useGatewayStore.getState().client;
+    if (!client?.isConnected) return;
+    set({ loading: true });
+    try {
+      const result = await client.request<{ sessions: Session[] }>('sessions.list');
+      set({ sessions: result.sessions ?? [], loading: false });
+    } catch {
+      set({ loading: false });
+    }
   },
 
   switchSession: (key: string) => {
@@ -35,11 +42,19 @@ export const useSessionsStore = create<SessionsState>()((set) => ({
   },
 
   createSession: async () => {
-    // TODO: S2 — call sessions.create via gateway
-    return 'default';
+    // OpenClaw sessions are implicit — created on first chat.send with a new sessionKey
+    const key = crypto.randomUUID();
+    set({ activeSessionKey: key });
+    return key;
   },
 
-  deleteSession: async (_key: string) => {
-    // TODO: S2 — call sessions.delete via gateway
+  deleteSession: async (key: string) => {
+    const client = useGatewayStore.getState().client;
+    if (!client?.isConnected) return;
+    await client.request('sessions.delete', { key });
+    set((s) => ({
+      sessions: s.sessions.filter((sess) => sess.key !== key),
+      activeSessionKey: s.activeSessionKey === key ? null : s.activeSessionKey,
+    }));
   },
 }));

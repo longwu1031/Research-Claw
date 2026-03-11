@@ -17,11 +17,13 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
         manualChunks: {
           antd: ['antd', '@ant-design/icons'],
           markdown: ['react-markdown', 'remark-gfm'],
+          shiki: ['shiki'],
         },
       },
     },

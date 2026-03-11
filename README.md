@@ -6,8 +6,9 @@ AI-powered local academic research assistant — an [OpenClaw](https://openclaw.
 
 ### Prerequisites
 
-- Node.js ≥ 22.12
-- pnpm ≥ 9.0
+- Node.js >= 22.12
+- pnpm >= 9.0
+- git
 
 ### Install
 
@@ -31,6 +32,12 @@ pnpm start
 # Dashboard: http://127.0.0.1:18789
 ```
 
+### Build
+
+```bash
+pnpm install && pnpm build && pnpm start
+```
+
 ### Development
 
 ```bash
@@ -38,6 +45,47 @@ pnpm dev
 # Dashboard dev server: http://localhost:5174
 # Gateway: http://127.0.0.1:18789
 ```
+
+### Test
+
+```bash
+cd dashboard && npx vitest run      # Unit tests
+cd dashboard && npx tsc --noEmit    # Type check
+```
+
+## Project Structure
+
+```
+research-claw/
+├── config/                  # OpenClaw configuration overlay
+│   ├── openclaw.json        # Active config (gitignored if contains secrets)
+│   └── openclaw.example.json
+├── dashboard/               # React + Vite + Ant Design 5 dashboard
+│   ├── src/
+│   │   ├── components/      # UI components (TopBar, LeftNav, ChatView, panels, cards)
+│   │   ├── gateway/         # WebSocket RPC v3 client + hooks
+│   │   ├── i18n/            # en.json + zh-CN.json locale files
+│   │   ├── stores/          # Zustand stores (chat, config, ui, tasks, library, sessions)
+│   │   ├── styles/          # Theme tokens + global CSS
+│   │   └── types/           # Card type definitions
+│   └── vite.config.ts
+├── extensions/              # OpenClaw plugin scaffolds
+├── patches/                 # pnpm patch for branding (~20 lines)
+├── scripts/                 # install, setup, build, branding scripts
+├── skills/                  # SKILL.md files
+└── workspace/               # Bootstrap files (SOUL.md, AGENTS.md, etc.)
+```
+
+## Configuration
+
+Edit `config/openclaw.json` to customize:
+
+- **provider** / **model** / **apiKey** — LLM provider settings
+- **gateway.port** — WebSocket gateway port (default: 18789)
+- **proxy** — HTTP proxy for API calls
+- **plugins** — Enabled plugin list
+
+Copy from template: `cp config/openclaw.example.json config/openclaw.json`
 
 ## Architecture
 

@@ -1,0 +1,152 @@
+/**
+ * Message Card Types — Dashboard mirror of protocol.ts
+ *
+ * Verified against extensions/research-claw-core/src/cards/protocol.ts
+ * Every field name, type, and optionality matches the canonical source exactly.
+ */
+
+// ---------------------------------------------------------------------------
+// Card type discriminator
+// ---------------------------------------------------------------------------
+
+export type CardType =
+  | 'paper_card'
+  | 'task_card'
+  | 'progress_card'
+  | 'approval_card'
+  | 'radar_digest'
+  | 'file_card';
+
+/** Canonical set for runtime membership checks. */
+export const CARD_TYPES: ReadonlySet<string> = new Set<CardType>([
+  'paper_card',
+  'task_card',
+  'progress_card',
+  'approval_card',
+  'radar_digest',
+  'file_card',
+]);
+
+// ---------------------------------------------------------------------------
+// Paper Card (12 fields)
+// ---------------------------------------------------------------------------
+
+export interface PaperCard {
+  type: 'paper_card';
+  title: string;
+  authors: string[];
+  venue?: string;
+  year?: number;
+  doi?: string;
+  url?: string;
+  arxiv_id?: string;
+  /** First ~200 characters of the abstract. Truncated with "..." if needed. */
+  abstract_preview?: string;
+  read_status?: 'unread' | 'reading' | 'read' | 'reviewed';
+  /** Internal library ID if the paper is already in the user's library. */
+  library_id?: string;
+  tags?: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Task Card (9 fields)
+// ---------------------------------------------------------------------------
+
+export interface TaskCard {
+  type: 'task_card';
+  /** Internal task ID. Omitted when the agent is proposing a new task. */
+  id?: string;
+  title: string;
+  description?: string;
+  task_type: 'human' | 'agent' | 'mixed';
+  status: 'todo' | 'in_progress' | 'blocked' | 'done' | 'cancelled';
+  priority: 'urgent' | 'high' | 'medium' | 'low';
+  deadline?: string; // ISO 8601
+  /** Title of a related paper, for cross-referencing. */
+  related_paper_title?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Progress Card (9 fields)
+// ---------------------------------------------------------------------------
+
+export interface ProgressCard {
+  type: 'progress_card';
+  period: string; // "today" | "this_week" | "this_month" | "session" | custom label
+  papers_read: number;
+  papers_added: number;
+  tasks_completed: number;
+  tasks_created: number;
+  /** Word count written in drafts/notes during the period. */
+  writing_words?: number;
+  /** Estimated reading time in minutes. */
+  reading_minutes?: number;
+  /** List of notable achievements or milestones. Max 5 items. */
+  highlights?: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Approval Card (6 fields)
+// ---------------------------------------------------------------------------
+
+export interface ApprovalCard {
+  type: 'approval_card';
+  /** Human-readable description of the proposed action. */
+  action: string;
+  /** Why the agent wants to perform this action. */
+  context: string;
+  risk_level: 'low' | 'medium' | 'high';
+  /** Structured details about the action (command args, file paths, etc.). */
+  details?: Record<string, unknown>;
+  /** Maps to the exec.approval.requested event ID. */
+  approval_id?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Radar Digest (6 fields + NotablePaper sub-interface)
+// ---------------------------------------------------------------------------
+
+export interface NotablePaper {
+  title: string;
+  authors: string[];
+  /** Why the agent considers this paper notable for the user. */
+  relevance_note: string;
+}
+
+export interface RadarDigest {
+  type: 'radar_digest';
+  source: string; // "arxiv" | "semantic_scholar" | "pubmed" | "custom"
+  /** The search query or topic that was tracked. */
+  query: string;
+  /** Time window the scan covered. */
+  period: string;
+  total_found: number;
+  notable_papers: NotablePaper[];
+}
+
+// ---------------------------------------------------------------------------
+// File Card (8 fields)
+// ---------------------------------------------------------------------------
+
+export interface FileCard {
+  type: 'file_card';
+  name: string;
+  path: string;
+  size_bytes?: number;
+  mime_type?: string;
+  created_at?: string; // ISO 8601
+  modified_at?: string; // ISO 8601
+  git_status?: 'new' | 'modified' | 'committed';
+}
+
+// ---------------------------------------------------------------------------
+// Union type
+// ---------------------------------------------------------------------------
+
+export type MessageCard =
+  | PaperCard
+  | TaskCard
+  | ProgressCard
+  | ApprovalCard
+  | RadarDigest
+  | FileCard;
