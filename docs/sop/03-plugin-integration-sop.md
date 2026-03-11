@@ -196,7 +196,22 @@ api.registerHttpRoute({
 });
 ```
 
-### 3.6 Testing
+### 3.6 Plugin HTTP Route Scope (v2026.3.9 Breaking Change)
+
+OpenClaw commit `a1520d70f` introduced scope enforcement for plugin HTTP handlers:
+
+- **`auth: "plugin"` routes** receive `WRITE_SCOPE` only (no admin privileges)
+- **`auth: "gateway"` routes** receive full scope (`ADMIN + APPROVALS + PAIRING`)
+- Plugin routes using `runtime.subagent.*` calls now receive scoped gateway clients
+
+**Impact on Research-Claw plugins:**
+- `wentor-connect` OAuth callback uses `auth: "gateway"` → unaffected
+- `/rc/upload` uses `auth: "gateway"` → unaffected
+- Any future `auth: "plugin"` routes must NOT rely on admin scope
+
+**Device token rotation:** `device.token.rotate` now enforces caller-scope subsetting. Plugins cannot request elevated scopes beyond what they hold.
+
+### 3.7 Testing
 
 - Plugin activation: mock PluginRuntime
 - Tool validation: test TypeBox schema with edge cases

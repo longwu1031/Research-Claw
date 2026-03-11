@@ -1,7 +1,7 @@
 # 00 — Master Reference Map
 
 > Research-Claw Documentation Index
-> Status: Complete | OpenClaw base: `2026.3.9` (commit `144c1b80`) | Protocol: v3
+> Status: Complete | OpenClaw base: `2026.3.9` (commit `62d5df28d`) | Protocol: v3
 
 ---
 
@@ -184,9 +184,9 @@ Convention: fenced code blocks with card type as language tag. Unknown types deg
 | `IDENTITY.md` | 04 §7 | 703 | Product identity, persona |
 | `USER.md` | 04 §8 | 827 | User profile template |
 | `TOOLS.md` | 04 §9 | 3,615 | API reference, local tools |
-| `MEMORY.md` | 04 §10 | 516 | Persistent memory template |
+| `MEMORY.md` | 04 §10 | 964 | Persistent memory template (v1.1: Global + Current Focus + Projects) |
 
-**Total:** 24,503 chars (limit: 150K total, 20K per file).
+**Total:** ~24,951 chars (limit: 150K total, 20K per file).
 
 ### 3.6 HTTP Endpoints
 

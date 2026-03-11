@@ -1,7 +1,7 @@
 # 03e — Dashboard UI Engineering Spec
 
 > Research-Claw Dashboard — React 18 + Vite + Ant Design 5
-> Based on OpenClaw gateway WS RPC v3 protocol (commit 144c1b80, version 2026.3.9)
+> Based on OpenClaw gateway WS RPC v3 protocol (commit 62d5df28d, version 2026.3.9)
 
 ---
 

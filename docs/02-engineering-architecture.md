@@ -4,7 +4,7 @@
 >
 > Status: DRAFT v1.0 | Last updated: 2026-03-11
 >
-> OpenClaw base: `2026.3.9` (commit `144c1b80`) | Protocol: v3
+> OpenClaw base: `2026.3.9` (commit `62d5df28d`) | Protocol: v3
 
 ---
 
@@ -76,7 +76,7 @@ Cross-references: [`05` Plugin SDK details](./modules/05-plugin-sdk.md) | [`03e`
                     │  ┌────────────────────────────────────────────────────────┐    │
                     │  │              OpenClaw (npm dependency)                 │    │
                     │  │              Version: 2026.3.9                         │    │
-                    │  │              Commit: 144c1b80                          │    │
+                    │  │              Commit: 62d5df28d                          │    │
                     │  │              License: MIT                              │    │
                     │  │                                                        │    │
                     │  │  Gateway · Agent runtime · 40 extensions              │    │
@@ -153,7 +153,7 @@ The plugin tier uses OpenClaw's documented Plugin SDK. Plugins are TypeScript pa
 
 | Plugin | Status | Description |
 |--------|--------|-------------|
-| `research-claw-core` | MVP (P0) | Literature library, task management, workspace tracking, 18 tools, 12 RPC methods |
+| `research-claw-core` | MVP (P0) | Literature library, task management, workspace tracking, 24 tools, 46 RPC methods |
 | `wentor-connect` | Placeholder | Wentor platform sync (deferred post-MVP) |
 
 **Upgrade risk: LOW.** Plugin SDK is semver-stable. Breaking changes only on OpenClaw major versions. TypeScript compilation catches interface drift at build time.
