@@ -1,22 +1,8 @@
-import React, { useCallback } from 'react';
-import { Badge, Button, Popover, Space, Switch, List, Typography } from 'antd';
-import {
-  BellOutlined,
-  BulbOutlined,
-  BulbFilled,
-  UserOutlined,
-  ClockCircleOutlined,
-  AlertOutlined,
-  WarningOutlined,
-  InfoCircleOutlined,
-} from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useConfigStore } from '../stores/config';
 import { useUiStore } from '../stores/ui';
-import { useEvent } from '../gateway/hooks';
-import type { AgentStatus, Notification as AppNotification } from '../stores/ui';
-
-const { Text } = Typography;
+import NotificationDropdown from './NotificationDropdown';
+import type { AgentStatus } from '../stores/ui';
 
 const STATUS_COLORS: Record<AgentStatus, string> = {
   idle: '#22C55E',
@@ -28,24 +14,6 @@ const STATUS_COLORS: Record<AgentStatus, string> = {
 };
 
 const PULSE_STATES = new Set<AgentStatus>(['thinking', 'tool_running', 'streaming']);
-
-const NOTIFICATION_ICONS: Record<AppNotification['type'], React.ReactNode> = {
-  deadline: <ClockCircleOutlined style={{ color: '#EF4444' }} />,
-  heartbeat: <AlertOutlined style={{ color: '#F59E0B' }} />,
-  system: <InfoCircleOutlined style={{ color: '#3B82F6' }} />,
-  error: <WarningOutlined style={{ color: '#EF4444' }} />,
-};
-
-function relativeTimestamp(ts: string): string {
-  const diff = Date.now() - new Date(ts).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
 
 function AgentStatusDot({ status }: { status: AgentStatus }) {
   const { t } = useTranslation();
@@ -67,72 +35,27 @@ function AgentStatusDot({ status }: { status: AgentStatus }) {
   );
 }
 
-function NotificationPanel() {
-  const { t } = useTranslation();
-  const notifications = useUiStore((s) => s.notifications);
-  const markAllRead = useUiStore((s) => s.markAllNotificationsRead);
-  const markRead = useUiStore((s) => s.markNotificationRead);
-
-  if (notifications.length === 0) {
-    return (
-      <div style={{ padding: 16, textAlign: 'center', minWidth: 240 }}>
-        <Text type="secondary">{t('notification.noNotifications')}</Text>
-      </div>
-    );
-  }
-
+function SunIcon() {
   return (
-    <div style={{ minWidth: 280, maxHeight: 360, overflow: 'auto' }}>
-      <div style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text strong>{t('topbar.notifications')}</Text>
-        <Button type="link" size="small" onClick={markAllRead}>
-          {t('notification.markAllRead')}
-        </Button>
-      </div>
-      <List
-        size="small"
-        dataSource={notifications.slice(0, 20)}
-        renderItem={(item) => (
-          <List.Item
-            onClick={() => !item.read && markRead(item.id)}
-            style={{
-              padding: '8px 12px',
-              background: item.read ? 'transparent' : 'var(--surface-active)',
-              cursor: item.read ? 'default' : 'pointer',
-            }}
-          >
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', width: '100%' }}>
-              <span style={{ flexShrink: 0, marginTop: 2, fontSize: 14 }}>
-                {NOTIFICATION_ICONS[item.type]}
-              </span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <Text style={{ fontSize: 13, fontWeight: item.read ? 400 : 500 }}>{item.title}</Text>
-                {item.body && (
-                  <div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>{item.body}</Text>
-                  </div>
-                )}
-                <div>
-                  <Text type="secondary" style={{ fontSize: 11 }}>{relativeTimestamp(item.timestamp)}</Text>
-                </div>
-              </div>
-              {!item.read && (
-                <div
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    background: '#3B82F6',
-                    flexShrink: 0,
-                    marginTop: 6,
-                  }}
-                />
-              )}
-            </div>
-          </List.Item>
-        )}
-      />
-    </div>
+    <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="5" />
+      <line x1="12" y1="1" x2="12" y2="3" />
+      <line x1="12" y1="21" x2="12" y2="23" />
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+      <line x1="1" y1="12" x2="3" y2="12" />
+      <line x1="21" y1="12" x2="23" y2="12" />
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
   );
 }
 
@@ -140,60 +63,11 @@ export default function TopBar() {
   const { t } = useTranslation();
   const theme = useConfigStore((s) => s.theme);
   const setTheme = useConfigStore((s) => s.setTheme);
-  const unreadCount = useUiStore((s) => s.unreadCount);
+  const locale = useConfigStore((s) => s.locale);
+  const setLocale = useConfigStore((s) => s.setLocale);
   const agentStatus = useUiStore((s) => s.agentStatus);
-  const addNotification = useUiStore((s) => s.addNotification);
 
-  // Subscribe to gateway events for notifications
-  const handleHeartbeatAlert = useCallback(
-    (payload: unknown) => {
-      const data = payload as { title?: string; body?: string } | undefined;
-      if (data?.title) {
-        addNotification({
-          type: 'heartbeat',
-          title: data.title,
-          body: data.body,
-        });
-      }
-    },
-    [addNotification],
-  );
-
-  const handleTaskDeadline = useCallback(
-    (payload: unknown) => {
-      const data = payload as { title?: string; deadline?: string } | undefined;
-      if (data?.title) {
-        addNotification({
-          type: 'deadline',
-          title: data.title,
-          body: data.deadline ? `Due: ${data.deadline}` : undefined,
-        });
-      }
-    },
-    [addNotification],
-  );
-
-  const handleSystemNotification = useCallback(
-    (payload: unknown) => {
-      const data = payload as { title?: string; body?: string; type?: string } | undefined;
-      if (data?.title) {
-        addNotification({
-          type: (data.type as AppNotification['type']) ?? 'system',
-          title: data.title,
-          body: data.body,
-        });
-      }
-    },
-    [addNotification],
-  );
-
-  useEvent('heartbeat.alert', handleHeartbeatAlert);
-  useEvent('task.deadline', handleTaskDeadline);
-  useEvent('notification', handleSystemNotification);
-
-  const handleThemeToggle = () => {
-    setTheme(theme === 'dark' ? 'light' : 'dark');
-  };
+  const isDark = theme === 'dark';
 
   return (
     <div
@@ -210,12 +84,14 @@ export default function TopBar() {
     >
       {/* Logo */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 18, lineHeight: 1 }}>{'\u{1F99E}'}</span>
         <span
           style={{
-            fontSize: 16,
+            fontSize: 14,
             fontWeight: 700,
             fontFamily: "'Fira Code', 'JetBrains Mono', Consolas, monospace",
             color: 'var(--accent-primary)',
+            letterSpacing: -0.3,
           }}
         >
           {t('app.name')}
@@ -226,47 +102,75 @@ export default function TopBar() {
       <div style={{ flex: 1 }} />
 
       {/* Right actions */}
-      <Space size={12} align="center">
-        {/* Notification bell */}
-        <Popover
-          content={<NotificationPanel />}
-          trigger="click"
-          placement="bottomRight"
-        >
-          <Badge count={unreadCount} size="small" offset={[-2, 2]} overflowCount={99}>
-            <Button
-              type="text"
-              icon={<BellOutlined />}
-              title={t('topbar.notifications')}
-              aria-label={t('a11y.notifications')}
-              style={{ color: 'var(--text-secondary)' }}
-            />
-          </Badge>
-        </Popover>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <NotificationDropdown />
 
-        {/* Agent status dot */}
         <AgentStatusDot status={agentStatus} />
 
-        {/* Theme toggle */}
-        <Switch
-          checked={theme === 'light'}
-          onChange={handleThemeToggle}
-          checkedChildren={<BulbFilled />}
-          unCheckedChildren={<BulbOutlined />}
-          title={t('topbar.themeToggle')}
-          size="small"
-        />
+        {/* Language toggle: EN | 中 */}
+        <div
+          onClick={() => setLocale(locale === 'en' ? 'zh-CN' : 'en')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setLocale(locale === 'en' ? 'zh-CN' : 'en'); }}
+          aria-label={locale === 'en' ? 'Switch to Chinese' : '切换为英文'}
+          style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}
+        >
+          <span
+            style={{
+              padding: '2px 6px',
+              borderRadius: 4,
+              color: locale === 'en' ? 'var(--text-primary)' : 'var(--text-tertiary)',
+              fontWeight: locale === 'en' ? 600 : 400,
+              transition: 'color 0.2s',
+            }}
+          >
+            EN
+          </span>
+          <span style={{ color: 'var(--text-tertiary)' }}>|</span>
+          <span
+            style={{
+              padding: '2px 6px',
+              borderRadius: 4,
+              color: locale === 'zh-CN' ? 'var(--text-primary)' : 'var(--text-tertiary)',
+              fontWeight: locale === 'zh-CN' ? 600 : 400,
+              transition: 'color 0.2s',
+            }}
+          >
+            中
+          </span>
+        </div>
 
-        {/* Avatar */}
-        <Button
-          type="text"
-          icon={<UserOutlined />}
-          shape="circle"
-          size="small"
-          title={t('topbar.profile')}
-          style={{ color: 'var(--text-secondary)' }}
-        />
-      </Space>
+        {/* Theme toggle: Sun / Moon */}
+        <button
+          onClick={() => setTheme(isDark ? 'light' : 'dark')}
+          title={t('topbar.themeToggle')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 32,
+            height: 32,
+            padding: 4,
+            borderRadius: 6,
+            border: 'none',
+            background: 'transparent',
+            color: 'var(--text-secondary)',
+            cursor: 'pointer',
+            transition: 'background 0.2s, color 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--surface-hover)';
+            e.currentTarget.style.color = 'var(--text-primary)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = 'var(--text-secondary)';
+          }}
+        >
+          {isDark ? <SunIcon /> : <MoonIcon />}
+        </button>
+      </div>
     </div>
   );
 }

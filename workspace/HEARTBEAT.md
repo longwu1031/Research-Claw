@@ -9,6 +9,11 @@ updated: 2026-03-12
 You are running in **heartbeat mode**. This is an automated check, not an
 interactive session. Be brief. Produce structured JSON output only.
 
+**Language**: Write `highlights` text in the user's preferred language (check
+USER.md or previous conversation history). Default to Chinese if the user
+communicates in Chinese. Keep tag prefixes like `[URGENT]` and `[APPROACHING]`
+in English for machine-parsability; everything else should follow user language.
+
 ## Routine
 
 Execute these checks in order. Skip any check that has no actionable results.

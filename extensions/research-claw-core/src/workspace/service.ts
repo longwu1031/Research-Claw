@@ -1,8 +1,8 @@
 /**
  * WorkspaceService — High-level workspace operations for Research-Claw.
  *
- * Wraps the GitTracker (factory-based) to provide the 7 `rc.ws.*` RPC methods:
- * init, tree, read, save, history, diff, restore. Handles path validation,
+ * Wraps the GitTracker (factory-based) to provide the 8 `rc.ws.*` RPC methods:
+ * init, tree, read, save, history, diff, restore, delete. Handles path validation,
  * MIME type detection, atomic writes, and directory scaffolding.
  */
 
@@ -912,6 +912,55 @@ export class WorkspaceService {
 
       throw err;
     }
+  }
+
+  // -----------------------------------------------------------------------
+  // delete — rc.ws.delete
+  // -----------------------------------------------------------------------
+
+  /**
+   * Delete a file from the workspace and commit the removal.
+   *
+   * @param filePath - Relative path within workspace
+   */
+  async delete(filePath: string): Promise<{ ok: boolean; path: string; committed: boolean }> {
+    const fullPath = this.resolvePath(filePath);
+
+    // Check file exists
+    try {
+      const stat = await fsp.stat(fullPath);
+      if (!stat.isFile()) {
+        throw new WorkspaceError(
+          `Not a file: ${filePath}`,
+          WS_FILE_NOT_FOUND,
+          { path: filePath },
+        );
+      }
+    } catch (err) {
+      if (err instanceof WorkspaceError) throw err;
+      throw new WorkspaceError(
+        `File not found: ${filePath}`,
+        WS_FILE_NOT_FOUND,
+        { path: filePath },
+      );
+    }
+
+    // Delete the file
+    await fsp.unlink(fullPath);
+
+    // Auto-commit the deletion if git tracking is enabled
+    let committed = false;
+    if (this.tracker) {
+      try {
+        const filename = path.basename(filePath);
+        const result = await this.tracker.commitFile(filePath, `Delete: ${filename}`);
+        committed = result.committed;
+      } catch {
+        // Git failure is non-fatal
+      }
+    }
+
+    return { ok: true, path: filePath, committed };
   }
 
   // -----------------------------------------------------------------------

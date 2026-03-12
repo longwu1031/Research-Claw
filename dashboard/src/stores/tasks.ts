@@ -63,6 +63,7 @@ interface TasksState {
   setPerspective: (p: 'all' | 'human' | 'agent') => void;
   toggleCompleted: () => void;
   completeTask: (id: string) => Promise<void>;
+  reopenTask: (id: string) => Promise<void>;
   createTask: (input: TaskInput) => Promise<void>;
   updateTask: (id: string, patch: TaskPatch) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
@@ -78,7 +79,11 @@ export const useTasksStore = create<TasksState>()((set, get) => ({
 
   loadTasks: async () => {
     const client = useGatewayStore.getState().client;
-    if (!client?.isConnected) return;
+    if (!client?.isConnected) {
+      console.log('[TasksStore] loadTasks skipped: not connected');
+      return;
+    }
+    console.log('[TasksStore] loadTasks → rc.task.list');
     set({ loading: true });
     try {
       const { perspective, showCompleted, sortBy } = get();
@@ -118,6 +123,24 @@ export const useTasksStore = create<TasksState>()((set, get) => ({
       await client.request<Task>('rc.task.complete', { id });
     } catch {
       // Revert on failure — reload
+      get().loadTasks();
+    }
+  },
+
+  reopenTask: async (id: string) => {
+    const client = useGatewayStore.getState().client;
+    if (!client?.isConnected) return;
+    // Optimistic update
+    set((s) => ({
+      tasks: s.tasks.map((t) =>
+        t.id === id
+          ? { ...t, status: 'todo' as const, completed_at: null }
+          : t,
+      ),
+    }));
+    try {
+      await client.request<Task>('rc.task.update', { id, patch: { status: 'todo' } });
+    } catch {
       get().loadTasks();
     }
   },

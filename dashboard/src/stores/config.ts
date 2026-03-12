@@ -1,60 +1,84 @@
 import { create } from 'zustand';
 import i18n from '../i18n';
+import { useGatewayStore } from './gateway';
+import { isConfigValid } from '../utils/config-patch';
+
+/** Model definition from openclaw.json providers */
+export interface GatewayModelDef {
+  id: string;
+  name?: string;
+  input?: string[];
+  reasoning?: boolean;
+  contextWindow?: number;
+  maxTokens?: number;
+}
+
+/** Provider definition from openclaw.json */
+export interface GatewayProviderDef {
+  baseUrl?: string;
+  api?: string;
+  models?: GatewayModelDef[];
+}
+
+/** Subset of the gateway config we care about */
+export interface GatewayConfig {
+  agents?: {
+    defaults?: {
+      model?: { primary?: string; fallbacks?: string[] };
+      imageModel?: { primary?: string; fallbacks?: string[] };
+      heartbeat?: { every?: string };
+    };
+  };
+  models?: {
+    providers?: Record<string, GatewayProviderDef>;
+  };
+  env?: Record<string, string>;
+  raw?: string | null;
+  baseHash?: string | null;
+}
+
+export type BootState = 'pending' | 'ready' | 'needs_setup' | 'gateway_unreachable';
 
 interface ConfigState {
   theme: 'dark' | 'light';
   locale: 'en' | 'zh-CN';
-  model: string | null;
-  provider: string | null;
-  endpoint: string | null;
-  apiKey: string | null;
-  proxyUrl: string | null;
-  setupComplete: boolean;
+  systemPromptAppend: string;
+  bootState: BootState;
+
+  /** Live config from gateway (via config.get RPC) */
+  gatewayConfig: GatewayConfig | null;
+  gatewayConfigLoading: boolean;
 
   setTheme: (t: 'dark' | 'light') => void;
   setLocale: (l: 'en' | 'zh-CN') => void;
-  setModel: (m: string) => void;
+  setSystemPromptAppend: (v: string) => void;
   loadConfig: () => void;
-  completeSetup: (apiKey: string, provider: string, endpoint: string, proxy?: string) => void;
+  loadGatewayConfig: () => Promise<void>;
+  evaluateConfig: () => void;
+  setBootState: (s: BootState) => void;
 }
 
-function loadFromStorage(): Partial<ConfigState> {
+function loadFromStorage(): { theme: 'dark' | 'light'; locale: 'en' | 'zh-CN'; systemPromptAppend: string } {
   try {
     const theme = (localStorage.getItem('rc-theme') as 'dark' | 'light') ?? 'dark';
-    const locale = (localStorage.getItem('rc-locale') as 'en' | 'zh-CN') ?? 'en';
-    const setupComplete = localStorage.getItem('rc-setup-complete') === 'true';
-    const provider = localStorage.getItem('rc-provider');
-    const endpoint = localStorage.getItem('rc-endpoint');
-    const apiKey = localStorage.getItem('rc-api-key');
-    const proxyUrl = localStorage.getItem('rc-proxy');
-    const model = localStorage.getItem('rc-model');
-    return {
-      theme,
-      locale,
-      setupComplete,
-      provider,
-      endpoint,
-      apiKey,
-      proxyUrl,
-      model,
-    };
+    const locale = (localStorage.getItem('rc-locale') as 'en' | 'zh-CN') ?? 'zh-CN';
+    const systemPromptAppend = localStorage.getItem('rc-system-prompt-append') ?? '';
+    return { theme, locale, systemPromptAppend };
   } catch {
-    return {};
+    return { theme: 'dark', locale: 'zh-CN', systemPromptAppend: '' };
   }
 }
 
-export const useConfigStore = create<ConfigState>()((set) => {
+export const useConfigStore = create<ConfigState>()((set, get) => {
   const persisted = loadFromStorage();
 
   return {
-    theme: persisted.theme ?? 'dark',
-    locale: persisted.locale ?? 'en',
-    model: null,
-    provider: persisted.provider ?? null,
-    endpoint: persisted.endpoint ?? null,
-    apiKey: persisted.apiKey ?? null,
-    proxyUrl: persisted.proxyUrl ?? null,
-    setupComplete: persisted.setupComplete ?? false,
+    theme: persisted.theme,
+    locale: persisted.locale,
+    systemPromptAppend: persisted.systemPromptAppend,
+    bootState: 'pending',
+    gatewayConfig: null,
+    gatewayConfigLoading: false,
 
     setTheme: (t: 'dark' | 'light') => {
       document.documentElement.setAttribute('data-theme', t);
@@ -68,9 +92,9 @@ export const useConfigStore = create<ConfigState>()((set) => {
       set({ locale: l });
     },
 
-    setModel: (m: string) => {
-      localStorage.setItem('rc-model', m);
-      set({ model: m });
+    setSystemPromptAppend: (v: string) => {
+      localStorage.setItem('rc-system-prompt-append', v);
+      set({ systemPromptAppend: v });
     },
 
     loadConfig: () => {
@@ -81,21 +105,51 @@ export const useConfigStore = create<ConfigState>()((set) => {
       set(data);
     },
 
-    completeSetup: (apiKey: string, provider: string, endpoint: string, proxy?: string) => {
-      localStorage.setItem('rc-api-key', apiKey);
-      localStorage.setItem('rc-provider', provider);
-      localStorage.setItem('rc-endpoint', endpoint);
-      localStorage.setItem('rc-setup-complete', 'true');
-      if (proxy) {
-        localStorage.setItem('rc-proxy', proxy);
+    loadGatewayConfig: async () => {
+      const client = useGatewayStore.getState().client;
+      if (!client?.isConnected) return;
+      set({ gatewayConfigLoading: true });
+      try {
+        const snapshot = await client.request<{
+          config?: Record<string, unknown>;
+          resolved?: Record<string, unknown>;
+          raw?: string | null;
+          hash?: string | null;
+        }>('config.get', {});
+        // Gateway returns `hash` (not `baseHash`). We store it as `baseHash` for our interface.
+        // Use `resolved` (merged config) if available, fall back to `config`.
+        const configObj = (snapshot.resolved ?? snapshot.config ?? {}) as Record<string, unknown>;
+        const gc: GatewayConfig = {
+          agents: configObj.agents as GatewayConfig['agents'],
+          models: configObj.models as GatewayConfig['models'],
+          env: configObj.env as GatewayConfig['env'],
+          raw: snapshot.raw ?? null,
+          baseHash: snapshot.hash ?? null,
+        };
+        set({ gatewayConfig: gc, gatewayConfigLoading: false });
+        get().evaluateConfig();
+      } catch {
+        set({ gatewayConfigLoading: false });
       }
-      set({
-        apiKey,
-        provider,
-        endpoint,
-        proxyUrl: proxy ?? null,
-        setupComplete: true,
-      });
+    },
+
+    evaluateConfig: () => {
+      const { gatewayConfig } = get();
+      if (isConfigValid(gatewayConfig as Record<string, unknown> | null)) {
+        set({ bootState: 'ready' });
+      } else {
+        set({ bootState: 'needs_setup' });
+      }
+    },
+
+    setBootState: (s: BootState) => {
+      set({ bootState: s });
     },
   };
 });
+
+// Debug helper: re-enter SetupWizard from browser console.
+// Usage: __resetSetup()
+(window as unknown as Record<string, unknown>).__resetSetup = () => {
+  useConfigStore.setState({ bootState: 'needs_setup' });
+};

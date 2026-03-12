@@ -4,17 +4,28 @@ node_modules/
 # Build output
 dist/
 dashboard/dist/
+*.tsbuildinfo
+*.d.ts.map
+
+# Runtime config (use openclaw.example.json as template)
+config/openclaw.json
+config/*.bak
+config/*.bak.*
 
 # Environment
 .env
 .env.local
 .env.production
 
-# SQLite databases
+# SQLite databases (both .sqlite and .db patterns)
 *.sqlite
 *.sqlite-journal
 *.sqlite-wal
 *.sqlite-shm
+*.db
+*.db-wal
+*.db-shm
+.research-claw/
 
 # OS
 .DS_Store
@@ -35,3 +46,16 @@ coverage/
 
 # Temp
 .tmp/
+
+# Lock files (using pnpm, not npm)
+extensions/*/package-lock.json
+
+# Workspace runtime data (keep only bootstrap .md files)
+workspace/.openclaw/
+workspace/memory/
+workspace/sources/
+workspace/skills_collection/
+workspace/*.csv
+workspace/*.bib
+workspace/*.json
+workspace/helloworld.md

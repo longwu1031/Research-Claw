@@ -86,6 +86,7 @@ export interface CronPreset {
   config: Record<string, unknown>;
   last_run_at: string | null;
   next_run_at: string | null;
+  gateway_job_id: string | null;
 }
 
 export interface ListParams {
@@ -114,11 +115,11 @@ const VALID_TRANSITIONS: Readonly<Record<TaskStatus, readonly TaskStatus[]>> = {
   todo: ['in_progress', 'cancelled'],
   in_progress: ['done', 'blocked', 'todo', 'cancelled'],
   blocked: ['in_progress', 'done', 'cancelled'],
-  done: [],
-  cancelled: [],
+  done: ['todo'],
+  cancelled: ['todo'],
 };
 
-const PRESET_DEFINITIONS: Omit<CronPreset, 'enabled' | 'last_run_at' | 'next_run_at' | 'config'>[] = [
+const PRESET_DEFINITIONS: Omit<CronPreset, 'enabled' | 'last_run_at' | 'next_run_at' | 'config' | 'gateway_job_id'>[] = [
   {
     id: 'arxiv_daily_scan',
     name: 'arXiv Daily Scan',
@@ -136,6 +137,18 @@ const PRESET_DEFINITIONS: Omit<CronPreset, 'enabled' | 'last_run_at' | 'next_run
     name: 'Deadline Reminders Daily',
     description: 'Send reminders for tasks with upcoming deadlines every morning.',
     schedule: '0 9 * * *',
+  },
+  {
+    id: 'group_meeting_prep',
+    name: 'Group Meeting Prep',
+    description: 'Check USER.md for upcoming group meetings and prepare review materials, reading summaries, and discussion points.',
+    schedule: '0 9 * * 1-5',
+  },
+  {
+    id: 'weekly_report',
+    name: 'Weekly Report',
+    description: 'Generate a weekly research progress report: papers read, tasks completed, key findings, and next week goals. Saved to workspace.',
+    schedule: '0 17 * * 5',
   },
 ];
 
@@ -279,13 +292,21 @@ export class TaskService {
     // Create cron state persistence table if it doesn't exist
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS rc_cron_state (
-        preset_id   TEXT PRIMARY KEY,
-        enabled     INTEGER NOT NULL DEFAULT 0,
-        config      TEXT NOT NULL DEFAULT '{}',
-        last_run_at TEXT,
-        next_run_at TEXT
+        preset_id      TEXT PRIMARY KEY,
+        enabled        INTEGER NOT NULL DEFAULT 0,
+        config         TEXT NOT NULL DEFAULT '{}',
+        last_run_at    TEXT,
+        next_run_at    TEXT,
+        gateway_job_id TEXT
       )
     `);
+
+    // Migration: add gateway_job_id column if missing (for existing DBs)
+    try {
+      this.db.exec('ALTER TABLE rc_cron_state ADD COLUMN gateway_job_id TEXT');
+    } catch {
+      // Column already exists — ignore
+    }
 
     // Ensure all preset definitions have a row (insert only if missing)
     const insertStmt = this.db.prepare(
@@ -664,8 +685,15 @@ export class TaskService {
         bindings.push(timestamp);
       } else if (newStatus === 'cancelled') {
         setClauses.push('completed_at = NULL');
-      } else if (newStatus === 'todo' && currentTask.status === 'in_progress') {
-        setClauses.push('agent_session_id = NULL');
+      } else if (newStatus === 'todo') {
+        // Reopening from done/cancelled: clear completed_at
+        if (currentTask.status === 'done' || currentTask.status === 'cancelled') {
+          setClauses.push('completed_at = NULL');
+        }
+        // Reverting from in_progress: clear agent_session_id
+        if (currentTask.status === 'in_progress') {
+          setClauses.push('agent_session_id = NULL');
+        }
       }
 
       // Nothing to update
@@ -704,7 +732,11 @@ export class TaskService {
 
     const currentTask = rowToTask(existing);
 
-    if (!isValidTransition(currentTask.status, 'done')) {
+    // Allow todo → done by auto-transitioning through in_progress.
+    // This matches user expectation: "mark complete" should work regardless of current status.
+    const needsAutoProgress = currentTask.status === 'todo';
+
+    if (!needsAutoProgress && !isValidTransition(currentTask.status, 'done')) {
       throw new RpcError(
         -32004,
         `Invalid status transition: ${currentTask.status} -> done`,
@@ -713,6 +745,15 @@ export class TaskService {
 
     const doComplete = this.db.transaction(() => {
       const timestamp = now();
+
+      // Auto-transition: todo → in_progress (logged as its own activity)
+      if (needsAutoProgress) {
+        this.db.prepare(
+          `UPDATE rc_tasks SET status = 'in_progress', updated_at = ? WHERE id = ?`,
+        ).run(timestamp, id);
+        logActivity(this.db, id, 'status_changed', 'todo', 'in_progress', actor);
+      }
+
       let updatedNotes = currentTask.notes;
 
       if (notes) {
@@ -724,7 +765,7 @@ export class TaskService {
         `UPDATE rc_tasks SET status = 'done', completed_at = ?, notes = ?, updated_at = ? WHERE id = ?`,
       ).run(timestamp, updatedNotes, timestamp, id);
 
-      logActivity(this.db, id, 'completed', currentTask.status, 'done', actor);
+      logActivity(this.db, id, 'completed', needsAutoProgress ? 'in_progress' : currentTask.status, 'done', actor);
     });
 
     doComplete();
@@ -868,8 +909,8 @@ export class TaskService {
   cronPresetsList(): CronPreset[] {
     return PRESET_DEFINITIONS.map((def) => {
       const row = this.db.prepare(
-        'SELECT enabled, config, last_run_at, next_run_at FROM rc_cron_state WHERE preset_id = ?',
-      ).get(def.id) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null } | undefined;
+        'SELECT enabled, config, last_run_at, next_run_at, gateway_job_id FROM rc_cron_state WHERE preset_id = ?',
+      ).get(def.id) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null; gateway_job_id: string | null } | undefined;
 
       let config: Record<string, unknown> = {};
       try { config = JSON.parse(row?.config ?? '{}') as Record<string, unknown>; } catch { /* */ }
@@ -883,6 +924,7 @@ export class TaskService {
         config,
         last_run_at: row?.last_run_at ?? null,
         next_run_at: row?.next_run_at ?? null,
+        gateway_job_id: row?.gateway_job_id ?? null,
       };
     });
   }
@@ -907,8 +949,8 @@ export class TaskService {
 
     // Read back persisted state
     const row = this.db.prepare(
-      'SELECT enabled, config, last_run_at, next_run_at FROM rc_cron_state WHERE preset_id = ?',
-    ).get(presetId) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null };
+      'SELECT enabled, config, last_run_at, next_run_at, gateway_job_id FROM rc_cron_state WHERE preset_id = ?',
+    ).get(presetId) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null; gateway_job_id: string | null };
 
     let storedConfig: Record<string, unknown> = {};
     try { storedConfig = JSON.parse(row.config) as Record<string, unknown>; } catch { /* */ }
@@ -922,6 +964,7 @@ export class TaskService {
       config: storedConfig,
       last_run_at: row.last_run_at,
       next_run_at: row.next_run_at,
+      gateway_job_id: row.gateway_job_id,
     };
 
     return { ok: true, preset };
@@ -935,12 +978,12 @@ export class TaskService {
     }
 
     this.db.prepare(
-      'UPDATE rc_cron_state SET enabled = 0, next_run_at = NULL WHERE preset_id = ?',
+      'UPDATE rc_cron_state SET enabled = 0, next_run_at = NULL, gateway_job_id = NULL WHERE preset_id = ?',
     ).run(presetId);
 
     const row = this.db.prepare(
-      'SELECT enabled, config, last_run_at, next_run_at FROM rc_cron_state WHERE preset_id = ?',
-    ).get(presetId) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null };
+      'SELECT enabled, config, last_run_at, next_run_at, gateway_job_id FROM rc_cron_state WHERE preset_id = ?',
+    ).get(presetId) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null; gateway_job_id: string | null };
 
     let storedConfig: Record<string, unknown> = {};
     try { storedConfig = JSON.parse(row.config) as Record<string, unknown>; } catch { /* */ }
@@ -954,9 +997,55 @@ export class TaskService {
       config: storedConfig,
       last_run_at: row.last_run_at,
       next_run_at: row.next_run_at,
+      gateway_job_id: row.gateway_job_id,
     };
 
     return { ok: true, preset };
+  }
+
+  /** Store the gateway cron job ID after activation. */
+  cronPresetsSetJobId(presetId: string, jobId: string): { ok: true } {
+    const def = PRESET_DEFINITIONS.find((p) => p.id === presetId);
+    if (!def) {
+      throw new RpcError(-32001, `Cron preset not found: ${presetId}`);
+    }
+
+    this.db.prepare(
+      'UPDATE rc_cron_state SET gateway_job_id = ? WHERE preset_id = ?',
+    ).run(jobId, presetId);
+
+    return { ok: true };
+  }
+
+  // ── Agent Notifications ──────────────────────────────────────────────
+
+  /** Insert a custom notification sent by the agent. */
+  sendNotification(type: string, title: string, body?: string): { id: string; type: string; title: string; body: string | null; created_at: string } {
+    const id = randomUUID();
+    const validTypes = ['deadline', 'heartbeat', 'system', 'error'];
+    const safeType = validTypes.includes(type) ? type : 'system';
+
+    this.db.prepare(
+      `INSERT INTO rc_agent_notifications (id, type, title, body) VALUES (?, ?, ?, ?)`,
+    ).run(id, safeType, title, body ?? null);
+
+    const row = this.db.prepare('SELECT * FROM rc_agent_notifications WHERE id = ?').get(id) as
+      { id: string; type: string; title: string; body: string | null; created_at: string; read: number };
+
+    return { id: row.id, type: row.type, title: row.title, body: row.body, created_at: row.created_at };
+  }
+
+  /** Get unread custom notifications (for dashboard polling). */
+  getUnreadNotifications(limit = 20): Array<{ id: string; type: string; title: string; body: string | null; created_at: string }> {
+    return this.db.prepare(
+      `SELECT id, type, title, body, created_at FROM rc_agent_notifications
+       WHERE read = 0 ORDER BY created_at DESC LIMIT ?`,
+    ).all(limit) as Array<{ id: string; type: string; title: string; body: string | null; created_at: string }>;
+  }
+
+  /** Mark a custom notification as read. */
+  markNotificationRead(id: string): void {
+    this.db.prepare('UPDATE rc_agent_notifications SET read = 1 WHERE id = ?').run(id);
   }
 
   // ── Private Helpers ─────────────────────────────────────────────────

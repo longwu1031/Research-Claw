@@ -18,22 +18,24 @@ export interface Paper {
   notes?: string;
   pdf_path?: string;
   is_own?: boolean;
-  source_type?: string;
+  source?: string;
   tags: string[];
-  status: ReadStatus;
+  read_status: ReadStatus;
   rating?: number;
-  created_at: string;
+  added_at: string;
   updated_at: string;
 }
 
 export interface Tag {
+  id: string;
   name: string;
   color?: string;
-  count: number;
+  paper_count?: number;
+  created_at: string;
 }
 
 export interface PaperFilter {
-  status?: ReadStatus;
+  read_status?: ReadStatus;
   tag?: string;
   year?: number;
   sort?: 'added_at' | 'year' | 'title';
@@ -54,6 +56,7 @@ interface LibraryState {
   setActiveTab: (tab: 'pending' | 'saved') => void;
   updatePaperStatus: (id: string, status: ReadStatus) => Promise<void>;
   ratePaper: (id: string, rating: number) => Promise<void>;
+  setFilters: (filters: Partial<PaperFilter>) => void;
   searchPapers: (query: string) => Promise<void>;
   deletePaper: (id: string) => Promise<void>;
 }
@@ -69,19 +72,33 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
 
   loadPapers: async (filter?: PaperFilter) => {
     const client = useGatewayStore.getState().client;
-    if (!client?.isConnected) return;
+    if (!client?.isConnected) {
+      console.log('[LibraryStore] loadPapers skipped: not connected');
+      return;
+    }
     set({ loading: true });
     try {
-      const params: Record<string, unknown> = {};
-      const effectiveFilter = filter ?? get().filters;
-      if (effectiveFilter.status) params.read_status = effectiveFilter.status;
-      if (effectiveFilter.tag) params.tag = effectiveFilter.tag;
-      if (effectiveFilter.year) params.year = effectiveFilter.year;
-      if (effectiveFilter.sort) params.sort = effectiveFilter.sort;
-      const query = get().searchQuery;
-      if (query) params.query = query;
-      const result = await client.request<{ items: Paper[]; total: number }>('rc.lit.list', params);
-      set({ papers: result.items, total: result.total, loading: false });
+      const query = get().searchQuery.trim();
+      if (query) {
+        // rc.lit.list does NOT support text search — use rc.lit.search (FTS5)
+        console.log('[LibraryStore] loadPapers → rc.lit.search (query=%s)', query);
+        const result = await client.request<{ items: Paper[]; total: number }>('rc.lit.search', { query });
+        set({ papers: result.items, total: result.total, loading: false });
+      } else {
+        // No search query — use rc.lit.list with structured filters
+        console.log('[LibraryStore] loadPapers → rc.lit.list');
+        const params: Record<string, unknown> = {};
+        const effectiveFilter = filter ?? get().filters;
+        if (effectiveFilter.read_status) params.read_status = effectiveFilter.read_status;
+        if (effectiveFilter.tag) params.tag = effectiveFilter.tag;
+        if (effectiveFilter.year) params.year = effectiveFilter.year;
+        if (effectiveFilter.sort) {
+          // Backend defaults to DESC; title should be ascending (A→Z)
+          params.sort = effectiveFilter.sort === 'title' ? '+title' : effectiveFilter.sort;
+        }
+        const result = await client.request<{ items: Paper[]; total: number }>('rc.lit.list', params);
+        set({ papers: result.items, total: result.total, loading: false });
+      }
     } catch {
       set({ loading: false });
     }
@@ -106,12 +123,16 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
     set({ activeTab: tab });
   },
 
+  setFilters: (filters: Partial<PaperFilter>) => {
+    set((s) => ({ filters: { ...s.filters, ...filters } }));
+  },
+
   updatePaperStatus: async (id: string, status: ReadStatus) => {
     const client = useGatewayStore.getState().client;
     if (!client?.isConnected) return;
     // Optimistic update
     set((s) => ({
-      papers: s.papers.map((p) => (p.id === id ? { ...p, status } : p)),
+      papers: s.papers.map((p) => (p.id === id ? { ...p, read_status: status } : p)),
     }));
     try {
       await client.request('rc.lit.status', { id, status });
@@ -150,10 +171,15 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
   deletePaper: async (id: string) => {
     const client = useGatewayStore.getState().client;
     if (!client?.isConnected) return;
-    await client.request('rc.lit.delete', { id });
-    set((s) => ({
-      papers: s.papers.filter((p) => p.id !== id),
-      total: s.total - 1,
-    }));
+    try {
+      await client.request('rc.lit.delete', { id });
+      set((s) => ({
+        papers: s.papers.filter((p) => p.id !== id),
+        total: s.total - 1,
+      }));
+    } catch {
+      // Reload to restore consistent state
+      get().loadPapers();
+    }
   },
 }));

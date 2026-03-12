@@ -117,7 +117,7 @@ export default function TaskCard(props: TaskCardType) {
             color={borderColor}
             style={{ fontSize: 11 }}
           >
-            {props.priority}
+            {t(`tasks.priority.${props.priority}`, { defaultValue: props.priority })}
           </Tag>
         </div>
 
@@ -133,7 +133,7 @@ export default function TaskCard(props: TaskCardType) {
               textDecoration: statusStyle.strikethrough ? 'line-through' : undefined,
             }}
           >
-            {props.status.replace('_', ' ')}
+            {t(`tasks.status.${props.status}`, { defaultValue: props.status.replace('_', ' ') })}
           </Tag>
         </div>
 
@@ -172,6 +172,7 @@ export default function TaskCard(props: TaskCardType) {
           type="link"
           size="small"
           onClick={handleViewInPanel}
+          aria-label={t('card.task.viewInPanel')}
           style={{ color: tokens.accent.blue, paddingLeft: 0, fontSize: 12 }}
         >
           {t('card.task.viewInPanel')} <RightOutlined />
@@ -182,6 +183,7 @@ export default function TaskCard(props: TaskCardType) {
             size="small"
             icon={<CheckCircleOutlined />}
             onClick={handleMarkComplete}
+            aria-label={t('card.task.markComplete')}
             style={{
               borderColor: tokens.accent.green,
               color: tokens.accent.green,

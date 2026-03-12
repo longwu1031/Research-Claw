@@ -1,101 +1,97 @@
 import React, { useState } from 'react';
-import { Button, Input, Select, Typography, Space, Alert, Card } from 'antd';
+import { Button, Input, Typography, Space, Alert, Card, Divider, Segmented } from 'antd';
 import {
   ApiOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
+  GlobalOutlined,
   LoadingOutlined,
   RocketOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { useConfigStore } from '../../stores/config';
-import { GatewayClient } from '../../gateway/client';
+import { useGatewayStore } from '../../stores/gateway';
+import { buildConfigPatch } from '../../utils/config-patch';
 
 const { Title, Text } = Typography;
 
-const PROVIDERS = [
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'openrouter', label: 'OpenRouter' },
-  { value: 'custom', label: 'Custom' },
-];
-
-const PROVIDER_ENDPOINTS: Record<string, string> = {
-  anthropic: 'https://api.anthropic.com',
-  openai: 'https://api.openai.com',
-  openrouter: 'https://openrouter.ai/api',
-  custom: '',
-};
-
-type TestStatus = 'idle' | 'testing' | 'success' | 'failed';
-
 export default function SetupWizard() {
   const { t } = useTranslation();
-  const completeSetup = useConfigStore((s) => s.completeSetup);
+  const client = useGatewayStore((s) => s.client);
+  const connState = useGatewayStore((s) => s.state);
 
-  const [provider, setProvider] = useState<string>('anthropic');
-  const [endpoint, setEndpoint] = useState<string>(PROVIDER_ENDPOINTS.anthropic);
-  const [apiKey, setApiKey] = useState<string>('');
-  const [proxy, setProxy] = useState<string>('');
-  const [testStatus, setTestStatus] = useState<TestStatus>('idle');
-  const [testError, setTestError] = useState<string>('');
+  const [baseUrl, setBaseUrl] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [textModel, setTextModel] = useState('');
+  const [visionModel, setVisionModel] = useState('');
+  const [useDifferentEndpoint, setUseDifferentEndpoint] = useState(false);
+  const [visionBaseUrl, setVisionBaseUrl] = useState('');
+  const [visionApiKey, setVisionApiKey] = useState('');
+  const [proxyEnabled, setProxyEnabled] = useState(false);
+  const [proxyUrl, setProxyUrl] = useState('http://127.0.0.1:7890');
+  const [saving, setSaving] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleProviderChange = (value: string) => {
-    setProvider(value);
-    setEndpoint(PROVIDER_ENDPOINTS[value] ?? '');
-    setTestStatus('idle');
-  };
+  const canStart =
+    apiKey.trim().length > 0 &&
+    baseUrl.trim().length > 0 &&
+    textModel.trim().length > 0;
 
-  const handleTest = async () => {
-    setTestStatus('testing');
-    setTestError('');
+  const handleStart = async () => {
+    if (!client?.isConnected) return;
+
+    setSaving(true);
+    setError('');
 
     try {
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          testClient?.disconnect();
-          reject(new Error('Connection timeout'));
-        }, 10_000);
-
-        let testClient: GatewayClient | null = null;
-
-        testClient = new GatewayClient({
-          url: 'ws://127.0.0.1:18789',
-          clientName: 'research-claw-dashboard',
-          clientVersion: '0.1.0',
-          onHello: async () => {
-            try {
-              // Handshake succeeded — call health RPC to verify gateway
-              await testClient!.request('health');
-              clearTimeout(timeout);
-              setTestStatus('success');
-              testClient!.disconnect();
-              resolve();
-            } catch (err) {
-              clearTimeout(timeout);
-              testClient!.disconnect();
-              reject(err instanceof Error ? err : new Error('Health check failed'));
-            }
-          },
-          onClose: (_code, reason) => {
-            clearTimeout(timeout);
-            reject(new Error(reason || 'Connection closed'));
-          },
-        });
-
-        testClient.connect();
+      const patch = buildConfigPatch({
+        baseUrl: baseUrl.trim(),
+        apiKey: apiKey.trim(),
+        textModel: textModel.trim(),
+        visionModel: visionModel.trim() || undefined,
+        visionBaseUrl: useDifferentEndpoint ? visionBaseUrl.trim() || undefined : undefined,
+        visionApiKey: useDifferentEndpoint ? visionApiKey.trim() || undefined : undefined,
+        proxyUrl: proxyEnabled ? proxyUrl.trim() : '',
       });
+
+      // Gateway requires baseHash for config.patch (optimistic locking).
+      // Always fetch fresh hash right before patching.
+      const configSnapshot = await client.request<{ hash: string }>('config.get', {});
+
+      await client.request('config.patch', {
+        raw: JSON.stringify(patch),
+        baseHash: configSnapshot.hash,
+      });
+
+      // Gateway will SIGUSR1 restart → WS drops → auto reconnect → onHello → config.get → evaluateConfig → bootState='ready'
+      setRestarting(true);
     } catch (err) {
-      setTestStatus('failed');
-      setTestError(err instanceof Error ? err.message : 'Unknown error');
+      setSaving(false);
+      setError(err instanceof Error ? err.message : 'Failed to configure gateway');
     }
   };
 
-  const handleStart = () => {
-    completeSetup(apiKey, provider, endpoint, proxy || undefined);
-  };
-
-  const canStart = apiKey.trim().length > 0 && provider;
+  // While restarting, show overlay — the gateway store's onHello will auto-fetch config
+  // and evaluateConfig will set bootState to 'ready', which unmounts this wizard
+  if (restarting) {
+    return (
+      <div
+        style={{
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--bg)',
+          gap: 16,
+        }}
+      >
+        <LoadingOutlined style={{ fontSize: 48, color: 'var(--accent-primary)' }} />
+        <Text style={{ fontSize: 16 }}>{t('setup.gatewayRestarting')}</Text>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {connState === 'connected' ? t('status.connected') : t('status.reconnecting')}
+        </Text>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -114,6 +110,8 @@ export default function SetupWizard() {
           maxWidth: 480,
           background: 'var(--surface-hover)',
           border: '1px solid var(--border)',
+          maxHeight: '90vh',
+          overflow: 'auto',
         }}
         styles={{ body: { padding: 32 } }}
       >
@@ -126,27 +124,15 @@ export default function SetupWizard() {
             <Text type="secondary">{t('setup.subtitle')}</Text>
           </div>
 
+          {/* ── Model ── */}
           <div>
             <Text strong style={{ display: 'block', marginBottom: 4 }}>
-              {t('setup.provider')}
-            </Text>
-            <Select
-              style={{ width: '100%' }}
-              value={provider}
-              onChange={handleProviderChange}
-              options={PROVIDERS}
-              placeholder={t('setup.providerPlaceholder')}
-            />
-          </div>
-
-          <div>
-            <Text strong style={{ display: 'block', marginBottom: 4 }}>
-              {t('setup.endpoint')}
+              {t('setup.baseUrl')}
             </Text>
             <Input
-              value={endpoint}
-              onChange={(e) => setEndpoint(e.target.value)}
-              placeholder={t('setup.endpointPlaceholder')}
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder={t('setup.baseUrlPlaceholder')}
             />
           </div>
 
@@ -164,51 +150,131 @@ export default function SetupWizard() {
 
           <div>
             <Text strong style={{ display: 'block', marginBottom: 4 }}>
-              {t('setup.proxy')}
+              {t('setup.modelName')}
             </Text>
             <Input
-              value={proxy}
-              onChange={(e) => setProxy(e.target.value)}
-              placeholder={t('setup.proxyPlaceholder')}
+              value={textModel}
+              onChange={(e) => setTextModel(e.target.value)}
+              placeholder={t('setup.modelNamePlaceholder')}
             />
           </div>
 
-          {testStatus === 'success' && (
-            <Alert
-              type="success"
-              message={t('setup.testSuccess')}
-              icon={<CheckCircleOutlined />}
-              showIcon
+          {/* ── Vision ── */}
+          <div>
+            <Text strong style={{ display: 'block', marginBottom: 4 }}>
+              {t('setup.visionModel')}
+            </Text>
+            <Input
+              value={visionModel}
+              onChange={(e) => setVisionModel(e.target.value)}
+              placeholder={t('setup.visionModelPlaceholder')}
             />
+            <Text type="secondary" style={{ fontSize: 11, marginTop: 2, display: 'block' }}>
+              {t('setup.visionModelHint')}
+            </Text>
+          </div>
+
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 13 }}>{t('setup.differentEndpoint')}</Text>
+              <Segmented
+                value={useDifferentEndpoint ? 'on' : 'off'}
+                onChange={(v) => setUseDifferentEndpoint(v === 'on')}
+                options={[
+                  { label: 'OFF', value: 'off' },
+                  { label: 'ON', value: 'on' },
+                ]}
+                size="small"
+              />
+            </div>
+          </div>
+
+          {useDifferentEndpoint && (
+            <>
+              <div>
+                <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                  {t('setup.visionBaseUrl')}
+                </Text>
+                <Input
+                  value={visionBaseUrl}
+                  onChange={(e) => setVisionBaseUrl(e.target.value)}
+                  placeholder={t('setup.baseUrlPlaceholder')}
+                />
+              </div>
+              <div>
+                <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                  {t('setup.visionApiKey')}
+                </Text>
+                <Input.Password
+                  value={visionApiKey}
+                  onChange={(e) => setVisionApiKey(e.target.value)}
+                  placeholder={t('setup.apiKeyPlaceholder')}
+                  prefix={<ApiOutlined />}
+                />
+              </div>
+            </>
           )}
 
-          {testStatus === 'failed' && (
+          <Divider style={{ margin: '4px 0' }} />
+
+          {/* ── Network ── */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <Text style={{ fontSize: 13 }}>
+                <GlobalOutlined style={{ marginRight: 6 }} />
+                {t('setup.proxyEnabled')}
+              </Text>
+              <Segmented
+                value={proxyEnabled ? 'on' : 'off'}
+                onChange={(v) => setProxyEnabled(v === 'on')}
+                options={[
+                  { label: 'OFF', value: 'off' },
+                  { label: 'ON', value: 'on' },
+                ]}
+                size="small"
+              />
+            </div>
+            {proxyEnabled && (
+              <>
+                <Input
+                  value={proxyUrl}
+                  onChange={(e) => setProxyUrl(e.target.value)}
+                  placeholder="http://127.0.0.1:7890"
+                />
+                <Text type="secondary" style={{ fontSize: 11, marginTop: 2, display: 'block' }}>
+                  {t('setup.proxyHint')}
+                </Text>
+              </>
+            )}
+          </div>
+
+          {error && (
             <Alert
               type="error"
-              message={t('setup.testFailed', { error: testError })}
-              icon={<CloseCircleOutlined />}
+              message={error}
               showIcon
+              closable
+              onClose={() => setError('')}
             />
           )}
 
-          <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-            <Button
-              onClick={handleTest}
-              loading={testStatus === 'testing'}
-              icon={testStatus === 'testing' ? <LoadingOutlined /> : <ApiOutlined />}
-            >
-              {testStatus === 'testing' ? t('setup.testing') : t('setup.test')}
-            </Button>
+          <Alert
+            type="info"
+            message={t('setup.restartHint')}
+            style={{ fontSize: 12 }}
+          />
 
+          <div style={{ textAlign: 'right' }}>
             <Button
               type="primary"
               onClick={handleStart}
-              disabled={!canStart}
+              disabled={!canStart || saving}
+              loading={saving}
               icon={<RocketOutlined />}
             >
-              {t('setup.start')}
+              {saving ? t('setup.configuring') : t('setup.start')}
             </Button>
-          </Space>
+          </div>
         </Space>
       </Card>
     </div>

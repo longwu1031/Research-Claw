@@ -29,16 +29,16 @@ Provided by the `research-claw-core` plugin. Data stored in
 | Tool | Purpose | Example |
 |:---|:---|:---|
 | `library_add_paper` | Add a paper to local library | Provide DOI, title, or BibTeX |
-| `library_search` | Search library by keyword, author, tag, status | `library_search(query="attention", status="unread")` |
+| `library_search` | Search library by keyword (full-text across title, abstract, authors) | `library_search(query="attention", limit=20)` |
 | `library_update_paper` | Update paper metadata, status, annotations | Change status to "read", add notes |
 | `library_get_paper` | Retrieve full details of a specific paper | By DOI or internal ID |
 | `library_export_bibtex` | Export library or subset as BibTeX | Filter by tag, project, or list |
 | `library_reading_stats` | Reading activity summary | Papers read this week, total count |
 | `library_batch_add` | Batch import multiple papers at once | Provide array of DOIs or metadata objects |
 | `library_manage_collection` | Create, update, or delete paper collections | `library_manage_collection(action="create", name="Survey Papers")` |
-| `library_tag_paper` | Add or remove tags on a paper | `library_tag_paper(paper_id="...", add=["ml"], remove=["misc"])` |
-| `library_add_note` | Add an annotation note to a paper | `library_add_note(paper_id="...", note="Key insight on p.5", page=5)` |
-| `library_import_bibtex` | Import papers from a BibTeX file | `library_import_bibtex(path="refs.bib")` |
+| `library_tag_paper` | Add or remove a tag on a paper | `library_tag_paper(paper_id="...", tag_name="ml", action="add")` |
+| `library_add_note` | Add an annotation note to a paper | `library_add_note(paper_id="...", note_text="Key insight on p.5", page=5)` |
+| `library_import_bibtex` | Import papers from BibTeX content | `library_import_bibtex(bibtex_content="@article{...}")` |
 | `library_citation_graph` | Query citation relationships between papers | `library_citation_graph(paper_id="...", direction="both", depth=1)` |
 
 ## Task Management Tools (6 tools)
@@ -58,16 +58,35 @@ For managing files in the research workspace.
 
 | Tool | Purpose | Example |
 |:---|:---|:---|
-| `workspace_save` | Save content to a workspace file | `workspace_save(path="notes/ch3.md", content="...")` |
+| `workspace_save` | Save content to a workspace file (returns file_card — include it verbatim) | `workspace_save(path="notes/ch3.md", content="...")` |
 | `workspace_read` | Read a workspace file | `workspace_read(path="notes/ch3.md")` |
-| `workspace_list` | List files in workspace directory | `workspace_list(dir="notes/")` |
+| `workspace_list` | List files in workspace directory | `workspace_list(directory="notes/", recursive=true)` |
 | `workspace_diff` | Show changes to a file since last commit | `workspace_diff(path="notes/ch3.md")` |
 | `workspace_history` | Show file edit history | `workspace_history(path="notes/ch3.md")` |
-| `workspace_restore` | Restore a previous version of a file | `workspace_restore(path="notes/ch3.md", version=3)` |
+| `workspace_restore` | Restore a previous version of a file | `workspace_restore(path="notes/ch3.md", commit_hash="abc1234")` |
+
+## Research Radar Tools (3 tools)
+
+For configuring and scanning with the research radar. Config is persisted in
+`.research-claw/library.db` and displayed on the dashboard Radar panel.
+
+| Tool | Purpose | Example |
+|:---|:---|:---|
+| `radar_configure` | Set tracking keywords, authors, journals, sources | `radar_configure(keywords=["transformer", "LLM"], authors=["Vaswani"])` |
+| `radar_get_config` | Read current radar configuration | `radar_get_config()` |
+| `radar_scan` | Scan arXiv/Semantic Scholar for new papers matching config | `radar_scan()` or `radar_scan(sources=["arxiv"], max_results=10)` |
+
+**Important:** When the user asks to configure/update their research radar, you
+MUST use the `radar_configure` tool to persist the settings. Do NOT just output
+text — the dashboard reads from the database, not from chat history.
+
+**Important:** When the user asks to check for new papers or scan their radar,
+you MUST use the `radar_scan` tool. Papers are returned but NOT auto-added to
+the library — use `library_add_paper` or `library_batch_add` to save interesting ones.
 
 ## Tool Count Summary
 
-Total: **24 tools** (12 library + 6 task + 6 workspace), all registered in
+Total: **27 tools** (12 library + 6 task + 6 workspace + 3 radar), all registered in
 `openclaw.json` under `tools.alsoAllow`.
 
 ## Citation and Export

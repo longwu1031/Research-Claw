@@ -10,11 +10,12 @@ import {
   MenuUnfoldOutlined,
   AppstoreOutlined,
   PlusOutlined,
+  DeleteOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useUiStore, type PanelTab } from '../stores/ui';
-import { useSessionsStore } from '../stores/sessions';
-import { useChatStore } from '../stores/chat';
+import { useSessionsStore, MAIN_SESSION_KEY } from '../stores/sessions';
 
 const { Text } = Typography;
 
@@ -32,6 +33,19 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'settings', icon: <SettingOutlined />, labelKey: 'nav.settings' },
 ];
 
+/** Get display name for a session. Prefers label > derivedTitle > short key. */
+function getSessionName(session: { key: string; label?: string; derivedTitle?: string; displayName?: string }, t: (k: string) => string): string {
+  if (session.label) return session.label;
+  if (session.derivedTitle) return session.derivedTitle;
+  if (session.displayName) return session.displayName;
+  const { key } = session;
+  // For the main session, show a friendly name
+  if (key === 'main' || key === 'agent:main:main') return t('project.mainSession');
+  // Strip "agent:main:" prefix for readability
+  const display = key.replace(/^agent:main:/, '');
+  return display.length > 20 ? `${display.slice(0, 20)}…` : display;
+}
+
 export default function LeftNav() {
   const { t } = useTranslation();
   const collapsed = useUiStore((s) => s.leftNavCollapsed);
@@ -46,7 +60,9 @@ export default function LeftNav() {
   const loadSessions = useSessionsStore((s) => s.loadSessions);
   const switchSession = useSessionsStore((s) => s.switchSession);
   const createSession = useSessionsStore((s) => s.createSession);
-  const send = useChatStore((s) => s.send);
+  const deleteSession = useSessionsStore((s) => s.deleteSession);
+  const renameSession = useSessionsStore((s) => s.renameSession);
+  const isMainSession = useSessionsStore((s) => s.isMainSession);
 
   useEffect(() => {
     loadSessions();
@@ -61,53 +77,68 @@ export default function LeftNav() {
     }
   };
 
+  const handleRename = (key: string, currentLabel: string) => {
+    const newLabel = prompt(t('project.renamePrompt'), currentLabel);
+    if (newLabel !== null && newLabel !== currentLabel) {
+      renameSession(key, newLabel);
+    }
+  };
+
+  const handleDelete = (key: string) => {
+    if (isMainSession(key)) return;
+    if (confirm(t('project.deleteConfirm'))) {
+      deleteSession(key);
+    }
+  };
+
   // Build project switcher dropdown items
   const projectMenuItems = useMemo(() => {
     const items: Array<{ key: string; label: React.ReactNode; onClick?: () => void }> = [];
 
-    // "All Projects" at top
-    items.push({
-      key: 'all',
-      label: (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <AppstoreOutlined style={{ fontSize: 12 }} />
-          <span>{t('project.allProjects')}</span>
-        </div>
-      ),
-      onClick: () => switchSession(''),
-    });
-
-    // Divider placeholder via type
-    if (sessions.length > 0) {
-      items.push({ key: 'divider', label: <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} /> });
-    }
-
-    // Session items
-    for (const session of sessions.slice(0, 10)) {
+    // Session items — sorted by updatedAt desc (server already does this)
+    for (const session of sessions.slice(0, 15)) {
       const isActive = session.key === activeSessionKey;
+      const isMain = isMainSession(session.key);
+      const name = getSessionName(session, t);
+
       items.push({
         key: session.key,
         label: (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 180 }}>
             <div
               style={{
                 width: 6,
                 height: 6,
                 borderRadius: '50%',
+                flexShrink: 0,
                 background: isActive ? 'var(--accent-primary)' : 'var(--text-tertiary)',
               }}
             />
-            <span style={{ fontWeight: isActive ? 600 : 400 }}>
-              {session.label ?? `Session ${session.key.slice(0, 8)}`}
+            <span style={{ flex: 1, fontWeight: isActive ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {name}
             </span>
+            {/* Rename button */}
+            <EditOutlined
+              style={{ fontSize: 11, color: 'var(--text-tertiary)', flexShrink: 0 }}
+              onClick={(e) => { e.stopPropagation(); handleRename(session.key, name); }}
+            />
+            {/* Delete button — hidden for main session */}
+            {!isMain && (
+              <DeleteOutlined
+                style={{ fontSize: 11, color: 'var(--text-tertiary)', flexShrink: 0 }}
+                onClick={(e) => { e.stopPropagation(); handleDelete(session.key); }}
+              />
+            )}
           </div>
         ),
         onClick: () => switchSession(session.key),
       });
     }
 
-    // "New Project" at bottom
-    items.push({ key: 'divider2', label: <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} /> });
+    // Divider + "New Project"
+    if (sessions.length > 0) {
+      items.push({ key: 'divider', label: <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} /> });
+    }
     items.push({
       key: 'new',
       label: (
@@ -117,19 +148,22 @@ export default function LeftNav() {
         </div>
       ),
       onClick: async () => {
-        const key = await createSession();
-        switchSession(key);
+        await createSession();
       },
     });
 
     return items;
-  }, [sessions, activeSessionKey, switchSession, createSession, t]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions, activeSessionKey, t]);
 
   const activeSessionLabel = useMemo(() => {
-    if (!activeSessionKey) return t('nav.project.default');
     const session = sessions.find((s) => s.key === activeSessionKey);
-    return session?.label ?? `Session ${activeSessionKey.slice(0, 8)}`;
-  }, [activeSessionKey, sessions, t]);
+    if (session) return getSessionName(session, t);
+    // Active key not in list yet (e.g. just created, not yet on server)
+    if (isMainSession(activeSessionKey)) return t('project.mainSession');
+    const display = activeSessionKey.replace(/^agent:main:/, '');
+    return display.length > 20 ? `${display.slice(0, 20)}…` : display;
+  }, [activeSessionKey, sessions, t, isMainSession]);
 
   return (
     <div

@@ -1,8 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Typography, Spin } from 'antd';
-import { MessageOutlined } from '@ant-design/icons';
+import { MessageOutlined, ArrowDownOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { List as VirtualList, type ListImperativeAPI } from 'react-window';
 import { useChatStore } from '../../stores/chat';
 import type { ChatMessage } from '../../gateway/types';
 import MessageBubble from './MessageBubble';
@@ -10,70 +9,80 @@ import MessageInput from './MessageInput';
 
 const { Text } = Typography;
 
-const VIRTUAL_SCROLL_THRESHOLD = 100;
-const ESTIMATED_ROW_HEIGHT = 80;
+/** Distance (px) from bottom within which the user is considered "near bottom". Matches OpenClaw. */
+const NEAR_BOTTOM_THRESHOLD = 450;
 
-interface VirtualRowProps {
-  messages: ChatMessage[];
-}
-
-function VirtualRow(props: {
-  index: number;
-  style: React.CSSProperties;
-  ariaAttributes: { 'aria-posinset': number; 'aria-setsize': number; role: 'listitem' };
-} & VirtualRowProps) {
-  const { index, style, messages } = props;
-  return (
-    <div style={style}>
-      <MessageBubble message={messages[index]} />
-    </div>
-  );
+function extractVisibleText(msg: ChatMessage): string {
+  if (msg.text) return msg.text;
+  if (typeof msg.content === 'string') return msg.content;
+  if (Array.isArray(msg.content)) {
+    return msg.content
+      .filter((c) => c.type === 'text' && c.text)
+      .map((c) => c.text!)
+      .join('');
+  }
+  return '';
 }
 
 export default function ChatView() {
   const { t } = useTranslation();
-  const messages = useChatStore((s) => s.messages);
+  const rawMessages = useChatStore((s) => s.messages);
+  // Filter messages for display:
+  // 1. Only show 'user' and 'assistant' roles (skip toolResult, etc.)
+  // 2. Skip assistant messages with no visible text (tool-call-only turns)
+  const messages = rawMessages.filter((m) => {
+    if (m.role === 'user') return true;
+    if (m.role !== 'assistant') return false;
+    return extractVisibleText(m).trim().length > 0;
+  });
   const streaming = useChatStore((s) => s.streaming);
   const streamText = useChatStore((s) => s.streamText);
   const sending = useChatStore((s) => s.sending);
   const lastError = useChatStore((s) => s.lastError);
   const clearError = useChatStore((s) => s.clearError);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [containerHeight, setContainerHeight] = useState(600);
-  const virtualRef = useRef<ListImperativeAPI>(null);
 
-  const useVirtual = messages.length > VIRTUAL_SCROLL_THRESHOLD;
+  // Smart scroll state — refs to avoid re-renders on every scroll event
+  const userNearBottomRef = useRef(true);
+  const [newMessagesBelow, setNewMessagesBelow] = useState(false);
 
-  // Measure container height for virtual scrolling
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerHeight(entry.contentRect.height);
-      }
-    });
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
+  // Scroll event handler — tracks whether user is near bottom
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    userNearBottomRef.current = distanceFromBottom < NEAR_BOTTOM_THRESHOLD;
+    if (userNearBottomRef.current) {
+      setNewMessagesBelow(false);
+    }
   }, []);
 
-  // Auto-scroll to bottom (non-virtual mode)
-  useEffect(() => {
-    if (!useVirtual && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  // Scroll to bottom — used by the "new messages" pill
+  const scrollToBottom = useCallback(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
     }
-  }, [messages, streamText, useVirtual]);
+    userNearBottomRef.current = true;
+    setNewMessagesBelow(false);
+  }, []);
 
-  // Auto-scroll for virtual mode: scroll to last item
+  // Smart auto-scroll: only scroll if user is near bottom
   useEffect(() => {
-    if (useVirtual && virtualRef.current && messages.length > 0) {
-      try {
-        virtualRef.current.scrollToRow({ index: messages.length - 1, align: 'end' });
-      } catch {
-        // RangeError if index is invalid during transition
+    if (scrollRef.current) {
+      if (userNearBottomRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      } else if (streaming) {
+        setNewMessagesBelow(true);
       }
     }
-  }, [messages.length, useVirtual, virtualRef]);
+  }, [messages, streamText, streaming]);
+
+  // Reset scroll tracking when a new session starts (messages cleared)
+  useEffect(() => {
+    if (messages.length === 0) {
+      userNearBottomRef.current = true;
+      setNewMessagesBelow(false);
+    }
+  }, [messages.length]);
 
   return (
     <div
@@ -86,94 +95,97 @@ export default function ChatView() {
     >
       {/* Message list */}
       <div
-        ref={containerRef}
+        role="log"
+        aria-live="polite"
         style={{
           flex: 1,
-          overflow: useVirtual ? 'hidden' : undefined,
+          minHeight: 0,
+          overflow: 'hidden',
         }}
       >
-        {!useVirtual ? (
-          <div
-            ref={scrollRef}
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          style={{
+            height: '100%',
+            overflow: 'auto',
+            padding: '16px 24px',
+          }}
+        >
+          {messages.length === 0 && !streaming && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                gap: 12,
+              }}
+            >
+              <MessageOutlined
+                style={{ fontSize: 48, color: 'var(--text-tertiary)', opacity: 0.5 }}
+              />
+              <Text type="secondary">{t('chat.empty')}</Text>
+            </div>
+          )}
+
+          {messages.map((msg, idx) => (
+            <MessageBubble key={idx} message={msg} />
+          ))}
+
+          {/* Streaming indicator */}
+          {streaming && streamText && (
+            <MessageBubble
+              message={{ role: 'assistant', text: streamText, timestamp: Date.now() }}
+              isStreaming
+            />
+          )}
+
+          {/* Sending indicator */}
+          {sending && (
+            <div style={{ padding: '8px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Spin size="small" />
+              <Text type="secondary" style={{ fontSize: 13 }}>
+                {t('chat.thinking')}
+              </Text>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* "New messages below" pill — shown when user scrolls up during streaming */}
+      {newMessagesBelow && (
+        <div style={{ position: 'relative', height: 0, overflow: 'visible' }}>
+          <button
+            onClick={scrollToBottom}
+            aria-label={t('chat.newMessages')}
             style={{
-              height: '100%',
-              overflow: 'auto',
-              padding: '16px 24px',
+              position: 'absolute',
+              bottom: 8,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 16px',
+              background: 'var(--surface-hover, rgba(255,255,255,0.08))',
+              border: '1px solid var(--border, rgba(255,255,255,0.1))',
+              borderRadius: 9999,
+              color: 'var(--text-secondary, #a1a1aa)',
+              fontSize: 12,
+              cursor: 'pointer',
+              backdropFilter: 'blur(8px)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+              transition: 'background 0.15s, color 0.15s',
+              zIndex: 10,
             }}
           >
-            {messages.length === 0 && !streaming && (
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '100%',
-                  gap: 12,
-                }}
-              >
-                <MessageOutlined
-                  style={{ fontSize: 48, color: 'var(--text-tertiary)', opacity: 0.5 }}
-                />
-                <Text type="secondary">{t('chat.empty')}</Text>
-              </div>
-            )}
-
-            {messages.map((msg, idx) => (
-              <MessageBubble key={idx} message={msg} />
-            ))}
-
-            {/* Streaming indicator */}
-            {streaming && streamText && (
-              <MessageBubble
-                message={{ role: 'assistant', text: streamText, timestamp: Date.now() }}
-                isStreaming
-              />
-            )}
-
-            {/* Sending indicator */}
-            {sending && (
-              <div style={{ padding: '8px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Spin size="small" />
-                <Text type="secondary" style={{ fontSize: 13 }}>
-                  {t('chat.thinking')}
-                </Text>
-              </div>
-            )}
-          </div>
-        ) : (
-          <>
-            <VirtualList
-              listRef={virtualRef}
-              rowComponent={VirtualRow}
-              rowCount={messages.length}
-              rowHeight={ESTIMATED_ROW_HEIGHT}
-              rowProps={{ messages }}
-              style={{ height: containerHeight }}
-            />
-
-            {/* Streaming indicator (outside virtual list) */}
-            {streaming && streamText && (
-              <div style={{ padding: '0 24px' }}>
-                <MessageBubble
-                  message={{ role: 'assistant', text: streamText, timestamp: Date.now() }}
-                  isStreaming
-                />
-              </div>
-            )}
-
-            {/* Sending indicator */}
-            {sending && (
-              <div style={{ padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Spin size="small" />
-                <Text type="secondary" style={{ fontSize: 13 }}>
-                  {t('chat.thinking')}
-                </Text>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+            <ArrowDownOutlined style={{ fontSize: 12 }} />
+            {t('chat.newMessages')}
+          </button>
+        </div>
+      )}
 
       {/* Error banner */}
       {lastError && (

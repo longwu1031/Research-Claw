@@ -5,10 +5,10 @@
  * for the literature library, task system, and workspace tracking.
  *
  * Registration totals:
- *   - 24 agent tools (12 literature + 6 task + 6 workspace)
- *   - 45 WS RPC methods + 1 HTTP route = 46 interface methods
- *     (26 rc.lit.* + 10 rc.task.* + 3 rc.cron.* + 6 rc.ws.* = 45 WS; POST /rc/upload = 1 HTTP)
- *   - 6 hooks (before_prompt_build, session_start, session_end, agent_end, after_tool_call, gateway_start)
+ *   - 28 agent tools (12 literature + 7 task + 6 workspace + 3 radar)
+ *   - 54 WS RPC methods + 1 HTTP route = 55 interface methods
+ *     (26 rc.lit.* + 10 rc.task.* + 4 rc.cron.* + 2 rc.notifications.* + 9 rc.ws.* + 3 rc.radar.* = 54 WS; POST /rc/upload = 1 HTTP)
+ *   - 7 hooks (before_prompt_build, session_start, session_end, before_tool_call, agent_end, after_tool_call, gateway_start)
  *   - 1 service (research-claw-db lifecycle)
  */
 
@@ -26,6 +26,9 @@ import { registerTaskRpc } from './src/tasks/rpc.js';
 import { WorkspaceService, type WorkspaceConfig } from './src/workspace/service.js';
 import { createWorkspaceTools } from './src/workspace/tools.js';
 import { registerWorkspaceRpc } from './src/workspace/rpc.js';
+import { registerRadarRpc } from './src/radar/rpc.js';
+import { createRadarTools } from './src/radar/tools.js';
+import type { RegisterMethod } from './src/types.js';
 
 // ── Upload file extension whitelist ──────────────────────────────────────
 
@@ -101,7 +104,7 @@ const plugin: PluginDefinition = {
   description: 'Literature library, task management, and workspace tracking for academic research',
   version: '0.1.0',
 
-  async register(api) {
+  register(api) {
     const cfg = (api.pluginConfig ?? {}) as PluginConfig;
     const dbPath = api.resolvePath(cfg.dbPath ?? '.research-claw/library.db');
     const deadlineWarningHours = cfg.heartbeatDeadlineWarningHours ?? 48;
@@ -126,7 +129,16 @@ const plugin: PluginDefinition = {
       gitAuthorEmail: cfg.workspace?.gitAuthorEmail ?? 'research-claw@wentor.ai',
     };
     const wsService = new WorkspaceService(wsConfig);
-    await wsService.init();
+
+    // Fire-and-forget: scaffold directories + git tracker in background.
+    // MUST NOT await here — OpenClaw's plugin loader does not support async
+    // register(). The gateway snapshots pluginRegistry.gatewayHandlers via
+    // spread operator BEFORE an async register() resolves, so all RPC
+    // methods would be "unknown". Completing within ~100ms, well before
+    // any dashboard connection (~18s after startup).
+    wsService.init().catch((err) => {
+      api.logger.error(`Workspace init failed: ${err instanceof Error ? err.message : String(err)}`);
+    });
 
     // ── 3. Register database lifecycle service ───────────────────────
     api.registerService({
@@ -151,7 +163,7 @@ const plugin: PluginDefinition = {
       },
     });
 
-    // ── 4. Register tools (24 total) ─────────────────────────────────
+    // ── 4. Register tools (27 total) ─────────────────────────────────
     for (const tool of createLiteratureTools(litService)) {
       api.registerTool(tool);
     }
@@ -161,15 +173,41 @@ const plugin: PluginDefinition = {
     for (const tool of createWorkspaceTools(wsService)) {
       api.registerTool(tool);
     }
+    for (const tool of createRadarTools(dbManager.db)) {
+      api.registerTool(tool);
+    }
 
-    // ── 5. Register RPC methods (46 total) ───────────────────────────
-    const registerMethod = api.registerGatewayMethod.bind(api) as (
-      method: string,
-      handler: unknown,
-    ) => void;
+    // ── 5. Register RPC methods (49 total) ───────────────────────────
+    // Rate limiting not needed: local satellite, no network exposure (ws://127.0.0.1:28789 only)
+    //
+    // Bridge: our RPC handlers use a simple (params) => result signature,
+    // but the gateway expects (opts: { params, respond, ... }) => void.
+    // This wrapper extracts opts.params, awaits the result, and calls
+    // opts.respond() to send the WS response back to the client.
+    const registerMethod: RegisterMethod = (method, handler) => {
+      api.registerGatewayMethod(method, async (opts: {
+        params: Record<string, unknown>;
+        respond: (ok: boolean, payload?: unknown, error?: { code: string; message: string }) => void;
+      }) => {
+        try {
+          const result = await handler(opts.params);
+          opts.respond(true, result);
+        } catch (err) {
+          // Handle both Error instances and plain ErrorShape objects from classifyError()
+          const message =
+            err instanceof Error
+              ? err.message
+              : typeof err === 'object' && err !== null && 'message' in err
+                ? String((err as { message: unknown }).message)
+                : String(err);
+          opts.respond(false, undefined, { code: 'PLUGIN_ERROR', message });
+        }
+      });
+    };
     registerLiteratureRpc(registerMethod, litService);   // 26 methods
-    registerTaskRpc(registerMethod, taskService);         // 10 task + 3 cron = 13 methods
-    registerWorkspaceRpc(registerMethod, wsService);      // 6 methods
+    registerTaskRpc(registerMethod, taskService);         // 10 task + 4 cron = 14 methods
+    registerWorkspaceRpc(registerMethod, wsService, wsConfig.root);  // 9 methods
+    registerRadarRpc(registerMethod, dbManager.db);       // 3 methods
 
     // ── 6. Register HTTP route: POST /rc/upload ──────────────────────
     api.registerHttpRoute({
@@ -192,9 +230,10 @@ const plugin: PluginDefinition = {
             return true;
           }
 
-          // Sanitize destination: reject traversal attempts early (wsService.save also validates)
+          // Sanitize destination: resolve and verify it stays within workspace root
           const destDir = destination || 'sources';
-          if (destDir.includes('..') || destDir.startsWith('/') || destDir.startsWith('\\')) {
+          const resolvedDest = path.resolve(wsConfig.root, destDir);
+          if (!resolvedDest.startsWith(path.resolve(wsConfig.root) + path.sep) && resolvedDest !== path.resolve(wsConfig.root)) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ ok: false, error: { code: 'UPLOAD_INVALID_PATH', message: 'Invalid destination path' } }));
             return true;
@@ -258,11 +297,25 @@ const plugin: PluginDefinition = {
     // ── 7. Register hooks (6) ────────────────────────────────────────
 
     // Hook 1: Inject research context into agent prompt
+    //
+    // Provides the agent with a snapshot of current state at each turn:
+    //   - Library statistics (total papers, unread count)
+    //   - Overdue tasks (past deadline)
+    //   - Upcoming tasks (within deadline warning window)
+    //   - Active task overview (todo + in_progress, both agent and user tasks)
     api.on('before_prompt_build', () => {
       try {
         const stats = litService.getStats();
         const overdue = taskService.overdue();
         const upcoming = taskService.upcoming(deadlineWarningHours);
+
+        // Fetch active tasks (todo + in_progress) for overview
+        const activeTasks = taskService.list({
+          limit: 10,
+          sort: 'priority',
+          direction: 'asc',
+          include_completed: false,
+        });
 
         const lines: string[] = [];
         lines.push(`[Research-Claw] Library: ${stats.total} papers (${stats.by_status['unread'] ?? 0} unread)`);
@@ -280,6 +333,27 @@ const plugin: PluginDefinition = {
           }
         }
 
+        // Active task overview — gives the agent awareness of user's and its own todos
+        if (activeTasks.items.length > 0) {
+          const agentTasks = activeTasks.items.filter((t: { task_type: string }) => t.task_type === 'agent' || t.task_type === 'mixed');
+          const humanTasks = activeTasks.items.filter((t: { task_type: string }) => t.task_type === 'human');
+
+          if (agentTasks.length > 0) {
+            lines.push(`[Research-Claw] Agent tasks (${agentTasks.length} active):`);
+            for (const t of agentTasks.slice(0, 5)) {
+              const status = (t as { status: string }).status;
+              lines.push(`  - [${status}] "${(t as { title: string }).title}"`);
+            }
+          }
+          if (humanTasks.length > 0) {
+            lines.push(`[Research-Claw] User tasks (${humanTasks.length} active):`);
+            for (const t of humanTasks.slice(0, 5)) {
+              const status = (t as { status: string }).status;
+              lines.push(`  - [${status}] "${(t as { title: string }).title}"`);
+            }
+          }
+        }
+
         return { prependContext: lines.join('\n') };
       } catch {
         return {};
@@ -293,10 +367,22 @@ const plugin: PluginDefinition = {
       }
     });
 
-    // Hook 3: Close open reading sessions on session end
+    // Hook 3: Close open reading sessions on session end (including stale sessions > 24h)
     api.on('session_end', () => {
       if (!dbManager?.isOpen()) return;
       try {
+        // Close stale sessions older than 24 hours (e.g. user crashed without ending)
+        dbManager.db
+          .prepare(
+            `UPDATE rc_reading_sessions
+             SET ended_at = datetime('now'),
+                 duration_minutes = CAST((julianday('now') - julianday(started_at)) * 1440 AS INTEGER)
+             WHERE ended_at IS NULL
+               AND started_at < datetime('now', '-24 hours')`,
+          )
+          .run();
+
+        // Close remaining open sessions from this agent session
         const openSessions = dbManager.db
           .prepare('SELECT id FROM rc_reading_sessions WHERE ended_at IS NULL')
           .all() as Array<{ id: string }>;
@@ -312,18 +398,78 @@ const plugin: PluginDefinition = {
       }
     });
 
-    // Hook 4: Record agent run summary
+    // Hook 4: Guard against destructive exec commands outside workspace
+    //
+    // OpenClaw's `exec` tool lets the agent run arbitrary shell commands.
+    // We intercept it here to block commands that could recursively delete
+    // or format storage outside the workspace root. Normal commands (python,
+    // git, npm, curl, single-file rm, etc.) pass through unhindered.
+    //
+    // Design philosophy: block only catastrophic operations (recursive
+    // delete on system/home paths, disk-level destruction). Single-file rm,
+    // redirects to /tmp, chmod on local scripts are all legitimate and
+    // must NOT be blocked. Prompt-level HiL constraints in AGENTS.md
+    // cover the remaining surface area.
+    //
+    // Returns { block: true, blockReason } to prevent execution,
+    // or {} to allow it.
+    const wsRoot = wsConfig.root;
+
+    // Only block recursive rm targeting paths outside the workspace
+    const CATASTROPHIC_PATTERNS = [
+      // rm -rf / rm -fr / rm -r targeting absolute paths (outside workspace)
+      /\brm\s+(-\w*r\w*f|-\w*f\w*r|-r)\s+\//,
+      // rm -rf / rm -fr / rm -r targeting home directory
+      /\brm\s+(-\w*r\w*f|-\w*f\w*r|-r)\s+~/,
+      // rm -rf / rm -fr / rm -r targeting parent traversal
+      /\brm\s+(-\w*r\w*f|-\w*f\w*r|-r)\s+\.\.\//,
+      // Disk-level destructive operations — never needed for research
+      /\bdd\s+.*of=\/dev\//,
+      /\bmkfs\b/,
+      /\bshred\s/,
+      // Fork bomb
+      /:\(\)\s*\{.*:\|:.*&\s*\}/,
+    ];
+
+    api.on('before_tool_call', (event: unknown) => {
+      const evt = event as { toolName?: string; params?: Record<string, unknown> } | undefined;
+      if (!evt || evt.toolName !== 'exec') return {};
+
+      const command = typeof evt.params?.command === 'string' ? evt.params.command : '';
+      if (!command) return {};
+
+      // Allow anything explicitly targeting workspace (uses resolved absolute path)
+      if (command.includes(wsRoot)) return {};
+
+      // Check against catastrophic patterns only
+      for (const pattern of CATASTROPHIC_PATTERNS) {
+        if (pattern.test(command)) {
+          api.logger.warn(`[SafeGuard] Blocked catastrophic command: ${command.slice(0, 120)}`);
+          return {
+            block: true,
+            blockReason:
+              `Destructive command blocked by Research-Claw safety guard. ` +
+              `Recursive deletion and disk-level operations outside the workspace are not permitted. ` +
+              `Use workspace tools for file management. Command: ${command.slice(0, 80)}`,
+          };
+        }
+      }
+
+      return {};
+    });
+
+    // Hook 5: Record agent run summary
     api.on('agent_end', () => {
       // Lightweight: future versions can log session summary to activity_log
     });
 
-    // Hook 5: Capture results from research-plugins tools
+    // Hook 6: Capture results from research-plugins tools
     api.on('after_tool_call', (event: unknown) => {
       // Future: if tool is from research-plugins, offer to add papers
       void event;
     });
 
-    // Hook 6: Verify DB integrity on gateway start
+    // Hook 7: Verify DB integrity on gateway start
     api.on('gateway_start', () => {
       if (!dbManager?.isOpen()) return;
       try {
@@ -336,7 +482,7 @@ const plugin: PluginDefinition = {
       }
     });
 
-    api.logger.info('Research-Claw Core registered (24 tools, 45 WS RPC + 1 HTTP = 46 interfaces, 6 hooks)');
+    api.logger.info('Research-Claw Core registered (28 tools, 54 WS RPC + 1 HTTP = 55 interfaces, 7 hooks)');
   },
 };
 

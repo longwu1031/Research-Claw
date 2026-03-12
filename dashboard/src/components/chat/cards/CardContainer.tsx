@@ -19,6 +19,7 @@ export default function CardContainer({
 
   return (
     <div
+      role="article"
       data-testid="card-container"
       style={{
         background: tokens.bg.surface,

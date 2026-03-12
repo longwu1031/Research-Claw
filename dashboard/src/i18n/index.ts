@@ -8,7 +8,7 @@ i18n.use(initReactI18next).init({
     en: { translation: en },
     'zh-CN': { translation: zhCN },
   },
-  lng: localStorage.getItem('rc-locale') || 'en',
+  lng: localStorage.getItem('rc-locale') || 'zh-CN',
   fallbackLng: 'en',
   interpolation: { escapeValue: false },
 });

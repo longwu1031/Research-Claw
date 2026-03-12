@@ -29,7 +29,8 @@ This SOP governs:
 | `@wentorai/research-plugins` | Skills + Tools + MCPs | Published v1.0.0 | P0 |
 | `wentor-connect` | Tool + HTTP | Placeholder | P1 (post-MVP) |
 | Zotero | Tool | Planned | P1 |
-| QQ / DingTalk / Email | Channel | Planned | P2 |
+| QQ (`@tencent-connect/openclaw-qqbot`) | Channel | Available | P1 |
+| DingTalk / Email | Channel | Planned | P2 |
 
 ### 2.2 Plugin Discovery Pipeline
 

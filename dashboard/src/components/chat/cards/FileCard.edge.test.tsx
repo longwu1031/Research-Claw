@@ -19,6 +19,14 @@ vi.mock('@/stores/config', () => ({
   useConfigStore: (selector: (s: { theme: string }) => unknown) =>
     selector({ theme: 'dark' }),
 }));
+vi.mock('@/stores/ui', () => ({
+  useUiStore: {
+    getState: () => ({
+      requestWorkspacePreview: vi.fn(),
+      setRightPanelTab: vi.fn(),
+    }),
+  },
+}));
 
 describe('FileCard edge cases', () => {
   it('renders unknown file extension with generic icon', () => {
@@ -136,14 +144,14 @@ describe('FileCard edge cases', () => {
     expect(screen.queryByText(/card\.file\.git/)).not.toBeInTheDocument();
   });
 
-  it('renders action buttons (open and download)', () => {
+  it('renders action buttons (openFile and openDir)', () => {
     const file: FileCardType = {
       type: 'file_card',
       name: 'test.py',
       path: '/test.py',
     };
     render(<FileCard {...file} />);
-    expect(screen.getByText('card.file.open')).toBeInTheDocument();
-    expect(screen.getByText('card.file.download')).toBeInTheDocument();
+    expect(screen.getByText('card.file.openFile')).toBeInTheDocument();
+    expect(screen.getByText('card.file.openDir')).toBeInTheDocument();
   });
 });

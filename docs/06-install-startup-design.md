@@ -31,7 +31,7 @@ dependency. It is **not** a fork. The satellite architecture means all customisa
 happens through configuration overlays, plugin SDK extensions, and a minimal pnpm
 patch (~20 lines across 7 files).
 
-**Target platforms**: macOS (darwin arm64/x64), Linux (x64/arm64).
+**Target platforms**: macOS (darwin arm64/x64), Windows (x64/arm64).
 **Runtime**: Node.js >= 22.12, pnpm >= 9.15.
 
 ### File Map
@@ -217,7 +217,7 @@ echo "    cd ${INSTALL_DIR}"
 echo "    pnpm setup          # Configure API key"
 echo "    pnpm start          # Start gateway"
 echo ""
-echo "  Dashboard: http://127.0.0.1:18789"
+echo "  Dashboard: http://127.0.0.1:28789"
 echo ""
 ```
 
@@ -473,7 +473,7 @@ echo ""
 echo "  Start Research-Claw:"
 echo "    pnpm start"
 echo ""
-echo "  Dashboard: http://127.0.0.1:18789"
+echo "  Dashboard: http://127.0.0.1:28789"
 echo ""
 echo "  Other commands:"
 echo "    pnpm health     # Check gateway status"
@@ -829,7 +829,7 @@ node entry.js gateway run --config ./config/openclaw.json
   │
   ├─ Load config/openclaw.json
   │    ├─ gateway.mode = "local"       → bind to 127.0.0.1 only
-  │    ├─ gateway.port = 18789         → HTTP + WebSocket server
+  │    ├─ gateway.port = 28789         → HTTP + WebSocket server
   │    └─ gateway.controlUi.root       → dashboard/dist/
   │
   ├─ Apply .env variables
@@ -860,9 +860,9 @@ node entry.js gateway run --config ./config/openclaw.json
   ├─ Start heartbeat timer (30-minute interval)
   │
   └─ Gateway ready
-       ├─ HTTP:  http://127.0.0.1:18789
-       ├─ WS:    ws://127.0.0.1:18789/socket.io/
-       └─ Dashboard: http://127.0.0.1:18789 (serves dashboard/dist/)
+       ├─ HTTP:  http://127.0.0.1:28789
+       ├─ WS:    ws://127.0.0.1:28789/socket.io/
+       └─ Dashboard: http://127.0.0.1:28789 (serves dashboard/dist/)
 ```
 
 ### Environment Variables
@@ -877,7 +877,7 @@ node entry.js gateway run --config ./config/openclaw.json
 
 ### Network Binding
 
-The gateway binds to `127.0.0.1:18789` (loopback only). It is **never** exposed to
+The gateway binds to `127.0.0.1:28789` (loopback only). It is **never** exposed to
 the network. This is enforced by `gateway.mode = "local"` in the config. There is no
 authentication layer on the local gateway — loopback access is implicitly trusted.
 
@@ -1337,7 +1337,7 @@ scripts, CI, and manual debugging.
 # Research-Claw health check — verify gateway HTTP + TCP connectivity
 set -euo pipefail
 
-PORT="${1:-18789}"
+PORT="${1:-28789}"
 BASE="http://127.0.0.1:${PORT}"
 EXIT_CODE=0
 
@@ -1439,7 +1439,7 @@ exit "$EXIT_CODE"
 ### Usage
 
 ```bash
-# Default port (18789)
+# Default port (28789)
 bash scripts/health.sh
 
 # Custom port
@@ -1518,28 +1518,28 @@ rm -rf research-claw/
 
 ## 12. Troubleshooting Guide
 
-### Port 18789 Already in Use
+### Port 28789 Already in Use
 
 **Symptom**: Gateway fails to start with `EADDRINUSE` or similar error.
 
 **Diagnosis**:
 ```bash
 # Find what is using the port
-lsof -i :18789
+lsof -i :28789
 
 # On Linux:
-ss -tlnp | grep 18789
+ss -tlnp | grep 28789
 ```
 
 **Resolution**:
 ```bash
 # If it is a stale Research-Claw process, kill it
-kill $(lsof -ti :18789)
+kill $(lsof -ti :28789)
 
 # Then restart
 pnpm start
 
-# If another application uses 18789, change the port in config:
+# If another application uses 28789, change the port in config:
 # config/openclaw.json → gateway.port = 18790
 # Update daemon configs (plist/unit) if using a daemon
 ```
@@ -1570,7 +1570,7 @@ pnpm install
 
 ### Dashboard Blank Page
 
-**Symptom**: Navigating to `http://127.0.0.1:18789` shows a white screen or a
+**Symptom**: Navigating to `http://127.0.0.1:28789` shows a white screen or a
 "Cannot GET /" error.
 
 **Diagnosis**:
@@ -1691,7 +1691,7 @@ whoami
 chown -R "$USER" .research-claw/ config/ workspace/ skills/
 
 # Never run Research-Claw with sudo. The gateway binds to a
-# non-privileged port (18789) and does not need elevated permissions.
+# non-privileged port (28789) and does not need elevated permissions.
 ```
 
 ---
@@ -1699,7 +1699,7 @@ chown -R "$USER" .research-claw/ config/ workspace/ skills/
 ### Gateway Starts but Dashboard Does Not Load
 
 **Symptom**: `health.sh` shows the gateway is healthy, but the browser shows
-connection refused or a blank page at port 18789.
+connection refused or a blank page at port 28789.
 
 **Diagnosis**:
 ```bash

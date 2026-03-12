@@ -32,7 +32,7 @@ describe('Chat store', () => {
       streaming: false,
       streamText: null,
       runId: null,
-      sessionKey: 'default',
+      sessionKey: 'main',
       lastError: null,
       tokensIn: 0,
       tokensOut: 0,
@@ -48,10 +48,12 @@ describe('Chat store', () => {
       expect(useChatStore.getState().messages).toHaveLength(1);
       expect(useChatStore.getState().messages[0].role).toBe('user');
       expect(useChatStore.getState().messages[0].text).toBe('Hello world');
-      expect(mockGatewayClient.request).toHaveBeenCalledWith('chat.send', {
-        message: 'Hello world',
-        sessionKey: 'default',
-      });
+      expect(mockGatewayClient.request).toHaveBeenCalledWith('chat.send',
+        expect.objectContaining({
+          message: 'Hello world',
+          sessionKey: 'main',
+        }),
+      );
       expect(useChatStore.getState().runId).toBe('run-1');
       expect(useChatStore.getState().streaming).toBe(true);
     });
@@ -101,7 +103,7 @@ describe('Chat store', () => {
 
         useChatStore.getState().handleChatEvent({
           runId: 'run-1',
-          sessionKey: 'default',
+          sessionKey: 'main',
           state: 'delta',
           message: { role: 'assistant', text: 'Hello' },
         });
@@ -114,14 +116,14 @@ describe('Chat store', () => {
 
         useChatStore.getState().handleChatEvent({
           runId: 'run-1',
-          sessionKey: 'default',
+          sessionKey: 'main',
           state: 'delta',
           message: { role: 'assistant', text: 'Hello' },
         });
 
         useChatStore.getState().handleChatEvent({
           runId: 'run-1',
-          sessionKey: 'default',
+          sessionKey: 'main',
           state: 'delta',
           message: { role: 'assistant', text: ' world' },
         });
@@ -134,7 +136,7 @@ describe('Chat store', () => {
 
         useChatStore.getState().handleChatEvent({
           runId: 'run-OTHER',
-          sessionKey: 'default',
+          sessionKey: 'main',
           state: 'delta',
           message: { role: 'assistant', text: ' extra' },
         });
@@ -147,7 +149,7 @@ describe('Chat store', () => {
 
         useChatStore.getState().handleChatEvent({
           runId: 'run-1',
-          sessionKey: 'default',
+          sessionKey: 'main',
           state: 'delta',
           message: {
             role: 'assistant',
@@ -167,7 +169,7 @@ describe('Chat store', () => {
 
         useChatStore.getState().handleChatEvent({
           runId: 'run-1',
-          sessionKey: 'default',
+          sessionKey: 'main',
           state: 'final',
           message: { role: 'assistant', text: 'Hello world' },
         });
@@ -185,7 +187,7 @@ describe('Chat store', () => {
 
         useChatStore.getState().handleChatEvent({
           runId: 'run-1',
-          sessionKey: 'default',
+          sessionKey: 'main',
           state: 'final',
           message: { role: 'assistant', text: '  NO_REPLY  ' },
         });
@@ -198,7 +200,7 @@ describe('Chat store', () => {
 
         useChatStore.getState().handleChatEvent({
           runId: 'run-OTHER',
-          sessionKey: 'default',
+          sessionKey: 'main',
           state: 'final',
           message: { role: 'assistant', text: 'Sub-agent reply' },
         });
@@ -214,7 +216,7 @@ describe('Chat store', () => {
 
         useChatStore.getState().handleChatEvent({
           runId: 'run-1',
-          sessionKey: 'default',
+          sessionKey: 'main',
           state: 'final',
         });
 
@@ -228,7 +230,7 @@ describe('Chat store', () => {
 
         useChatStore.getState().handleChatEvent({
           runId: 'run-1',
-          sessionKey: 'default',
+          sessionKey: 'main',
           state: 'aborted',
         });
 
@@ -245,7 +247,7 @@ describe('Chat store', () => {
 
         useChatStore.getState().handleChatEvent({
           runId: 'run-1',
-          sessionKey: 'default',
+          sessionKey: 'main',
           state: 'aborted',
         });
 
@@ -260,7 +262,7 @@ describe('Chat store', () => {
 
         useChatStore.getState().handleChatEvent({
           runId: 'run-1',
-          sessionKey: 'default',
+          sessionKey: 'main',
           state: 'error',
           errorMessage: 'Model overloaded',
         });
@@ -276,7 +278,7 @@ describe('Chat store', () => {
 
         useChatStore.getState().handleChatEvent({
           runId: 'run-1',
-          sessionKey: 'default',
+          sessionKey: 'main',
           state: 'error',
         });
 
@@ -286,13 +288,13 @@ describe('Chat store', () => {
   });
 
   describe('abort', () => {
-    it('sends chat.abort RPC with current runId', () => {
-      useChatStore.setState({ runId: 'run-1' });
+    it('sends chat.abort RPC with runId and sessionKey', () => {
+      useChatStore.setState({ runId: 'run-1', sessionKey: 'main' });
       mockGatewayClient.request.mockResolvedValueOnce({});
 
       useChatStore.getState().abort();
 
-      expect(mockGatewayClient.request).toHaveBeenCalledWith('chat.abort', { runId: 'run-1' });
+      expect(mockGatewayClient.request).toHaveBeenCalledWith('chat.abort', { runId: 'run-1', sessionKey: 'main' });
     });
 
     it('does nothing when runId is null', () => {
@@ -303,13 +305,58 @@ describe('Chat store', () => {
       expect(mockGatewayClient.request).not.toHaveBeenCalled();
     });
 
-    it('does nothing when client is disconnected', () => {
-      useChatStore.setState({ runId: 'run-1' });
+    it('skips RPC when disconnected but still schedules timeout', () => {
+      vi.useFakeTimers();
+      useChatStore.setState({ runId: 'run-1', streaming: true, streamText: 'partial' });
       mockGatewayClient.isConnected = false;
 
       useChatStore.getState().abort();
 
       expect(mockGatewayClient.request).not.toHaveBeenCalled();
+
+      // After 3s timeout, streaming state should be force-cleared
+      vi.advanceTimersByTime(3000);
+      expect(useChatStore.getState().streaming).toBe(false);
+      expect(useChatStore.getState().runId).toBeNull();
+      expect(useChatStore.getState().messages).toHaveLength(1);
+      expect(useChatStore.getState().messages[0].text).toBe('partial');
+      vi.useRealTimers();
+    });
+
+    it('timeout is a no-op if server already responded with aborted event', () => {
+      vi.useFakeTimers();
+      useChatStore.setState({ runId: 'run-1', streaming: true, streamText: 'partial', messages: [] });
+      mockGatewayClient.request.mockResolvedValueOnce({});
+
+      useChatStore.getState().abort();
+
+      // Simulate server sending 'aborted' event before timeout
+      useChatStore.getState().handleChatEvent({
+        runId: 'run-1',
+        sessionKey: 'main',
+        state: 'aborted',
+      });
+
+      expect(useChatStore.getState().streaming).toBe(false);
+      expect(useChatStore.getState().messages).toHaveLength(1);
+
+      // Timeout fires but runId is already null → no-op
+      vi.advanceTimersByTime(3000);
+      expect(useChatStore.getState().messages).toHaveLength(1); // still 1, not duplicated
+      vi.useRealTimers();
+    });
+
+    it('timeout force-clears without message when no streamText', () => {
+      vi.useFakeTimers();
+      useChatStore.setState({ runId: 'run-1', streaming: true, streamText: null, messages: [] });
+      mockGatewayClient.request.mockResolvedValueOnce({});
+
+      useChatStore.getState().abort();
+
+      vi.advanceTimersByTime(3000);
+      expect(useChatStore.getState().streaming).toBe(false);
+      expect(useChatStore.getState().messages).toHaveLength(0);
+      vi.useRealTimers();
     });
   });
 
@@ -364,7 +411,7 @@ describe('Chat store', () => {
       await useChatStore.getState().loadHistory();
 
       expect(mockGatewayClient.request).toHaveBeenCalledWith('chat.history', {
-        sessionKey: 'default',
+        sessionKey: 'main',
       });
       expect(useChatStore.getState().messages).toHaveLength(2);
     });

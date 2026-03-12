@@ -1,14 +1,13 @@
 {
   "app": {
-    "name": "科研龙虾",
+    "name": "WentorOS\u00b7\u79d1\u7814\u9f99\u867e",
     "tagline": "AI 驱动的学术科研助手"
   },
   "topbar": {
     "notifications": "通知",
     "noNotifications": "暂无通知",
     "markAllRead": "全部已读",
-    "themeToggle": "切换主题",
-    "profile": "个人资料"
+    "themeToggle": "切换主题"
   },
   "nav": {
     "library": "文献库",
@@ -17,25 +16,22 @@
     "radar": "雷达",
     "settings": "设置",
     "collapse": "折叠侧边栏",
-    "expand": "展开侧边栏",
-    "project": {
-      "switch": "切换项目",
-      "default": "默认项目"
-    }
+    "expand": "展开侧边栏"
   },
   "chat": {
     "placeholder": "向你的科研助手提问...",
     "send": "发送",
     "thinking": "思考中...",
-    "streaming": "正在生成回复...",
-    "error": "出了点问题，请重试。",
     "empty": "开始与你的科研助手对话。",
     "abort": "停止",
-    "retry": "重试",
     "you": "你",
     "assistant": "助手",
-    "cardFallback": "不支持的卡片类型",
-    "dismiss": "关闭"
+    "dismiss": "关闭",
+    "newMessages": "有新消息",
+    "attachImage": "添加图片",
+    "imageOnly": "仅支持图片文件",
+    "imageTooLarge": "图片超过 5MB 限制",
+    "dragDropHint": "拖放图片到此处"
   },
   "library": {
     "title": "文献库",
@@ -56,10 +52,19 @@
       "remove": "移除",
       "editTags": "编辑标签"
     },
+    "editTags": {
+      "title": "编辑标签",
+      "cancel": "取消",
+      "save": "保存",
+      "noTags": "暂无标签",
+      "addTag": "添加标签",
+      "inputPlaceholder": "标签名称",
+      "suggestions": "已有标签"
+    },
     "filter": "筛选",
-    "sortBy": "排序方式",
+    "sortBy": "排序",
     "sortOptions": {
-      "addedAt": "添加日期",
+      "addedAt": "最近添加",
       "year": "年份",
       "title": "标题"
     }
@@ -79,6 +84,7 @@
     "completedCount": "已完成 ({{count}})",
     "empty": "暂无任务。\n让助手帮你规划科研计划。",
     "allDone": "所有任务已完成。",
+    "showCompleted": "显示已完成",
     "priority": {
       "urgent": "紧急",
       "high": "高",
@@ -103,7 +109,43 @@
     "fileTree": "文件树",
     "empty": "工作区为空。\n文件将在你和助手创建时出现在此处。",
     "filesChanged": "{{count}} 个文件已修改",
-    "dragDrop": "拖放文件到此上传"
+    "dragDrop": "拖放文件到此上传",
+    "contextMenu": {
+      "openExternal": "打开文件",
+      "openFolder": "打开文件夹",
+      "copyPath": "复制路径",
+      "pathCopied": "路径已复制",
+      "openFailed": "打开失败",
+      "delete": "删除",
+      "deleteConfirmTitle": "确认删除此文件？",
+      "deleteOk": "删除",
+      "deleteCancel": "取消",
+      "deleteSuccess": "文件已删除",
+      "deleteFailed": "删除文件失败"
+    },
+    "preview": {
+      "title": "文件预览",
+      "loading": "加载文件中...",
+      "errorTooLarge": "文件过大，无法预览。",
+      "errorNotFound": "文件未找到。",
+      "errorGeneric": "加载文件失败。",
+      "binaryNotPreviewable": "二进制文件 — 无法预览。",
+      "openFile": "打开文件",
+      "openFolder": "打开文件夹",
+      "copyPath": "复制路径",
+      "delete": "删除",
+      "deleteConfirm": "确认删除此文件？",
+      "deleteOk": "删除",
+      "deleteCancel": "取消",
+      "deleteSuccess": "文件已删除",
+      "deleteFailed": "删除文件失败"
+    }
+  },
+  "time": {
+    "justNow": "刚刚",
+    "minutesAgo": "{{count}}分钟前",
+    "hoursAgo": "{{count}}小时前",
+    "daysAgo": "{{count}}天前"
   },
   "radar": {
     "title": "科研雷达",
@@ -115,77 +157,73 @@
     "findings": "最新发现",
     "refresh": "刷新",
     "empty": "尚未配置雷达。\n告诉助手你想监控的主题、作者或期刊。",
-    "sources": "来源"
+    "sources": "来源",
+    "noTracking": "暂未追踪任何关键词、作者或期刊。",
+    "addTracking": "通过聊天添加追踪",
+    "noFindings": "暂无发现。请让助手扫描最新论文。",
+    "scanning": "扫描中...",
+    "scanResults": "扫描结果",
+    "newPapers": "新发现",
+    "skipped": "已跳过",
+    "automations": "自动化任务"
   },
   "settings": {
     "title": "设置",
-    "general": "通用",
-    "model": "模型",
-    "proxy": "代理",
-    "about": "关于",
-    "theme": {
-      "label": "主题",
-      "dark": "深色",
-      "light": "浅色"
-    },
-    "language": {
-      "label": "语言",
-      "en": "English",
-      "zhCN": "中文"
-    },
-    "notificationSound": "通知声音",
-    "autoScroll": "自动滚动聊天",
-    "timestampFormat": "时间戳格式",
-    "timestampRelative": "相对时间",
-    "timestampAbsolute": "绝对时间",
-    "timestampIso": "ISO 8601",
-    "fileOpenBehavior": "文件打开方式",
-    "fileOpenSystem": "系统默认",
-    "fileOpenInternal": "内置查看器",
-    "modelProvider": "服务商",
-    "modelSelection": "模型",
+    "baseUrl": "API 地址",
     "apiKeyLabel": "API 密钥",
-    "temperature": "Temperature",
-    "maxTokens": "最大输出 tokens",
+    "primaryModel": "文本模型",
+    "visionModel": "视觉模型",
+    "visionModelHint": "可选。用于图像相关任务，文本模型处理其他请求。",
+    "differentEndpoint": "使用不同的视觉端点",
+    "visionBaseUrl": "视觉 API 地址",
+    "visionApiKey": "视觉 API 密钥",
     "systemPromptAppend": "附加系统提示",
     "proxyEnabled": "启用代理",
-    "proxyProtocol": "协议",
-    "proxyHost": "主机",
-    "proxyPort": "端口",
-    "proxyAuth": "认证",
-    "proxyUsername": "用户名",
-    "proxyPassword": "密码",
-    "proxyTest": "测试连接",
-    "proxyTestSuccess": "代理工作正常",
-    "proxyTestFailed": "代理测试失败：{{error}}",
+    "proxyUrl": "代理地址",
     "aboutVersion": "Research-Claw v{{version}}",
-    "aboutOpenClaw": "OpenClaw v{{version}}",
+    "aboutOpenClaw": "由 OpenClaw v{{version}} 驱动",
     "aboutGateway": "网关端点",
     "aboutPlugins": "插件",
     "aboutBootstrap": "引导文件",
-    "aboutLogs": "打开日志文件夹",
     "aboutDiagnostics": "复制诊断信息",
     "aboutDiagnosticsCopied": "诊断信息已复制到剪贴板",
+    "noVisionModel": "与文本模型相同",
+    "configSource": "配置来源：openclaw.json",
+    "configLoading": "加载配置中...",
+    "refreshConfig": "刷新",
+    "restartHint": "配置已保存到 openclaw.json，gateway 将自动重启。",
     "saved": "已保存",
     "saveFailed": "保存失败",
-    "copyFailed": "复制失败"
+    "copyFailed": "复制失败",
+    "save": "保存"
   },
   "setup": {
     "title": "欢迎使用科研龙虾",
     "subtitle": "配置你的 AI 科研助手以开始使用",
-    "provider": "服务商",
-    "providerPlaceholder": "选择服务商",
-    "endpoint": "API 端点",
-    "endpointPlaceholder": "https://api.anthropic.com",
+    "baseUrl": "API 地址",
+    "baseUrlPlaceholder": "https://open.bigmodel.cn/api/paas/v4",
     "apiKey": "API 密钥",
     "apiKeyPlaceholder": "输入你的 API 密钥",
-    "proxy": "HTTP 代理（可选）",
-    "proxyPlaceholder": "http://127.0.0.1:7890",
-    "test": "测试连接",
-    "testing": "测试中...",
-    "testSuccess": "连接成功！",
-    "testFailed": "连接失败：{{error}}",
-    "start": "启动科研龙虾"
+    "modelName": "文本模型",
+    "modelNamePlaceholder": "例如 glm-5、gpt-4o、claude-sonnet-4-5",
+    "visionModel": "视觉模型（可选）",
+    "visionModelPlaceholder": "例如 glm-4.6v",
+    "visionModelHint": "可选。用于图像相关任务，文本模型处理其他请求。",
+    "differentEndpoint": "使用不同的视觉端点",
+    "visionBaseUrl": "视觉 API 地址",
+    "visionApiKey": "视觉 API 密钥",
+    "proxyEnabled": "代理",
+    "proxyHint": "如果你的网络需要代理才能访问 AI 接口，请在此填写。重启网关后生效。",
+    "gatewayRestarting": "网关重启中...",
+    "restartHint": "保存后 gateway 将自动重启，仪表盘会自动重连。",
+    "start": "启动科研龙虾",
+    "configuring": "配置中..."
+  },
+  "boot": {
+    "connecting": "正在连接网关...",
+    "gatewayUnreachable": "无法连接网关",
+    "retryConnect": "重试连接",
+    "gatewayHint": "请确保 OpenClaw 网关正在运行：openclaw gateway --force"
   },
   "status": {
     "connected": "已连接",
@@ -246,7 +284,7 @@
       "tasksCreated": "任务已创建",
       "writingWords": "写作字数",
       "readingMinutes": "阅读时长（分钟）",
-      "highlights": "亮点"
+      "highlights": "关键点"
     },
     "approval": {
       "title": "需要审批",
@@ -260,7 +298,8 @@
       "rejected": "已拒绝",
       "riskLow": "低",
       "riskMedium": "中",
-      "riskHigh": "高"
+      "riskHigh": "高",
+      "approveAlways": "批准（始终）"
     },
     "radar": {
       "title": "雷达更新",
@@ -274,6 +313,8 @@
     "file": {
       "open": "打开",
       "download": "下载",
+      "openFile": "打开文件",
+      "openDir": "在工作区中打开",
       "path": "路径",
       "size": "大小",
       "type": "类型",
@@ -284,8 +325,7 @@
   },
   "code": {
     "copy": "复制",
-    "copied": "已复制！",
-    "save": "保存"
+    "copied": "已复制！"
   },
   "notification": {
     "markAllRead": "全部已读",
@@ -295,7 +335,9 @@
   "project": {
     "newProject": "新建项目...",
     "switchProject": "切换项目",
-    "allProjects": "所有项目"
+    "mainSession": "主会话",
+    "renamePrompt": "输入新名称：",
+    "deleteConfirm": "删除此项目？聊天记录将丢失。"
   },
   "error": {
     "title": "出了点问题",

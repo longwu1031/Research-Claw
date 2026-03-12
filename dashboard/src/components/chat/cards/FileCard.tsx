@@ -1,6 +1,5 @@
-// Verified against spec 03d §3.6 + 01 §12.6
-import React from 'react';
-import { Button, Tag, Typography } from 'antd';
+import React, { useCallback } from 'react';
+import { Button, message, Tag, Typography } from 'antd';
 import {
   FileOutlined,
   FilePdfOutlined,
@@ -8,18 +7,19 @@ import {
   CodeOutlined,
   DatabaseOutlined,
   PictureOutlined,
-  DownloadOutlined,
-  FolderOpenOutlined,
+  ExportOutlined,
+  FolderViewOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import CardContainer from './CardContainer';
 import { useConfigStore } from '@/stores/config';
+import { useGatewayStore } from '@/stores/gateway';
 import { getThemeTokens } from '@/styles/theme';
 import type { FileCard as FileCardType } from '@/types/cards';
 
 const { Text } = Typography;
 
-/** File type icon + color mapping — spec 01 §7.3.2 + §12.6 */
+/** File type icon + color mapping */
 function getFileTypeInfo(name: string, tokens: ReturnType<typeof getThemeTokens>): {
   icon: React.ReactNode;
   color: string;
@@ -59,8 +59,21 @@ export default function FileCard(props: FileCardType) {
   const { t } = useTranslation();
   const theme = useConfigStore((s) => s.theme);
   const tokens = getThemeTokens(theme);
+  const client = useGatewayStore((s) => s.client);
 
   const fileInfo = getFileTypeInfo(props.name, tokens);
+
+  const handleOpenFile = useCallback(() => {
+    client?.request('rc.ws.openExternal', { path: props.path }).catch(() => {
+      message.error(t('workspace.contextMenu.openFailed'));
+    });
+  }, [props.path, client, t]);
+
+  const handleOpenFolder = useCallback(() => {
+    client?.request('rc.ws.openFolder', { path: props.path }).catch(() => {
+      message.error(t('workspace.contextMenu.openFailed'));
+    });
+  }, [props.path, client, t]);
 
   return (
     <CardContainer borderColor={fileInfo.color}>
@@ -144,27 +157,29 @@ export default function FileCard(props: FileCardType) {
         )}
       </div>
 
-      {/* Actions */}
+      {/* Actions: Open File (system) | Open Folder (Finder) */}
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
         <Button
           size="small"
-          icon={<FolderOpenOutlined />}
+          icon={<ExportOutlined />}
+          onClick={handleOpenFile}
           style={{
             borderColor: tokens.accent.blue,
             color: tokens.accent.blue,
           }}
         >
-          {t('card.file.open')}
+          {t('card.file.openFile')}
         </Button>
         <Button
           size="small"
-          icon={<DownloadOutlined />}
+          icon={<FolderViewOutlined />}
+          onClick={handleOpenFolder}
           style={{
             borderColor: tokens.accent.blue,
             color: tokens.accent.blue,
           }}
         >
-          {t('card.file.download')}
+          {t('card.file.openDir')}
         </Button>
       </div>
     </CardContainer>

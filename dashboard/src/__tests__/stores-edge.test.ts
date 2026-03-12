@@ -44,7 +44,7 @@ describe('Library store filter combinations', () => {
     mockGatewayClient.request.mockResolvedValueOnce({ items: [], total: 0 });
 
     await useLibraryStore.getState().loadPapers({
-      status: 'read',
+      read_status: 'read',
       tag: 'ml',
       year: 2024,
       sort: 'year',
@@ -70,14 +70,15 @@ describe('Library store filter combinations', () => {
 
   it('uses stored filters when no filter argument is provided', async () => {
     const { useLibraryStore } = await import('../stores/library');
-    useLibraryStore.setState({ filters: { status: 'unread', sort: 'title' } });
+    useLibraryStore.setState({ filters: { read_status: 'unread', sort: 'title' } });
     mockGatewayClient.request.mockResolvedValueOnce({ items: [], total: 0 });
 
     await useLibraryStore.getState().loadPapers();
 
+    // Title sort sends '+title' for ascending A→Z
     expect(mockGatewayClient.request).toHaveBeenCalledWith(
       'rc.lit.list',
-      expect.objectContaining({ read_status: 'unread', sort: 'title' }),
+      expect.objectContaining({ read_status: 'unread', sort: '+title' }),
     );
   });
 
@@ -95,8 +96,8 @@ describe('Library store filter combinations', () => {
     const { useLibraryStore } = await import('../stores/library');
     // rc.lit.tags returns Tag[] directly, not { tags: [...] }
     mockGatewayClient.request.mockResolvedValueOnce([
-      { name: 'ml', count: 10, color: '#3B82F6' },
-      { name: 'nlp', count: 5 },
+      { id: 'tag-1', name: 'ml', paper_count: 10, color: '#3B82F6', created_at: '2025-01-01T00:00:00Z' },
+      { id: 'tag-2', name: 'nlp', paper_count: 5, created_at: '2025-01-01T00:00:00Z' },
     ]);
 
     await useLibraryStore.getState().loadTags();
@@ -120,7 +121,7 @@ describe('Library store filter combinations', () => {
     useLibraryStore.setState({
       papers: [{
         id: 'p1', title: 'T', authors: [], year: 2025, tags: [],
-        status: 'unread', rating: 3, created_at: '', updated_at: '',
+        read_status: 'unread', rating: 3, added_at: '', updated_at: '',
       }],
       total: 1,
     });
@@ -131,7 +132,7 @@ describe('Library store filter combinations', () => {
     mockGatewayClient.request.mockResolvedValueOnce({
       items: [{
         id: 'p1', title: 'T', authors: [], year: 2025, tags: [],
-        status: 'unread', rating: 3, created_at: '', updated_at: '',
+        read_status: 'unread', rating: 3, added_at: '', updated_at: '',
       }],
       total: 1,
     });
@@ -149,8 +150,8 @@ describe('Library store filter combinations', () => {
     const { useLibraryStore } = await import('../stores/library');
     useLibraryStore.setState({
       papers: [
-        { id: 'p1', title: 'A', authors: [], year: 2025, tags: [], status: 'unread', created_at: '', updated_at: '' },
-        { id: 'p2', title: 'B', authors: [], year: 2025, tags: [], status: 'unread', created_at: '', updated_at: '' },
+        { id: 'p1', title: 'A', authors: [], year: 2025, tags: [], read_status: 'unread', added_at: '', updated_at: '' },
+        { id: 'p2', title: 'B', authors: [], year: 2025, tags: [], read_status: 'unread', added_at: '', updated_at: '' },
       ],
       total: 2,
     });
@@ -313,7 +314,7 @@ describe('Sessions store edge cases', () => {
     const { useSessionsStore } = await import('../stores/sessions');
     useSessionsStore.setState({
       sessions: [],
-      activeSessionKey: null,
+      activeSessionKey: 'main',
       loading: false,
     });
   });
@@ -331,9 +332,9 @@ describe('Sessions store edge cases', () => {
   it('loadSessions with multiple sessions populates list', async () => {
     const { useSessionsStore } = await import('../stores/sessions');
     const sessions = [
-      { key: 's1', createdAt: '2025-01-01T00:00:00Z', messageCount: 10 },
-      { key: 's2', createdAt: '2025-01-02T00:00:00Z', messageCount: 5 },
-      { key: 's3', createdAt: '2025-01-03T00:00:00Z', messageCount: 0 },
+      { key: 's1', updatedAt: 1704067200 },
+      { key: 's2', updatedAt: 1704153600 },
+      { key: 's3', updatedAt: 1704240000 },
     ];
     mockGatewayClient.request.mockResolvedValueOnce({ sessions });
 
@@ -357,7 +358,7 @@ describe('Sessions store edge cases', () => {
   it('switchSession to non-existent key still sets it as active', async () => {
     const { useSessionsStore } = await import('../stores/sessions');
     useSessionsStore.setState({
-      sessions: [{ key: 'existing', createdAt: '', messageCount: 0 }],
+      sessions: [{ key: 'existing' }],
       activeSessionKey: 'existing',
     });
 

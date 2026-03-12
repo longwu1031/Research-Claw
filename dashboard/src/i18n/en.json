@@ -1,14 +1,13 @@
 {
   "app": {
-    "name": "Research-Claw",
+    "name": "WentorOS\u00b7ResearchClaw",
     "tagline": "AI-Powered Academic Research Assistant"
   },
   "topbar": {
     "notifications": "Notifications",
     "noNotifications": "No notifications",
     "markAllRead": "Mark all read",
-    "themeToggle": "Toggle theme",
-    "profile": "Profile"
+    "themeToggle": "Toggle theme"
   },
   "nav": {
     "library": "Literature",
@@ -17,25 +16,22 @@
     "radar": "Radar",
     "settings": "Settings",
     "collapse": "Collapse sidebar",
-    "expand": "Expand sidebar",
-    "project": {
-      "switch": "Switch Project",
-      "default": "Default Project"
-    }
+    "expand": "Expand sidebar"
   },
   "chat": {
     "placeholder": "Ask your research assistant...",
     "send": "Send",
     "thinking": "Thinking...",
-    "streaming": "Generating response...",
-    "error": "Something went wrong. Please try again.",
     "empty": "Start a conversation with your research assistant.",
     "abort": "Stop",
-    "retry": "Retry",
     "you": "You",
     "assistant": "Assistant",
-    "cardFallback": "Unsupported card type",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "newMessages": "New messages below",
+    "attachImage": "Attach image",
+    "imageOnly": "Only image files are supported",
+    "imageTooLarge": "Image exceeds 5MB limit",
+    "dragDropHint": "Drop images here"
   },
   "library": {
     "title": "Literature Library",
@@ -56,10 +52,19 @@
       "remove": "Remove",
       "editTags": "Edit tags"
     },
+    "editTags": {
+      "title": "Edit Tags",
+      "cancel": "Cancel",
+      "save": "Save",
+      "noTags": "No tags yet",
+      "addTag": "New tag",
+      "inputPlaceholder": "Tag name",
+      "suggestions": "Existing tags"
+    },
     "filter": "Filter",
-    "sortBy": "Sort by",
+    "sortBy": "Sort",
     "sortOptions": {
-      "addedAt": "Date added",
+      "addedAt": "Recent",
       "year": "Year",
       "title": "Title"
     }
@@ -79,6 +84,7 @@
     "completedCount": "Completed ({{count}})",
     "empty": "No tasks yet.\nAsk the agent to help you plan your research.",
     "allDone": "All tasks completed.",
+    "showCompleted": "Show completed",
     "priority": {
       "urgent": "Urgent",
       "high": "High",
@@ -103,7 +109,43 @@
     "fileTree": "File Tree",
     "empty": "Workspace is empty.\nFiles will appear here as you and the agent create them.",
     "filesChanged": "{{count}} files changed",
-    "dragDrop": "Drop files here to upload"
+    "dragDrop": "Drop files here to upload",
+    "contextMenu": {
+      "openExternal": "Open File",
+      "openFolder": "Open Folder",
+      "copyPath": "Copy Path",
+      "pathCopied": "Path copied",
+      "openFailed": "Failed to open",
+      "delete": "Delete",
+      "deleteConfirmTitle": "Delete this file?",
+      "deleteOk": "Delete",
+      "deleteCancel": "Cancel",
+      "deleteSuccess": "File deleted",
+      "deleteFailed": "Failed to delete file"
+    },
+    "preview": {
+      "title": "File Preview",
+      "loading": "Loading file...",
+      "errorTooLarge": "File is too large to preview.",
+      "errorNotFound": "File not found.",
+      "errorGeneric": "Failed to load file.",
+      "binaryNotPreviewable": "Binary file — not previewable.",
+      "openFile": "Open File",
+      "openFolder": "Open Folder",
+      "copyPath": "Copy Path",
+      "delete": "Delete",
+      "deleteConfirm": "Are you sure you want to delete this file?",
+      "deleteOk": "Delete",
+      "deleteCancel": "Cancel",
+      "deleteSuccess": "File deleted",
+      "deleteFailed": "Failed to delete file"
+    }
+  },
+  "time": {
+    "justNow": "just now",
+    "minutesAgo": "{{count}}m ago",
+    "hoursAgo": "{{count}}h ago",
+    "daysAgo": "{{count}}d ago"
   },
   "radar": {
     "title": "Research Radar",
@@ -115,77 +157,73 @@
     "findings": "Recent Findings",
     "refresh": "Refresh",
     "empty": "No radar configured yet.\nTell the agent what topics, authors, or journals you want to monitor.",
-    "sources": "Sources"
+    "sources": "Sources",
+    "noTracking": "No keywords, authors, or journals tracked yet.",
+    "addTracking": "Add tracking via chat",
+    "noFindings": "No findings yet. Ask the agent to scan for papers.",
+    "scanning": "Scanning...",
+    "scanResults": "Scan Results",
+    "newPapers": "new",
+    "skipped": "skipped",
+    "automations": "Automations"
   },
   "settings": {
     "title": "Settings",
-    "general": "General",
-    "model": "Model",
-    "proxy": "Proxy",
-    "about": "About",
-    "theme": {
-      "label": "Theme",
-      "dark": "Dark",
-      "light": "Light"
-    },
-    "language": {
-      "label": "Language",
-      "en": "English",
-      "zhCN": "中文"
-    },
-    "notificationSound": "Notification sound",
-    "autoScroll": "Auto-scroll chat",
-    "timestampFormat": "Timestamp format",
-    "timestampRelative": "Relative",
-    "timestampAbsolute": "Absolute",
-    "timestampIso": "ISO 8601",
-    "fileOpenBehavior": "File open behavior",
-    "fileOpenSystem": "System default",
-    "fileOpenInternal": "Internal viewer",
-    "modelProvider": "Provider",
-    "modelSelection": "Model",
+    "baseUrl": "API Base URL",
     "apiKeyLabel": "API Key",
-    "temperature": "Temperature",
-    "maxTokens": "Max output tokens",
+    "primaryModel": "Text Model",
+    "visionModel": "Vision Model",
+    "visionModelHint": "Optional. Used for image-related tasks; text model handles everything else.",
+    "differentEndpoint": "Different vision endpoint",
+    "visionBaseUrl": "Vision API URL",
+    "visionApiKey": "Vision API Key",
     "systemPromptAppend": "Additional system prompt",
     "proxyEnabled": "Proxy enabled",
-    "proxyProtocol": "Protocol",
-    "proxyHost": "Host",
-    "proxyPort": "Port",
-    "proxyAuth": "Authentication",
-    "proxyUsername": "Username",
-    "proxyPassword": "Password",
-    "proxyTest": "Test connection",
-    "proxyTestSuccess": "Proxy is working",
-    "proxyTestFailed": "Proxy test failed: {{error}}",
+    "proxyUrl": "Proxy URL",
     "aboutVersion": "Research-Claw v{{version}}",
-    "aboutOpenClaw": "OpenClaw v{{version}}",
+    "aboutOpenClaw": "Powered by OpenClaw v{{version}}",
     "aboutGateway": "Gateway endpoint",
     "aboutPlugins": "Plugins",
     "aboutBootstrap": "Bootstrap files",
-    "aboutLogs": "Open logs folder",
     "aboutDiagnostics": "Copy diagnostics",
     "aboutDiagnosticsCopied": "Diagnostics copied to clipboard",
+    "noVisionModel": "Same as text model",
+    "configSource": "Source: openclaw.json",
+    "configLoading": "Loading config...",
+    "refreshConfig": "Refresh",
+    "restartHint": "Changes are saved to openclaw.json. The gateway will restart automatically.",
     "saved": "Saved",
     "saveFailed": "Failed to save",
-    "copyFailed": "Failed to copy"
+    "copyFailed": "Failed to copy",
+    "save": "Save"
   },
   "setup": {
     "title": "Welcome to Research-Claw",
     "subtitle": "Configure your AI research assistant to get started",
-    "provider": "Provider",
-    "providerPlaceholder": "Select a provider",
-    "endpoint": "API Endpoint",
-    "endpointPlaceholder": "https://api.anthropic.com",
+    "baseUrl": "API Base URL",
+    "baseUrlPlaceholder": "https://open.bigmodel.cn/api/paas/v4",
     "apiKey": "API Key",
     "apiKeyPlaceholder": "Enter your API key",
-    "proxy": "HTTP Proxy (optional)",
-    "proxyPlaceholder": "http://127.0.0.1:7890",
-    "test": "Test Connection",
-    "testing": "Testing...",
-    "testSuccess": "Connection successful!",
-    "testFailed": "Connection failed: {{error}}",
-    "start": "Start Research-Claw"
+    "modelName": "Text Model",
+    "modelNamePlaceholder": "e.g. glm-5, gpt-4o, claude-sonnet-4-5",
+    "visionModel": "Vision Model (optional)",
+    "visionModelPlaceholder": "e.g. glm-4.6v",
+    "visionModelHint": "Optional. Used for image-related tasks; text model handles everything else.",
+    "differentEndpoint": "Different vision endpoint",
+    "visionBaseUrl": "Vision API URL",
+    "visionApiKey": "Vision API Key",
+    "proxyEnabled": "Proxy",
+    "proxyHint": "If your network requires a proxy to reach AI APIs, enter it here. Takes effect after gateway restart.",
+    "gatewayRestarting": "Gateway restarting...",
+    "restartHint": "After saving, the gateway will restart automatically. The dashboard reconnects on its own.",
+    "start": "Start Research-Claw",
+    "configuring": "Configuring..."
+  },
+  "boot": {
+    "connecting": "Connecting to gateway...",
+    "gatewayUnreachable": "Gateway unreachable",
+    "retryConnect": "Retry connection",
+    "gatewayHint": "Make sure the OpenClaw gateway is running: openclaw gateway --force"
   },
   "status": {
     "connected": "Connected",
@@ -246,7 +284,7 @@
       "tasksCreated": "Tasks created",
       "writingWords": "Words written",
       "readingMinutes": "Reading time (min)",
-      "highlights": "Highlights"
+      "highlights": "Key Points"
     },
     "approval": {
       "title": "Approval Required",
@@ -260,7 +298,8 @@
       "rejected": "Rejected",
       "riskLow": "Low",
       "riskMedium": "Medium",
-      "riskHigh": "High"
+      "riskHigh": "High",
+      "approveAlways": "Approve (Always)"
     },
     "radar": {
       "title": "Radar Update",
@@ -274,6 +313,8 @@
     "file": {
       "open": "Open",
       "download": "Download",
+      "openFile": "Open File",
+      "openDir": "Open in Workspace",
       "path": "Path",
       "size": "Size",
       "type": "Type",
@@ -284,8 +325,7 @@
   },
   "code": {
     "copy": "Copy",
-    "copied": "Copied!",
-    "save": "Save"
+    "copied": "Copied!"
   },
   "notification": {
     "markAllRead": "Mark all read",
@@ -295,7 +335,9 @@
   "project": {
     "newProject": "New Project...",
     "switchProject": "Switch Project",
-    "allProjects": "All Projects"
+    "mainSession": "Main Session",
+    "renamePrompt": "Enter new name:",
+    "deleteConfirm": "Delete this project? Chat history will be lost."
   },
   "error": {
     "title": "Something went wrong",

@@ -3,7 +3,7 @@
 > **Status:** Draft v1.0
 > **Date:** 2026-03-11
 > **Cross-refs:** `02-tech-stack.md` (tech choices), `03d-card-protocol.md` (structured card wire format), `03e-components.md` (React component implementation)
-> **Target runtime:** React 18 SPA served by OpenClaw gateway at `http://127.0.0.1:18789`
+> **Target runtime:** React 18 SPA served by OpenClaw gateway at `http://127.0.0.1:28789`
 
 ---
 
@@ -793,7 +793,7 @@ via natural language in chat ("set my temperature to 0.3").
 |------|---------|
 | Version | `Research-Claw v{version}` |
 | OpenClaw version | `OpenClaw v{version}` |
-| Gateway endpoint | `ws://127.0.0.1:18789` |
+| Gateway endpoint | `ws://127.0.0.1:28789` |
 | Plugin: research-claw-core | Version + status (loaded/error) |
 | Plugin: research-plugins | Version + item count |
 | Connected software | List: Zotero (status), Overleaf (status), etc. |
@@ -1708,7 +1708,7 @@ for simple cases. No Redux -- the app is not complex enough to warrant it.
 ### 15.4 Gateway RPC Integration
 
 All Direct RPC calls (Section 8) use the OpenClaw gateway WebSocket at
-`ws://127.0.0.1:18789`. The `GatewayProvider` manages:
+`ws://127.0.0.1:28789`. The `GatewayProvider` manages:
 
 1. **Connection lifecycle**: Connect, reconnect with exponential backoff, heartbeat ping
 2. **RPC calls**: JSON-RPC v2 over WebSocket. Request/response correlation via `id` field

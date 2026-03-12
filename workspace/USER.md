@@ -27,7 +27,7 @@ updated: 2026-03-12
 
 ## Preferences
 - **Citation style:** APA
-- **Language:** English
+- **Language:** 中文
 - **Working hours:** 09:00-18:00
 - **Timezone:** UTC+0
 - **Notification frequency:** daily

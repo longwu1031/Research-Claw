@@ -4,9 +4,16 @@
  * 26 gateway RPC methods in the `rc.lit.*` namespace.
  * Each handler extracts params, calls the LiteratureService,
  * and responds via the gateway method callback.
+ *
+ * Error codes: rc.lit.* uses -32001 to -32012
+ *   -32001 PAPER_NOT_FOUND, -32002 DUPLICATE_PAPER, -32003 TAG_NOT_FOUND,
+ *   -32004 COLLECTION_NOT_FOUND, -32005 SESSION_NOT_FOUND,
+ *   -32006 SESSION_ALREADY_ENDED, -32007 SELF_CITATION,
+ *   -32010 BIBTEX_PARSE_ERROR, -32011 VALIDATION_ERROR, -32012 FTS_QUERY_ERROR
  */
 
 import { type LiteratureService, type PaperInput, type PaperPatch, type PaperFilter } from './service.js';
+import type { RegisterMethod } from '../types.js';
 
 // ── Error codes ─────────────────────────────────────────────────────────
 
@@ -100,10 +107,6 @@ function optionalStringArray(params: Record<string, unknown>, key: string): stri
   if (!Array.isArray(value)) return undefined;
   return value.map(String);
 }
-
-// ── Types ───────────────────────────────────────────────────────────────
-
-type RegisterMethod = (method: string, handler: unknown) => void;
 
 // ── Registration ────────────────────────────────────────────────────────
 
@@ -250,7 +253,7 @@ export function registerLiteratureRpc(registerMethod: RegisterMethod, service: L
       const id = requireString(params, 'id');
       const rating = Number(params.rating);
       if (isNaN(rating)) {
-        throw new Error('Invalid rating: must be a number between 1 and 5');
+        throw new Error('Invalid rating: must be a number between 0 and 5 (0 to clear)');
       }
       return service.rate(id, rating);
     } catch (err) {

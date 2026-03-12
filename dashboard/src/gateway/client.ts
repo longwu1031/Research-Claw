@@ -6,8 +6,9 @@ import type {
   RequestFrame,
   ResponseFrame,
 } from './types';
-import { PROTOCOL_VERSION } from './types';
+import { MIN_PROTOCOL, MAX_PROTOCOL } from './types';
 import { ReconnectScheduler } from './reconnect';
+import { getDeviceIdentity, buildV3Payload } from './device-identity';
 
 export class GatewayRequestError extends Error {
   code: string;
@@ -41,7 +42,12 @@ interface PendingRequest {
 }
 
 const REQUEST_TIMEOUT_MS = 30_000;
-const NON_RECOVERABLE_CODES = new Set(['UNAUTHORIZED', 'FORBIDDEN']);
+const NON_RECOVERABLE_CODES = new Set([
+  'UNAUTHORIZED',
+  'FORBIDDEN',
+  'DEVICE_AUTH_PUBLIC_KEY_INVALID',
+  'DEVICE_AUTH_DEVICE_ID_MISMATCH',
+]);
 
 export class GatewayClient {
   private ws: WebSocket | null = null;
@@ -71,7 +77,10 @@ export class GatewayClient {
       this.ws = null;
     }
     this.intentionalClose = false;
-    this.setState('connecting');
+    // Preserve 'reconnecting' state so the close handler continues the retry loop
+    if (this.state !== 'reconnecting') {
+      this.setState('connecting');
+    }
 
     const ws = new WebSocket(this.opts.url);
     this.ws = ws;
@@ -90,7 +99,7 @@ export class GatewayClient {
 
       if (frame.type === 'event') {
         if (frame.event === 'connect.challenge') {
-          this.handleChallenge(frame);
+          void this.handleChallenge(frame);
         } else {
           this.handleEvent(frame);
         }
@@ -139,8 +148,10 @@ export class GatewayClient {
 
   async request<T = unknown>(method: string, params?: unknown): Promise<T> {
     if (!this.ws || this.state !== 'connected') {
+      console.warn(`[GatewayClient] request(${method}) rejected: state=${this.state}, ws=${!!this.ws}`);
       throw new Error('Not connected to gateway');
     }
+    console.log(`[GatewayClient] → ${method}`, params ?? '');
 
     const id = crypto.randomUUID();
     const frame: RequestFrame = { type: 'req', id, method };
@@ -175,10 +186,62 @@ export class GatewayClient {
     };
   }
 
-  private handleChallenge(frame: EventFrame): void {
+  // ---------------------------------------------------------------------------
+  // Handshake with Ed25519 device identity (protocol v3)
+  // ---------------------------------------------------------------------------
+
+  private async handleChallenge(frame: EventFrame): Promise<void> {
     this.setState('authenticating');
-    const payload = frame.payload as { nonce?: string } | undefined;
-    const nonce = payload?.nonce;
+    const challengePayload = frame.payload as { nonce?: string; ts?: number } | undefined;
+    const nonce = challengePayload?.nonce ?? '';
+
+    // Obtain (or generate) a stable Ed25519 device identity
+    let identity;
+    try {
+      identity = await getDeviceIdentity();
+    } catch {
+      this.reconnector.cancel();
+      this.ws?.close(1000, 'device identity unavailable');
+      this.setState('disconnected');
+      return;
+    }
+
+    // Bail out if the socket closed while we were generating keys
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+    const signedAt = Date.now();
+    const clientId = 'openclaw-control-ui';
+    const clientMode = 'ui';
+    const role = 'operator';
+    const scopes = ['operator.read', 'operator.write', 'operator.admin'];
+    const token = this.opts.token ?? '';
+    const platform = this.opts.platform ?? 'browser';
+
+    // Build v3 signature payload
+    const sigPayload = buildV3Payload({
+      deviceId: identity.deviceId,
+      clientId,
+      clientMode,
+      role,
+      scopes,
+      signedAt,
+      token,
+      nonce,
+      platform,
+      deviceFamily: '',
+    });
+
+    let signature: string;
+    try {
+      signature = await identity.sign(sigPayload);
+    } catch {
+      this.reconnector.cancel();
+      this.ws?.close(1000, 'device signature failed');
+      this.setState('disconnected');
+      return;
+    }
+
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
     const id = crypto.randomUUID();
     const connectFrame: RequestFrame = {
@@ -186,17 +249,25 @@ export class GatewayClient {
       id,
       method: 'connect',
       params: {
-        protocol: PROTOCOL_VERSION,
-        auth: {
-          method: 'loopback',
-          ...(nonce ? { nonce } : {}),
-        },
+        minProtocol: MIN_PROTOCOL,
+        maxProtocol: MAX_PROTOCOL,
         client: {
-          name: this.opts.clientName ?? 'research-claw-dashboard',
+          id: clientId,
           version: this.opts.clientVersion ?? '0.1.0',
+          platform,
+          mode: clientMode,
+          displayName: this.opts.clientName ?? 'Research-Claw Dashboard',
         },
-        platform: this.opts.platform ?? 'browser',
-        mode: 'local',
+        role,
+        scopes,
+        ...(token ? { auth: { token } } : {}),
+        device: {
+          id: identity.deviceId,
+          publicKey: identity.publicKey,
+          signature,
+          signedAt,
+          nonce,
+        },
       },
     };
 
@@ -224,8 +295,10 @@ export class GatewayClient {
       timer,
     });
 
-    this.ws!.send(JSON.stringify(connectFrame));
+    this.ws.send(JSON.stringify(connectFrame));
   }
+
+  // ---------------------------------------------------------------------------
 
   private handleResponse(frame: ResponseFrame): void {
     const entry = this.pending.get(frame.id);
@@ -235,8 +308,10 @@ export class GatewayClient {
     this.pending.delete(frame.id);
 
     if (frame.ok) {
+      console.log(`[GatewayClient] ← ${frame.id.slice(0, 8)} OK`, typeof frame.payload === 'object' ? frame.payload : '');
       entry.resolve(frame.payload);
     } else {
+      console.warn(`[GatewayClient] ← ${frame.id.slice(0, 8)} ERR`, frame.error);
       entry.reject(new GatewayRequestError(frame.error ?? { code: 'UNKNOWN', message: 'Unknown error' }));
     }
   }
@@ -260,6 +335,7 @@ export class GatewayClient {
 
   private setState(state: ConnectionState): void {
     if (this.state === state) return;
+    console.log(`[GatewayClient] ${this.state} → ${state}`);
     this.state = state;
     this.opts.onStateChange?.(state);
   }

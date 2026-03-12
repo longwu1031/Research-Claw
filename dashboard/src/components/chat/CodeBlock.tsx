@@ -1,7 +1,7 @@
 // CodeBlock — Markdown code block interceptor with card type detection + syntax highlighting
 // Verified against spec 03d §5 + 03e §7.3
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Typography, message } from 'antd';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Button, Typography } from 'antd';
 import { CopyOutlined, CheckOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -26,26 +26,10 @@ import { getThemeTokens } from '@/styles/theme';
 const { Text } = Typography;
 
 // ---------------------------------------------------------------------------
-// Shiki highlighter singleton (lazy-loaded)
+// Shiki highlighter singleton (shared module)
 // ---------------------------------------------------------------------------
 
-let highlighterPromise: Promise<import('shiki').Highlighter> | null = null;
-
-function getHighlighter() {
-  if (!highlighterPromise) {
-    highlighterPromise = import('shiki').then((mod) =>
-      mod.createHighlighter({
-        themes: ['github-dark', 'github-light'],
-        langs: [
-          'python', 'javascript', 'typescript', 'json', 'bash', 'shell',
-          'markdown', 'latex', 'r', 'julia', 'matlab', 'yaml', 'toml',
-          'html', 'css', 'sql', 'c', 'cpp', 'java', 'go', 'rust',
-        ],
-      }),
-    );
-  }
-  return highlighterPromise;
-}
+import { getHighlighter } from '@/utils/shiki-highlighter';
 
 // ---------------------------------------------------------------------------
 // Syntax-highlighted code block with Copy button
@@ -58,6 +42,11 @@ function SyntaxHighlightedBlock({ language, code }: { language?: string; code: s
   const [html, setHtml] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Clean up copy timeout on unmount
+  useEffect(() => {
+    return () => clearTimeout(timeoutRef.current);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

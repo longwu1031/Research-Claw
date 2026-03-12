@@ -75,8 +75,8 @@ describe('TaskCard edge cases', () => {
     const title = screen.getByText('Edge case task');
     const styledParent = title.closest('span[style]');
     expect(styledParent).toHaveStyle({ textDecoration: 'line-through' });
-    // Status tag also has strikethrough
-    const statusTag = screen.getByText('cancelled');
+    // Status tag uses i18n key and also has strikethrough
+    const statusTag = screen.getByText('tasks.status.cancelled:{"defaultValue":"cancelled"}');
     expect(statusTag).toHaveStyle({ textDecoration: 'line-through' });
   });
 
@@ -124,7 +124,8 @@ describe('TaskCard edge cases', () => {
     const priorities: TaskCardType['priority'][] = ['urgent', 'high', 'medium', 'low'];
     for (const priority of priorities) {
       const { unmount } = render(<TaskCard {...baseTask} priority={priority} />);
-      expect(screen.getByText(priority)).toBeInTheDocument();
+      // Priority is now i18n-translated: t('tasks.priority.${priority}', { defaultValue: priority })
+      expect(screen.getByText(`tasks.priority.${priority}:{"defaultValue":"${priority}"}`)).toBeInTheDocument();
       unmount();
     }
   });

@@ -960,9 +960,10 @@ export class LiteratureService {
   // ── 9. rate ─────────────────────────────────────────────────────────
 
   rate(id: string, rating: number): Paper {
-    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    // rating=0 means "unrate" (clear rating → NULL)
+    if (!Number.isInteger(rating) || rating < 0 || rating > 5) {
       throw new Error(
-        `Invalid rating: ${rating}. Must be an integer between 1 and 5.`,
+        `Invalid rating: ${rating}. Must be an integer between 0 and 5 (0 to clear).`,
       );
     }
 
@@ -973,9 +974,10 @@ export class LiteratureService {
       throw new Error(`Paper not found: ${id}`);
     }
 
+    const dbRating = rating === 0 ? null : rating;
     this.db
       .prepare('UPDATE rc_papers SET rating = ?, updated_at = ? WHERE id = ?')
-      .run(rating, now(), id);
+      .run(dbRating, now(), id);
 
     const row = this.db.prepare('SELECT * FROM rc_papers WHERE id = ?').get(id) as PaperRow;
     const tags = getTagsForPaper(this.db, id);
@@ -1399,11 +1401,14 @@ export class LiteratureService {
             }
           }
 
+          const title = f.title ?? entry.citation_key;
+          const doi = f.doi;
+
           const paperInput: PaperInput = {
-            title: f.title ?? entry.citation_key,
+            title,
             authors,
             abstract: f.abstract,
-            doi: f.doi,
+            doi,
             url: f.url,
             arxiv_id: arxivId,
             venue,
@@ -1414,6 +1419,18 @@ export class LiteratureService {
             metadata:
               Object.keys(extraMetadata).length > 0 ? extraMetadata : undefined,
           };
+
+          // The add() method only deduplicates by DOI and arxiv_id.
+          // For entries without either identifier, perform a title-based
+          // duplicate check so that re-importing the same BibTeX file
+          // does not create duplicate rows.
+          if (!doi && !arxivId && title) {
+            const titleDupes = this.duplicateCheck({ title });
+            if (titleDupes.some((m) => m.match_type === 'title_exact')) {
+              skipped++;
+              continue;
+            }
+          }
 
           const result = this.add(paperInput);
           if ('duplicate' in result && result.duplicate) {

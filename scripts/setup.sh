@@ -47,4 +47,4 @@ fi
 echo ""
 echo "=== Setup complete ==="
 echo "Start Research-Claw with: pnpm start"
-echo "Dashboard will be at: http://127.0.0.1:18789"
+echo "Dashboard will be at: http://127.0.0.1:28789"

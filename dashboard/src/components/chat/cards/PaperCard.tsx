@@ -1,11 +1,12 @@
 // Verified against spec 03d §3.1 + 01 §12.1
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Button, Tag, Typography, message } from 'antd';
 import { BookOutlined, CopyOutlined, FilePdfOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import CardContainer from './CardContainer';
 import { useConfigStore } from '@/stores/config';
 import { useGatewayStore } from '@/stores/gateway';
+import { useLibraryStore } from '@/stores/library';
 import { getThemeTokens } from '@/styles/theme';
 import type { PaperCard as PaperCardType } from '@/types/cards';
 
@@ -46,6 +47,7 @@ export default function PaperCard(props: PaperCardType) {
   const theme = useConfigStore((s) => s.theme);
   const tokens = getThemeTokens(theme);
   const client = useGatewayStore((s) => s.client);
+  const [added, setAdded] = useState(!!props.library_id);
 
   const borderColor = STATUS_COLORS[props.read_status ?? ''] ?? tokens.text.muted;
 
@@ -61,6 +63,9 @@ export default function PaperCard(props: PaperCardType) {
         url: props.url,
         arxiv_id: props.arxiv_id,
       });
+      setAdded(true);
+      // Refresh library panel data so the paper appears there
+      useLibraryStore.getState().loadPapers();
     } catch {
       // Error handled by gateway layer
     }
@@ -197,20 +202,22 @@ export default function PaperCard(props: PaperCardType) {
         <Button
           size="small"
           icon={<BookOutlined />}
-          disabled={!!props.library_id}
+          disabled={added}
           onClick={handleAddToLibrary}
+          aria-label={added ? t('card.paper.inLibrary') : t('card.paper.addToLibrary')}
           style={{
             borderColor: tokens.accent.blue,
-            color: props.library_id ? tokens.text.muted : tokens.accent.blue,
+            color: added ? tokens.text.muted : tokens.accent.blue,
           }}
         >
-          {props.library_id ? t('card.paper.inLibrary') : t('card.paper.addToLibrary')}
+          {added ? t('card.paper.inLibrary') : t('card.paper.addToLibrary')}
         </Button>
 
         <Button
           size="small"
           icon={<CopyOutlined />}
           onClick={handleCite}
+          aria-label={t('card.paper.cite')}
           style={{
             borderColor: tokens.accent.blue,
             color: tokens.accent.blue,
@@ -224,6 +231,7 @@ export default function PaperCard(props: PaperCardType) {
             size="small"
             icon={<FilePdfOutlined />}
             onClick={() => window.open(pdfUrl, '_blank', 'noopener,noreferrer')}
+            aria-label={t('card.paper.openPdf')}
             style={{
               borderColor: tokens.accent.blue,
               color: tokens.accent.blue,

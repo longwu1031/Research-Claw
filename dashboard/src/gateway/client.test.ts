@@ -6,6 +6,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GatewayClient, GatewayRequestError } from './client';
 import type { ConnectionState } from './types';
 
+// Mock device-identity so Ed25519 keygen (async Web Crypto) resolves instantly
+vi.mock('./device-identity', () => ({
+  getDeviceIdentity: vi.fn().mockResolvedValue({
+    deviceId: 'test-device',
+    publicKey: 'test-key',
+    sign: vi.fn().mockResolvedValue('test-sig'),
+  }),
+  buildV3Payload: vi.fn().mockReturnValue('test-payload'),
+}));
+
 // ---------------------------------------------------------------------------
 // Mock WebSocket
 // ---------------------------------------------------------------------------
@@ -48,6 +58,12 @@ const MockWebSocketClass = vi.fn().mockImplementation((url: string) => {
   return mockWsInstance;
 });
 
+// Add static constants to match real WebSocket API
+(MockWebSocketClass as unknown as Record<string, number>).OPEN = 1;
+(MockWebSocketClass as unknown as Record<string, number>).CLOSED = 3;
+(MockWebSocketClass as unknown as Record<string, number>).CONNECTING = 0;
+(MockWebSocketClass as unknown as Record<string, number>).CLOSING = 2;
+
 // Replace global WebSocket
 const originalWebSocket = globalThis.WebSocket;
 
@@ -78,6 +94,11 @@ describe('GatewayClient', () => {
     // Server sends connect.challenge
     serverSend({ type: 'event', event: 'connect.challenge', payload: { nonce: 'test-nonce' } });
 
+    // Let the mocked async getDeviceIdentity + sign resolve (multiple microtask ticks)
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+
     // Client should have sent connect request via ws.send
     const sentFrame = JSON.parse(mockWsInstance.send.mock.calls[0][0]);
     expect(sentFrame.method).toBe('connect');
@@ -101,7 +122,7 @@ describe('GatewayClient', () => {
       const states: ConnectionState[] = [];
       const onHello = vi.fn();
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: (s) => states.push(s),
         onHello,
       });
@@ -121,7 +142,7 @@ describe('GatewayClient', () => {
     it('disconnect transitions to disconnected and calls onClose', async () => {
       const onClose = vi.fn();
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: () => {},
         onClose,
       });
@@ -136,7 +157,7 @@ describe('GatewayClient', () => {
 
     it('connect() closes existing connection before reconnecting', async () => {
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: () => {},
       });
 
@@ -152,7 +173,7 @@ describe('GatewayClient', () => {
   describe('Request/response correlation', () => {
     it('request resolves when server responds with matching id and ok=true', async () => {
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: () => {},
       });
       await completeHandshake(client);
@@ -174,7 +195,7 @@ describe('GatewayClient', () => {
 
     it('request rejects when server responds with ok=false', async () => {
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: () => {},
       });
       await completeHandshake(client);
@@ -197,7 +218,7 @@ describe('GatewayClient', () => {
 
     it('request includes params when provided', async () => {
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: () => {},
       });
       await completeHandshake(client);
@@ -211,7 +232,7 @@ describe('GatewayClient', () => {
 
     it('request throws if not connected', async () => {
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: () => {},
       });
 
@@ -222,7 +243,7 @@ describe('GatewayClient', () => {
   describe('Timeout handling', () => {
     it('request times out after 30s if no response', async () => {
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: () => {},
       });
       await completeHandshake(client);
@@ -243,29 +264,29 @@ describe('GatewayClient', () => {
   describe('Event subscription', () => {
     it('subscribe receives events and unsubscribe stops delivery', async () => {
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: () => {},
       });
       await completeHandshake(client);
 
       const handler = vi.fn();
-      const unsub = client.subscribe('chat.message', handler);
+      const unsub = client.subscribe('chat', handler);
 
       // Server sends an event
-      serverSend({ type: 'event', event: 'chat.message', payload: { text: 'hello' } });
+      serverSend({ type: 'event', event: 'chat', payload: { text: 'hello' } });
       expect(handler).toHaveBeenCalledWith({ text: 'hello' });
 
       // Unsubscribe
       unsub();
 
       // Server sends another event
-      serverSend({ type: 'event', event: 'chat.message', payload: { text: 'world' } });
+      serverSend({ type: 'event', event: 'chat', payload: { text: 'world' } });
       expect(handler).toHaveBeenCalledTimes(1); // Not called again
     });
 
     it('multiple handlers for the same event all receive it', async () => {
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: () => {},
       });
       await completeHandshake(client);
@@ -284,7 +305,7 @@ describe('GatewayClient', () => {
     it('onEvent callback fires for all events', async () => {
       const onEvent = vi.fn();
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: () => {},
         onEvent,
       });
@@ -302,7 +323,7 @@ describe('GatewayClient', () => {
     it('onGap fires when event sequence has a gap', async () => {
       const onGap = vi.fn();
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: () => {},
         onGap,
       });
@@ -322,7 +343,7 @@ describe('GatewayClient', () => {
     it('schedules reconnect on unexpected close when was connected', async () => {
       const states: ConnectionState[] = [];
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: (s) => states.push(s),
       });
       await completeHandshake(client);
@@ -338,7 +359,7 @@ describe('GatewayClient', () => {
     it('does not reconnect on intentional disconnect', async () => {
       const states: ConnectionState[] = [];
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: (s) => states.push(s),
       });
       await completeHandshake(client);
@@ -352,7 +373,7 @@ describe('GatewayClient', () => {
 
     it('rejects all pending requests on connection close', async () => {
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: () => {},
       });
       await completeHandshake(client);
@@ -373,9 +394,9 @@ describe('GatewayClient', () => {
   });
 
   describe('Protocol version negotiation', () => {
-    it('sends protocol version 3 in connect frame', async () => {
+    it('sends minProtocol/maxProtocol in connect frame', async () => {
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: () => {},
       });
 
@@ -385,15 +406,22 @@ describe('GatewayClient', () => {
       // Server sends challenge
       serverSend({ type: 'event', event: 'connect.challenge', payload: { nonce: 'n1' } });
 
+      // Let the mocked async getDeviceIdentity + sign resolve (multiple microtask ticks)
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
+
       const sentFrame = JSON.parse(mockWsInstance.send.mock.calls[0][0]);
-      expect(sentFrame.params.protocol).toBe(3);
+      expect(sentFrame.params.minProtocol).toBe(3);
+      expect(sentFrame.params.maxProtocol).toBe(3);
     });
 
-    it('sends client name and version in connect frame', async () => {
+    it('sends client id, name, version, platform, and mode in connect frame', async () => {
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         clientName: 'test-client',
         clientVersion: '1.2.3',
+        platform: 'darwin',
         onStateChange: () => {},
       });
 
@@ -402,16 +430,24 @@ describe('GatewayClient', () => {
 
       serverSend({ type: 'event', event: 'connect.challenge', payload: {} });
 
+      // Let the mocked async getDeviceIdentity + sign resolve (multiple microtask ticks)
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
+
       const sentFrame = JSON.parse(mockWsInstance.send.mock.calls[0][0]);
-      expect(sentFrame.params.client.name).toBe('test-client');
+      expect(sentFrame.params.client.id).toBe('openclaw-control-ui');
+      expect(sentFrame.params.client.displayName).toBe('test-client');
       expect(sentFrame.params.client.version).toBe('1.2.3');
+      expect(sentFrame.params.client.platform).toBe('darwin');
+      expect(sentFrame.params.client.mode).toBe('ui');
     });
   });
 
   describe('Error handling', () => {
     it('ignores malformed JSON messages', async () => {
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: () => {},
       });
       await completeHandshake(client);
@@ -439,7 +475,7 @@ describe('GatewayClient', () => {
     it('disconnects and does not reconnect on UNAUTHORIZED error during handshake', async () => {
       const states: ConnectionState[] = [];
       const client = new GatewayClient({
-        url: 'ws://test:18789',
+        url: 'ws://test:28789',
         onStateChange: (s) => states.push(s),
       });
 
@@ -448,6 +484,12 @@ describe('GatewayClient', () => {
 
       // Server sends challenge
       serverSend({ type: 'event', event: 'connect.challenge', payload: {} });
+
+      // Let the mocked async getDeviceIdentity + sign resolve (multiple microtask ticks)
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
+
       const sentFrame = JSON.parse(mockWsInstance.send.mock.calls[0][0]);
 
       // Server rejects with UNAUTHORIZED

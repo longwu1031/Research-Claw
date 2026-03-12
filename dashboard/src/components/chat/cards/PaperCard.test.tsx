@@ -23,6 +23,9 @@ vi.mock('@/stores/gateway', () => ({
   useGatewayStore: (selector: (s: { client: { request: typeof mockRequest } | null }) => unknown) =>
     selector({ client: { request: mockRequest } }),
 }));
+vi.mock('@/stores/library', () => ({
+  useLibraryStore: { getState: () => ({ loadPapers: vi.fn() }) },
+}));
 
 // Mock antd message
 vi.mock('antd', async () => {

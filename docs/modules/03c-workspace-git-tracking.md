@@ -9,7 +9,7 @@
 | **Status** | Draft |
 | **Depends on** | `02` (Engineering Architecture — HTTP route registration, RPC protocol) |
 | **Consumed by** | `03b` (task-file linking), `03e` (WorkspacePanel component), `03f` (plugin aggregation) |
-| **Namespace** | `rc.ws.*` (7 RPC methods) |
+| **Namespace** | `rc.ws.*` (6 WS RPC methods + 1 HTTP route) |
 | **Agent tools** | 6 (`workspace_save`, `workspace_read`, `workspace_list`, `workspace_diff`, `workspace_history`, `workspace_restore`) |
 | **HTTP routes** | 1 (`POST /rc/upload`) |
 

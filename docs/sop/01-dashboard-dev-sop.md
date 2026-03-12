@@ -7,7 +7,7 @@
 
 ## 1. Scope
 
-This SOP governs all development on the **Dashboard** — the React + Vite SPA served via `gateway.controlUi.root` at `http://127.0.0.1:18789`.
+This SOP governs all development on the **Dashboard** — the React + Vite SPA served via `gateway.controlUi.root` at `http://127.0.0.1:28789`.
 
 **Owner track:** Dashboard team / agent
 **Source files:** `dashboard/` directory
@@ -29,7 +29,7 @@ This SOP governs all development on the **Dashboard** — the React + Vite SPA s
 | State | Zustand | 5 |
 | Markdown | react-markdown + remark-gfm + shiki | 9 |
 | i18n | i18next + react-i18next | 24 / 15 |
-| Dev port | 5174 (proxy WS to gateway 18789) | — |
+| Dev port | 5175 (proxy WS to gateway 28789) | — |
 
 ### 2.2 Layout (FINALIZED — DO NOT ALTER)
 
@@ -165,7 +165,7 @@ App.tsx (shell)
 
 ## 5. Gateway Client Contract
 
-**WS endpoint:** `ws://127.0.0.1:18789` (protocol v3)
+**WS endpoint:** `ws://127.0.0.1:28789` (protocol v3)
 
 ### 5.1 Essential RPC Methods (Dashboard must call)
 
@@ -198,7 +198,7 @@ All `rc.*` namespace — see `docs/00-reference-map.md` SS3.2 for full list (46 
 
 ### 5.4 Handshake Flow
 
-1. WebSocket connect to `ws://127.0.0.1:18789`
+1. WebSocket connect to `ws://127.0.0.1:28789`
 2. Gateway sends `event: connect.challenge` (nonce)
 3. Client responds `req: connect` (auth info, device token, scopes)
 4. Gateway replies `res: hello-ok` (snapshot: presence, health, defaults)
@@ -240,7 +240,7 @@ All `rc.*` namespace — see `docs/00-reference-map.md` SS3.2 for full list (46 
 
 ```bash
 cd dashboard
-pnpm dev          # Dev server at :5174 (proxy WS to :18789)
+pnpm dev          # Dev server at :5175 (proxy WS to :28789)
 pnpm build        # Production build to dist/
 pnpm typecheck    # tsc --noEmit
 ```

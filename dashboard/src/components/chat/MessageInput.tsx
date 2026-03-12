@@ -1,14 +1,21 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { Button, Tooltip } from 'antd';
-import { SendOutlined, PauseOutlined } from '@ant-design/icons';
+import { Button, Tooltip, message } from 'antd';
+import { SendOutlined, PaperClipOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../stores/chat';
 import { useGatewayStore } from '../../stores/gateway';
+import type { ChatAttachment } from '../../gateway/types';
+
+const MAX_SIZE = 5_000_000; // 5MB — must match gateway's parseMessageWithAttachments limit
+const ACCEPTED_TYPES = /^image\/(png|jpe?g|gif|webp|bmp|tiff|heic|heif)$/;
 
 export default function MessageInput() {
   const { t } = useTranslation();
   const [text, setText] = useState('');
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const send = useChatStore((s) => s.send);
   const abort = useChatStore((s) => s.abort);
   const sending = useChatStore((s) => s.sending);
@@ -16,20 +23,101 @@ export default function MessageInput() {
   const connState = useGatewayStore((s) => s.state);
 
   const isConnected = connState === 'connected';
-  const canSend = text.trim().length > 0 && isConnected && !sending;
+  const canSend = (text.trim().length > 0 || attachments.length > 0) && isConnected && !sending;
+
+  const processFiles = useCallback(
+    (files: FileList | File[]) => {
+      for (const file of Array.from(files)) {
+        if (!ACCEPTED_TYPES.test(file.type)) {
+          message.warning(t('chat.imageOnly'));
+          continue;
+        }
+        if (file.size > MAX_SIZE) {
+          message.warning(t('chat.imageTooLarge'));
+          continue;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          setAttachments((prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              dataUrl,
+              mimeType: file.type,
+            },
+          ]);
+        };
+        reader.readAsDataURL(file);
+      }
+    },
+    [t],
+  );
+
+  const removeAttachment = useCallback((id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  }, []);
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      const imageFiles: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile();
+          if (file) imageFiles.push(file);
+        }
+      }
+
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        processFiles(imageFiles);
+      }
+    },
+    [processFiles],
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+
+      if (e.dataTransfer.files.length > 0) {
+        processFiles(e.dataTransfer.files);
+      }
+    },
+    [processFiles],
+  );
 
   const handleSend = useCallback(() => {
-    const message = text.trim();
-    if (!message || !isConnected || sending) return;
+    const msg = text.trim();
+    if ((!msg && attachments.length === 0) || !isConnected || sending) return;
     setText('');
-    send(message);
-    // Reset textarea height
+    setAttachments([]);
+    send(msg, attachments.length > 0 ? attachments : undefined);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [text, isConnected, sending, send]);
+  }, [text, attachments, isConnected, sending, send]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Do not intercept Enter during IME composition (e.g. Chinese pinyin input)
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -46,29 +134,104 @@ export default function MessageInput() {
 
   return (
     <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       style={{
         padding: '12px 24px 16px',
         borderTop: '1px solid var(--border)',
         background: 'var(--surface)',
       }}
     >
+      {/* Attachment preview strip */}
+      {attachments.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, padding: '8px 0', flexWrap: 'wrap' }}>
+          {attachments.map((att) => (
+            <div key={att.id} style={{ position: 'relative', width: 64, height: 64 }}>
+              <img
+                src={att.dataUrl}
+                alt=""
+                style={{
+                  width: 64,
+                  height: 64,
+                  objectFit: 'cover',
+                  borderRadius: 6,
+                  border: '1px solid var(--border)',
+                }}
+              />
+              <button
+                onClick={() => removeAttachment(att.id)}
+                style={{
+                  position: 'absolute',
+                  top: -6,
+                  right: -6,
+                  width: 18,
+                  height: 18,
+                  borderRadius: '50%',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 10,
+                  lineHeight: 1,
+                  padding: 0,
+                }}
+                aria-label={t('common.remove', { defaultValue: 'Remove' })}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Input row */}
       <div
         style={{
           display: 'flex',
           alignItems: 'flex-end',
           gap: 8,
           background: 'var(--surface-hover)',
-          border: '1px solid var(--border)',
+          border: `1px solid ${isDragging ? 'var(--accent-secondary)' : 'var(--border)'}`,
           borderRadius: 8,
-          padding: '8px 12px',
+          padding: '6px 12px',
           transition: 'border-color 0.15s ease',
         }}
       >
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={(e) => {
+            if (e.target.files) processFiles(e.target.files);
+            e.target.value = '';
+          }}
+        />
+
+        {/* Attach button */}
+        <Tooltip title={t('chat.attachImage')}>
+          <Button
+            type="text"
+            icon={<PaperClipOutlined />}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!isConnected || sending}
+            style={{ color: 'var(--text-secondary)', flexShrink: 0 }}
+          />
+        </Tooltip>
+
         <textarea
           ref={textareaRef}
+          className="chat-textarea"
           value={text}
           onChange={handleInput}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={t('chat.placeholder')}
           disabled={!isConnected || sending}
           rows={1}
@@ -79,11 +242,14 @@ export default function MessageInput() {
             background: 'transparent',
             color: 'var(--text-primary)',
             fontSize: 14,
-            lineHeight: 1.5,
+            lineHeight: '32px',
             resize: 'none',
             fontFamily: 'inherit',
-            minHeight: 22,
+            height: 32,
+            minHeight: 32,
             maxHeight: 160,
+            padding: 0,
+            margin: 0,
           }}
         />
 
@@ -91,7 +257,12 @@ export default function MessageInput() {
           <Tooltip title={t('chat.abort')}>
             <Button
               type="text"
-              icon={<PauseOutlined />}
+              icon={
+                <svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor">
+                  <circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" strokeWidth="2" />
+                  <rect x="8" y="8" width="8" height="8" rx="1" />
+                </svg>
+              }
               onClick={abort}
               style={{
                 color: 'var(--accent-primary)',

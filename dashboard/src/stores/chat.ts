@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import type { ChatMessage, ChatStreamEvent, ChatAttachment } from '../gateway/types';
 import { useGatewayStore } from './gateway';
+import { useLibraryStore } from './library';
+import { useTasksStore } from './tasks';
+import { useSessionsStore } from './sessions';
+import { useRadarStore } from './radar';
+import { useCronStore } from './cron';
+import { useUiStore } from './ui';
 
 const SILENT_REPLY_PATTERN = /^\s*NO_REPLY\s*$/;
 
@@ -8,9 +14,115 @@ function isSilentReply(text: string | undefined): boolean {
   return text !== undefined && SILENT_REPLY_PATTERN.test(text);
 }
 
+/** Roles that should be displayed in the chat UI. */
+const VISIBLE_ROLES = new Set(['user', 'assistant']);
+
+/**
+ * Strip system-injected context that OpenClaw stores inside user messages.
+ *
+ * Our `before_prompt_build` hook returns `{ prependContext }` which OpenClaw
+ * persists as part of the user message. On history reload, these lines pollute
+ * the displayed message. Two patterns are stripped:
+ *
+ *   1. `[Research-Claw] ...` header lines + their `  - ...` continuations
+ *   2. `System: ...` lines (exec events, run commands, etc.)
+ */
+function stripInjectedContext(text: string): string {
+  const lines = text.split('\n');
+  const cleaned: string[] = [];
+  let inRcBlock = false;
+
+  for (const line of lines) {
+    if (line.startsWith('[Research-Claw]')) {
+      inRcBlock = true;
+      continue;
+    }
+    // Indented continuation of an [Research-Claw] block
+    if (inRcBlock && /^\s{2,}-\s/.test(line)) {
+      continue;
+    }
+    inRcBlock = false;
+
+    // All System: prefixed lines (exec events, run commands, etc.)
+    if (/^System:\s/.test(line)) {
+      continue;
+    }
+
+    cleaned.push(line);
+  }
+
+  return cleaned.join('\n').trim();
+}
+
+function isVisibleRole(role: string): boolean {
+  return VISIBLE_ROLES.has(role);
+}
+
+/**
+ * Channel B: Extract notifications from card-type JSON blocks in assistant messages.
+ *
+ * Markdown code blocks with card language tags (```progress_card, ```radar_digest, etc.)
+ * contain structured data that should also generate notifications.
+ */
+const CARD_NOTIFICATION_RE = /```(progress_card|radar_digest|approval_card)\s*\n([\s\S]*?)```/g;
+
+function extractCardNotifications(text: string): void {
+  const { addNotification } = useUiStore.getState();
+  let match: RegExpExecArray | null;
+
+  while ((match = CARD_NOTIFICATION_RE.exec(text)) !== null) {
+    const cardType = match[1];
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(match[2]);
+    } catch {
+      continue;
+    }
+
+    switch (cardType) {
+      case 'progress_card': {
+        const highlights = data.highlights as string[] | undefined;
+        if (highlights && highlights.length > 0) {
+          addNotification({
+            type: 'heartbeat',
+            title: `Heartbeat: ${data.period ?? 'check'}`,
+            body: highlights.slice(0, 3).join('; '),
+            dedupKey: `heartbeat:${Date.now()}`,
+          });
+        }
+        break;
+      }
+      case 'radar_digest': {
+        const total = data.total_found as number | undefined;
+        if (total && total > 0) {
+          addNotification({
+            type: 'system',
+            title: `Radar: ${total} new papers`,
+            body: String(data.query ?? ''),
+            dedupKey: `radar:${data.query}:${Date.now()}`,
+          });
+        }
+        break;
+      }
+      case 'approval_card': {
+        addNotification({
+          type: 'error', // approval = critical, reuse highest-priority type
+          title: `Approval needed: ${data.action ?? 'action'}`,
+          body: String(data.context ?? ''),
+          dedupKey: `approval:${data.approval_id ?? Date.now()}`,
+        });
+        break;
+      }
+    }
+  }
+  // Reset lastIndex for global regex reuse
+  CARD_NOTIFICATION_RE.lastIndex = 0;
+}
+
 function extractText(msg: ChatMessage): string {
   if (msg.text) return msg.text;
-  if (msg.content) {
+  if (typeof msg.content === 'string') return msg.content;
+  if (Array.isArray(msg.content)) {
     return msg.content
       .filter((c) => c.type === 'text' && c.text)
       .map((c) => c.text!)
@@ -45,21 +157,31 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   streaming: false,
   streamText: null,
   runId: null,
-  sessionKey: 'default',
+  sessionKey: 'main',
   lastError: null,
   tokensIn: 0,
   tokensOut: 0,
 
-  send: async (text: string, _attachments?: ChatAttachment[]) => {
+  send: async (text: string, attachments?: ChatAttachment[]) => {
     const client = useGatewayStore.getState().client;
     if (!client || !client.isConnected) {
       set({ lastError: 'Not connected to gateway' });
       return;
     }
 
+    // Build user message — include content blocks for display when attachments present
     const userMessage: ChatMessage = {
       role: 'user',
       text,
+      content: attachments?.length
+        ? [
+            ...(text ? [{ type: 'text' as const, text }] : []),
+            ...attachments.map((att) => ({
+              type: 'image' as const,
+              source: { type: 'base64', media_type: att.mimeType, data: att.dataUrl },
+            })),
+          ]
+        : undefined,
       timestamp: Date.now(),
     };
 
@@ -71,9 +193,29 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     }));
 
     try {
+      // Convert attachments to RPC format expected by OpenClaw gateway
+      const rpcAttachments = attachments?.map((att, idx) => {
+        // Strip data URL prefix: "data:image/png;base64,ABC..." -> "ABC..."
+        const match = /^data:[^;]+;base64,(.+)$/.exec(att.dataUrl);
+        const content = match ? match[1] : att.dataUrl;
+        // Derive file extension from MIME (e.g. image/png → .png)
+        const ext = att.mimeType.split('/')[1]?.replace('jpeg', 'jpg') ?? 'png';
+        console.log(
+          `[Chat] attachment[${idx}]: type=${att.mimeType}, b64len=${content.length}, prefix_stripped=${!!match}`,
+        );
+        return {
+          type: 'image',
+          mimeType: att.mimeType,
+          fileName: `image-${idx + 1}.${ext}`,
+          content,
+        };
+      });
+
       const result = await client.request<{ runId: string }>('chat.send', {
         message: text,
         sessionKey: get().sessionKey,
+        idempotencyKey: crypto.randomUUID(),
+        ...(rpcAttachments?.length ? { attachments: rpcAttachments } : {}),
       });
       set({ runId: result.runId, sending: false, streaming: true });
     } catch (err) {
@@ -87,22 +229,58 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   abort: () => {
     const client = useGatewayStore.getState().client;
     const { runId } = get();
-    if (client && client.isConnected && runId) {
-      client.request('chat.abort', { runId }).catch((err) => {
+    if (!runId) return;
+    if (client && client.isConnected) {
+      client.request('chat.abort', { runId, sessionKey: get().sessionKey }).catch((err) => {
         console.warn('[Chat] Abort failed:', err);
       });
     }
+    // Safety: if server doesn't send 'aborted' event within 3s, force-clear streaming state.
+    // Normal case: server responds → handleChatEvent clears state → runId is null → timeout is a no-op.
+    const abortedRunId = runId;
+    setTimeout(() => {
+      if (get().runId === abortedRunId) {
+        console.warn('[Chat] Abort timeout — force-clearing streaming state');
+        const partialText = get().streamText;
+        if (partialText) {
+          set((s) => ({
+            messages: [...s.messages, { role: 'assistant' as const, text: partialText, timestamp: Date.now() }],
+            streaming: false,
+            streamText: null,
+            runId: null,
+          }));
+        } else {
+          set({ streaming: false, streamText: null, runId: null });
+        }
+      }
+    }, 3000);
   },
 
   loadHistory: async () => {
     const client = useGatewayStore.getState().client;
     if (!client || !client.isConnected) return;
 
+    const requestedKey = get().sessionKey;
     try {
       const result = await client.request<{ messages: ChatMessage[] }>('chat.history', {
-        sessionKey: get().sessionKey,
+        sessionKey: requestedKey,
       });
-      set({ messages: result.messages ?? [] });
+      // Guard: discard stale response if session changed during the await
+      if (get().sessionKey !== requestedKey) return;
+      // Filter out toolResult messages — they are tool internals, not user-visible.
+      // This matches OpenClaw Lit UI behavior (chat.ts:566).
+      const visible = (result.messages ?? []).filter((m) => isVisibleRole(m.role));
+      // Strip system-injected context from user messages (before_prompt_build prependContext,
+      // exec event lines, etc.) and drop messages that become empty after stripping.
+      const cleaned = visible
+        .map((m) => {
+          if (m.role !== 'user') return m;
+          const rawText = extractText(m);
+          const stripped = stripInjectedContext(rawText);
+          return stripped ? { ...m, text: stripped, content: undefined } : null;
+        })
+        .filter(Boolean) as ChatMessage[];
+      set({ messages: cleaned });
     } catch {
       // History load failure is non-fatal
     }
@@ -111,9 +289,20 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   handleChatEvent: (event: ChatStreamEvent) => {
     const { runId } = get();
 
+    // Accumulate token usage from any event that carries it
+    if (event.usage) {
+      const input = event.usage.input ?? 0;
+      const output = event.usage.output ?? 0;
+      if (input > 0 || output > 0) {
+        get().updateTokens(input, output);
+      }
+    }
+
     switch (event.state) {
       case 'delta': {
         if (event.runId !== runId) return;
+        // Skip non-visible roles (e.g. toolResult deltas)
+        if (event.message && !isVisibleRole(event.message.role)) return;
         const deltaText = event.message ? extractText(event.message) : '';
         set((s) => ({
           streaming: true,
@@ -124,6 +313,8 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
       case 'final': {
         if (!event.message) return;
+        // Skip tool result messages — not user-visible
+        if (!isVisibleRole(event.message.role)) return;
         const text = extractText(event.message);
         if (isSilentReply(text)) return;
 
@@ -140,6 +331,23 @@ export const useChatStore = create<ChatState>()((set, get) => ({
             streamText: null,
             runId: null,
           }));
+          // After a full conversation turn, refresh panel data
+          // (the LLM may have used tools that modified library/tasks/workspace)
+          console.log('[Chat] Run complete → refreshing panel stores');
+          setTimeout(() => {
+            useLibraryStore.getState().loadPapers();
+            useLibraryStore.getState().loadTags();
+            useTasksStore.getState().loadTasks();
+            useSessionsStore.getState().loadSessions();
+            useRadarStore.getState().loadConfig();
+            useCronStore.getState().loadPresets();
+            useUiStore.getState().triggerWorkspaceRefresh();
+            // Channel A: poll for deadline-based notifications
+            useUiStore.getState().checkNotifications();
+          }, 500);
+
+          // Channel B: extract notifications from card types in assistant message
+          extractCardNotifications(text);
         } else {
           // Sub-agent or different run
           set((s) => ({

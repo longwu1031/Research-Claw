@@ -47,8 +47,8 @@ describe('Library store integration', () => {
           authors: ['Auth'],
           year: 2025,
           tags: [],
-          status: 'unread',
-          created_at: '2025-01-01T00:00:00Z',
+          read_status: 'unread',
+          added_at: '2025-01-01T00:00:00Z',
           updated_at: '2025-01-01T00:00:00Z',
         },
       ],
@@ -67,7 +67,7 @@ describe('Library store integration', () => {
     const { useLibraryStore } = await import('../stores/library');
     mockGatewayClient.request.mockResolvedValueOnce({ items: [], total: 0 });
 
-    await useLibraryStore.getState().loadPapers({ status: 'reading' });
+    await useLibraryStore.getState().loadPapers({ read_status: 'reading' });
 
     expect(mockGatewayClient.request).toHaveBeenCalledWith(
       'rc.lit.list',
@@ -99,7 +99,7 @@ describe('Library store integration', () => {
     );
   });
 
-  it('loadPapers includes searchQuery when set', async () => {
+  it('loadPapers uses rc.lit.search when searchQuery is set', async () => {
     const { useLibraryStore } = await import('../stores/library');
     useLibraryStore.setState({ searchQuery: 'attention' });
     mockGatewayClient.request.mockResolvedValueOnce({ items: [], total: 0 });
@@ -107,8 +107,8 @@ describe('Library store integration', () => {
     await useLibraryStore.getState().loadPapers();
 
     expect(mockGatewayClient.request).toHaveBeenCalledWith(
-      'rc.lit.list',
-      expect.objectContaining({ query: 'attention' }),
+      'rc.lit.search',
+      { query: 'attention' },
     );
   });
 
@@ -140,8 +140,8 @@ describe('Library store integration', () => {
           authors: [],
           year: 2025,
           tags: [],
-          status: 'unread',
-          created_at: '2025-01-01T00:00:00Z',
+          read_status: 'unread',
+          added_at: '2025-01-01T00:00:00Z',
           updated_at: '2025-01-01T00:00:00Z',
         },
       ],
@@ -159,8 +159,8 @@ describe('Library store integration', () => {
           authors: [],
           year: 2025,
           tags: [],
-          status: 'unread',
-          created_at: '2025-01-01T00:00:00Z',
+          read_status: 'unread',
+          added_at: '2025-01-01T00:00:00Z',
           updated_at: '2025-01-01T00:00:00Z',
         },
       ],
@@ -169,7 +169,7 @@ describe('Library store integration', () => {
 
     // Optimistic update should change status immediately
     const promise = useLibraryStore.getState().updatePaperStatus('p1', 'read');
-    expect(useLibraryStore.getState().papers[0].status).toBe('read');
+    expect(useLibraryStore.getState().papers[0].read_status).toBe('read');
 
     await promise;
 
@@ -190,8 +190,8 @@ describe('Library store integration', () => {
           authors: ['A'],
           year: 2025,
           tags: [],
-          status: 'unread',
-          created_at: '2025-01-01T00:00:00Z',
+          read_status: 'unread',
+          added_at: '2025-01-01T00:00:00Z',
           updated_at: '2025-01-01T00:00:00Z',
         },
       ],
@@ -400,7 +400,7 @@ describe('Sessions store integration', () => {
     const { useSessionsStore } = await import('../stores/sessions');
     useSessionsStore.setState({
       sessions: [],
-      activeSessionKey: null,
+      activeSessionKey: 'main',
       loading: false,
     });
   });
@@ -431,8 +431,8 @@ describe('Sessions store integration', () => {
 
     const key = await useSessionsStore.getState().createSession();
 
-    // crypto.randomUUID returns a standard UUID v4 format
-    expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    // createSession generates a readable key like "project-{8hex}"
+    expect(key).toMatch(/^project-[0-9a-f]{8}$/);
     expect(useSessionsStore.getState().activeSessionKey).toBe(key);
   });
 
@@ -440,8 +440,8 @@ describe('Sessions store integration', () => {
     const { useSessionsStore } = await import('../stores/sessions');
     useSessionsStore.setState({
       sessions: [
-        { key: 'sess-1', createdAt: '2025-01-01T00:00:00Z', messageCount: 5 },
-        { key: 'sess-2', createdAt: '2025-01-02T00:00:00Z', messageCount: 3 },
+        { key: 'sess-1' },
+        { key: 'sess-2' },
       ],
       activeSessionKey: 'sess-1',
     });
@@ -453,16 +453,16 @@ describe('Sessions store integration', () => {
     const state = useSessionsStore.getState();
     expect(state.sessions).toHaveLength(1);
     expect(state.sessions[0].key).toBe('sess-2');
-    // Active key was sess-1 which was deleted, should be null
-    expect(state.activeSessionKey).toBeNull();
+    // Active key was sess-1 which was deleted, should reset to main
+    expect(state.activeSessionKey).toBe('main');
   });
 
   it('deleteSession keeps active key if different session deleted', async () => {
     const { useSessionsStore } = await import('../stores/sessions');
     useSessionsStore.setState({
       sessions: [
-        { key: 'sess-1', createdAt: '2025-01-01T00:00:00Z', messageCount: 5 },
-        { key: 'sess-2', createdAt: '2025-01-02T00:00:00Z', messageCount: 3 },
+        { key: 'sess-1' },
+        { key: 'sess-2' },
       ],
       activeSessionKey: 'sess-1',
     });

@@ -49,11 +49,30 @@ interface Migration {
 // Append future migrations here with incrementing version numbers.
 
 const MIGRATIONS: readonly Migration[] = [
-  // {
-  //   version: 2,
-  //   name: 'add_paper_language',
-  //   sql: `ALTER TABLE rc_papers ADD COLUMN language TEXT;`,
-  // },
+  {
+    version: 2,
+    name: 'add_radar_config',
+    sql: `CREATE TABLE IF NOT EXISTS rc_radar_config (
+  id         TEXT PRIMARY KEY DEFAULT 'default',
+  keywords   TEXT NOT NULL DEFAULT '[]',
+  authors    TEXT NOT NULL DEFAULT '[]',
+  journals   TEXT NOT NULL DEFAULT '[]',
+  sources    TEXT NOT NULL DEFAULT '["arxiv","semantic_scholar"]',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`,
+  },
+  {
+    version: 3,
+    name: 'add_agent_notifications',
+    sql: `CREATE TABLE IF NOT EXISTS rc_agent_notifications (
+  id         TEXT PRIMARY KEY,
+  type       TEXT NOT NULL DEFAULT 'system',
+  title      TEXT NOT NULL,
+  body       TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  read       INTEGER NOT NULL DEFAULT 0
+);`,
+  },
 ];
 
 // ── Helpers ─────────────────────────────────────────────────────────

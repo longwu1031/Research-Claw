@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { GatewayClient } from '../gateway/client';
+import { useConfigStore } from './config';
 import type { ConnectionState, HelloOk, EventFrame } from '../gateway/types';
 
 interface GatewayState {
@@ -37,6 +38,8 @@ export const useGatewayStore = create<GatewayState>()((set, get) => ({
       },
       onHello: (hello: HelloOk) => {
         get().setServerInfo(hello);
+        // Auto-fetch config on every (re)connection
+        useConfigStore.getState().loadGatewayConfig();
       },
       onEvent: (_event: EventFrame) => {
         // Global event handler — individual subscribers handle specifics

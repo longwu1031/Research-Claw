@@ -14,6 +14,14 @@ vi.mock('@/stores/config', () => ({
   useConfigStore: (selector: (s: { theme: string }) => unknown) =>
     selector({ theme: 'dark' }),
 }));
+vi.mock('@/stores/ui', () => ({
+  useUiStore: {
+    getState: () => ({
+      requestWorkspacePreview: vi.fn(),
+      setRightPanelTab: vi.fn(),
+    }),
+  },
+}));
 
 const fullFile: FileCardType = {
   type: 'file_card',
@@ -85,8 +93,8 @@ describe('FileCard', () => {
 
   it('renders action buttons', () => {
     render(<FileCard {...fullFile} />);
-    expect(screen.getByText('card.file.open')).toBeInTheDocument();
-    expect(screen.getByText('card.file.download')).toBeInTheDocument();
+    expect(screen.getByText('card.file.openFile')).toBeInTheDocument();
+    expect(screen.getByText('card.file.openDir')).toBeInTheDocument();
   });
 
   it('renders PDF file with correct structure', () => {

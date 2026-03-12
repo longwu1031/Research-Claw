@@ -10,11 +10,10 @@ describe('configStore', () => {
 
   it('default theme is dark', async () => {
     const { useConfigStore } = await import('../stores/config');
-    // Reset to defaults
-    useConfigStore.setState({ theme: 'dark', locale: 'en', setupComplete: false });
+    useConfigStore.setState({ theme: 'dark', locale: 'zh-CN', bootState: 'pending' });
     const state = useConfigStore.getState();
     expect(state.theme).toBe('dark');
-    expect(state.locale).toBe('en');
+    expect(state.locale).toBe('zh-CN');
   });
 
   it('setTheme updates state and localStorage', async () => {
@@ -24,14 +23,23 @@ describe('configStore', () => {
     expect(localStorage.getItem('rc-theme')).toBe('light');
   });
 
-  it('completeSetup stores credentials', async () => {
+  it('evaluateConfig sets needs_setup when no config', async () => {
     const { useConfigStore } = await import('../stores/config');
-    useConfigStore.getState().completeSetup('sk-test', 'anthropic', 'https://api.anthropic.com');
-    const state = useConfigStore.getState();
-    expect(state.setupComplete).toBe(true);
-    expect(state.apiKey).toBe('sk-test');
-    expect(state.provider).toBe('anthropic');
-    expect(localStorage.getItem('rc-setup-complete')).toBe('true');
+    useConfigStore.setState({ gatewayConfig: null });
+    useConfigStore.getState().evaluateConfig();
+    expect(useConfigStore.getState().bootState).toBe('needs_setup');
+  });
+
+  it('evaluateConfig sets ready when config is valid', async () => {
+    const { useConfigStore } = await import('../stores/config');
+    useConfigStore.setState({
+      gatewayConfig: {
+        agents: { defaults: { model: { primary: 'rc/gpt-4o' } } },
+        models: { providers: { rc: { baseUrl: 'https://api.openai.com' } } },
+      },
+    });
+    useConfigStore.getState().evaluateConfig();
+    expect(useConfigStore.getState().bootState).toBe('ready');
   });
 });
 
@@ -98,7 +106,7 @@ describe('chatStore', () => {
 
     useChatStore.getState().handleChatEvent({
       runId: 'run-1',
-      sessionKey: 'default',
+      sessionKey: 'main',
       state: 'delta',
       message: { role: 'assistant', text: 'Hello' },
     });
@@ -112,7 +120,7 @@ describe('chatStore', () => {
 
     useChatStore.getState().handleChatEvent({
       runId: 'run-1',
-      sessionKey: 'default',
+      sessionKey: 'main',
       state: 'final',
       message: { role: 'assistant', text: 'Hello world' },
     });
@@ -130,7 +138,7 @@ describe('chatStore', () => {
 
     useChatStore.getState().handleChatEvent({
       runId: 'run-1',
-      sessionKey: 'default',
+      sessionKey: 'main',
       state: 'final',
       message: { role: 'assistant', text: '  NO_REPLY  ' },
     });
@@ -144,7 +152,7 @@ describe('chatStore', () => {
 
     useChatStore.getState().handleChatEvent({
       runId: 'run-1',
-      sessionKey: 'default',
+      sessionKey: 'main',
       state: 'error',
       errorMessage: 'Model overloaded',
     });

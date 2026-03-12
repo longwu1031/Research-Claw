@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Input, Segmented, Space, Tag, Tooltip, Typography, Dropdown } from 'antd';
+import { Button, Input, Segmented, Select, Tag, Tooltip, Typography, Dropdown, message } from 'antd';
 import {
   BookOutlined,
   EllipsisOutlined,
@@ -10,14 +10,18 @@ import {
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { List as VirtualList } from 'react-window';
-import { useLibraryStore, type Paper, type ReadStatus } from '../../stores/library';
+import { useLibraryStore, type Paper, type PaperFilter, type ReadStatus } from '../../stores/library';
+import { useGatewayStore } from '../../stores/gateway';
+import { useChatStore } from '../../stores/chat';
 import { getThemeTokens } from '../../styles/theme';
 import { useConfigStore } from '../../stores/config';
+import EditTagsModal from './EditTagsModal';
 
 // react-window v2 row component for virtual list
 interface VirtualRowProps {
   papers: Paper[];
   tokens: ReturnType<typeof getThemeTokens>;
+  onEditTags?: (paper: Paper) => void;
 }
 
 function VirtualRow(props: {
@@ -25,10 +29,10 @@ function VirtualRow(props: {
   style: React.CSSProperties;
   ariaAttributes: { 'aria-posinset': number; 'aria-setsize': number; role: 'listitem' };
 } & VirtualRowProps) {
-  const { index, style, papers, tokens } = props;
+  const { index, style, ariaAttributes, papers, tokens, onEditTags } = props;
   return (
-    <div style={style}>
-      <PaperListItem paper={papers[index]} tokens={tokens} />
+    <div style={style} {...ariaAttributes}>
+      <PaperListItem paper={papers[index]} tokens={tokens} onEditTags={onEditTags} />
     </div>
   );
 }
@@ -68,12 +72,15 @@ function StatusBadge({ status }: { status: ReadStatus }) {
 interface PaperListItemProps {
   paper: Paper;
   tokens: ReturnType<typeof getThemeTokens>;
+  onEditTags?: (paper: Paper) => void;
 }
 
-function PaperListItem({ paper, tokens }: PaperListItemProps) {
+function PaperListItem({ paper, tokens, onEditTags }: PaperListItemProps) {
   const { t } = useTranslation();
   const updatePaperStatus = useLibraryStore((s) => s.updatePaperStatus);
   const ratePaper = useLibraryStore((s) => s.ratePaper);
+  const deletePaper = useLibraryStore((s) => s.deletePaper);
+  const send = useChatStore((s) => s.send);
 
   const authorsText = useMemo(() => {
     if (!paper.authors?.length) return '';
@@ -84,17 +91,59 @@ function PaperListItem({ paper, tokens }: PaperListItemProps) {
   const visibleTags = paper.tags?.slice(0, 3) ?? [];
   const extraTagCount = (paper.tags?.length ?? 0) - 3;
 
+  // Resolve a usable PDF URL: local path → paper URL → arxiv PDF
+  const pdfUrl = paper.pdf_path ?? paper.url ?? (paper.arxiv_id ? `https://arxiv.org/pdf/${paper.arxiv_id}` : null);
+
+  const handleCite = async () => {
+    const bibtex = `@article{,
+  title={${paper.title}},
+  author={${paper.authors.join(' and ')}},${paper.venue ? `\n  journal={${paper.venue}},` : ''}${paper.year ? `\n  year={${paper.year}},` : ''}${paper.doi ? `\n  doi={${paper.doi}},` : ''}
+}`;
+    try {
+      await navigator.clipboard.writeText(bibtex);
+      message.success(t('card.paper.citationCopied'));
+    } catch {
+      // Clipboard not available — fallback to chat
+      send(`Generate a citation for: ${paper.title} (${paper.year})`);
+    }
+  };
+
   const menuItems = [
-    { key: 'openPdf', label: t('library.paperActions.openPdf'), icon: <FilePdfOutlined /> },
-    { key: 'cite', label: t('library.paperActions.cite') },
-    { key: 'remove', label: t('library.paperActions.remove'), danger: true },
-    { key: 'editTags', label: t('library.paperActions.editTags') },
+    {
+      key: 'openPdf',
+      label: t('library.paperActions.openPdf'),
+      icon: <FilePdfOutlined />,
+      disabled: !pdfUrl,
+      onClick: () => {
+        if (pdfUrl) {
+          window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+        }
+      },
+    },
+    {
+      key: 'cite',
+      label: t('library.paperActions.cite'),
+      onClick: handleCite,
+    },
+    {
+      key: 'remove',
+      label: t('library.paperActions.remove'),
+      danger: true,
+      onClick: () => {
+        deletePaper(paper.id);
+      },
+    },
+    {
+      key: 'editTags',
+      label: t('library.paperActions.editTags'),
+      onClick: () => onEditTags?.(paper),
+    },
   ];
 
   const statusCycleOrder: ReadStatus[] = ['unread', 'reading', 'read', 'reviewed'];
 
   const handleStatusClick = () => {
-    const currentIndex = statusCycleOrder.indexOf(paper.status);
+    const currentIndex = statusCycleOrder.indexOf(paper.read_status);
     const nextStatus = statusCycleOrder[(currentIndex + 1) % statusCycleOrder.length];
     updatePaperStatus(paper.id, nextStatus);
   };
@@ -114,7 +163,7 @@ function PaperListItem({ paper, tokens }: PaperListItemProps) {
       }}
     >
       <div onClick={handleStatusClick} style={{ cursor: 'pointer', paddingTop: 2 }}>
-        <StatusBadge status={paper.status} />
+        <StatusBadge status={paper.read_status} />
       </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -201,22 +250,35 @@ export default function LibraryPanel() {
   const loadPapers = useLibraryStore((s) => s.loadPapers);
   const loadTags = useLibraryStore((s) => s.loadTags);
   const tags = useLibraryStore((s) => s.tags);
+  const filters = useLibraryStore((s) => s.filters);
+  const setFilters = useLibraryStore((s) => s.setFilters);
 
+  const connState = useGatewayStore((s) => s.state);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const listContainerRef = useRef<HTMLDivElement>(null);
   const [listHeight, setListHeight] = useState(400);
+  const [editTagsPaper, setEditTagsPaper] = useState<Paper | null>(null);
+
+  // Load data when gateway connection is established (or re-established)
+  useEffect(() => {
+    if (connState === 'connected') {
+      console.log('[LibraryPanel] connected → loading papers & tags');
+      loadPapers();
+      loadTags();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connState]);
 
   useEffect(() => {
+    if (selectedTags.length > 0) {
+      setFilters({ tag: selectedTags[0] });
+    } else {
+      setFilters({ tag: undefined });
+    }
     loadPapers();
-    loadTags();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    loadPapers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, selectedTags]);
+  }, [selectedTags]);
 
   useEffect(() => {
     if (!listContainerRef.current) return;
@@ -241,6 +303,14 @@ export default function LibraryPanel() {
     [setSearchQuery, loadPapers],
   );
 
+  const handleSortChange = useCallback(
+    (value: PaperFilter['sort']) => {
+      setFilters({ sort: value });
+      loadPapers();
+    },
+    [setFilters, loadPapers],
+  );
+
   const handleTagToggle = useCallback(
     (tagName: string) => {
       setSelectedTags((prev) => {
@@ -254,13 +324,19 @@ export default function LibraryPanel() {
   // Filter papers by active tab
   const filteredPapers = useMemo(() => {
     if (activeTab === 'pending') {
-      return papers.filter((p) => p.status === 'unread' || p.status === 'reading');
+      return papers.filter((p) => p.read_status === 'unread' || p.read_status === 'reading');
     }
-    return papers;
+    // "saved" tab: show only starred (rated) papers
+    return papers.filter((p) => p.rating && p.rating > 0);
   }, [papers, activeTab]);
 
   const pendingCount = useMemo(
-    () => papers.filter((p) => p.status === 'unread' || p.status === 'reading').length,
+    () => papers.filter((p) => p.read_status === 'unread' || p.read_status === 'reading').length,
+    [papers],
+  );
+
+  const savedCount = useMemo(
+    () => papers.filter((p) => p.rating && p.rating > 0).length,
     [papers],
   );
 
@@ -289,7 +365,7 @@ export default function LibraryPanel() {
           onChange={(v) => setActiveTab(v as 'pending' | 'saved')}
           options={[
             { label: `${t('library.pending')} (${pendingCount})`, value: 'pending' },
-            { label: `${t('library.saved')} (${total})`, value: 'saved' },
+            { label: `${t('library.saved')} (${savedCount})`, value: 'saved' },
           ]}
           block
           size="small"
@@ -305,6 +381,22 @@ export default function LibraryPanel() {
           onChange={handleSearchChange}
           allowClear
           size="small"
+        />
+      </div>
+
+      {/* Sort */}
+      <div style={{ padding: '0 16px 8px' }}>
+        <Select
+          size="small"
+          value={filters.sort ?? 'added_at'}
+          onChange={handleSortChange}
+          style={{ width: '100%' }}
+          options={[
+            { label: t('library.sortOptions.addedAt'), value: 'added_at' },
+            { label: t('library.sortOptions.year'), value: 'year' },
+            { label: t('library.sortOptions.title'), value: 'title' },
+          ]}
+          prefix={t('library.sortBy')}
         />
       </div>
 
@@ -331,15 +423,24 @@ export default function LibraryPanel() {
             rowComponent={VirtualRow}
             rowCount={filteredPapers.length}
             rowHeight={80}
-            rowProps={{ papers: filteredPapers, tokens }}
+            rowProps={{ papers: filteredPapers, tokens, onEditTags: setEditTagsPaper }}
             style={{ height: listHeight }}
           />
         ) : (
           filteredPapers.map((paper) => (
-            <PaperListItem key={paper.id} paper={paper} tokens={tokens} />
+            <PaperListItem key={paper.id} paper={paper} tokens={tokens} onEditTags={setEditTagsPaper} />
           ))
         )}
       </div>
+
+      {/* Edit tags modal */}
+      <EditTagsModal
+        open={editTagsPaper !== null}
+        paperId={editTagsPaper?.id ?? ''}
+        paperTitle={editTagsPaper?.title ?? ''}
+        currentTags={editTagsPaper?.tags ?? []}
+        onClose={() => setEditTagsPaper(null)}
+      />
     </div>
   );
 }

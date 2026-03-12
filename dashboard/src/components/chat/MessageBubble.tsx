@@ -8,6 +8,32 @@ import CodeBlock from './CodeBlock';
 
 const { Text } = Typography;
 
+/**
+ * Strip context metadata injected by Research-Claw's before_prompt_build hook.
+ * History messages from the gateway include lines like:
+ *   [Research-Claw] Library: 0 papers (0 unread)
+ *   [Thu 2026-03-12 10:25 GMT+8] actual message
+ * We extract only the user's original text.
+ */
+function stripUserMetaPrefix(raw: string): string {
+  const lines = raw.split('\n');
+  const cleaned: string[] = [];
+  for (const line of lines) {
+    // Skip [Research-Claw] context lines
+    if (/^\[Research-Claw\]/.test(line.trim())) continue;
+    // Strip leading timestamp tag: [Thu 2026-03-12 10:25 GMT+8]
+    const tsMatch = line.match(/^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}\s+GMT[+-]\d+\]\s*(.*)/);
+    if (tsMatch) {
+      if (tsMatch[1].length > 0) cleaned.push(tsMatch[1]);
+      continue;
+    }
+    // Skip empty lines that were between meta lines
+    if (line.trim() === '' && cleaned.length === 0) continue;
+    cleaned.push(line);
+  }
+  return cleaned.join('\n').trim();
+}
+
 interface MessageBubbleProps {
   message: ChatMessage;
   isStreaming?: boolean;
@@ -17,13 +43,18 @@ export default function MessageBubble({ message, isStreaming }: MessageBubblePro
   const { t } = useTranslation();
   const isUser = message.role === 'user';
 
-  const text =
+  const rawText =
     message.text ??
-    message.content
-      ?.filter((c) => c.type === 'text' && c.text)
-      .map((c) => c.text!)
-      .join('') ??
-    '';
+    (typeof message.content === 'string'
+      ? message.content
+      : Array.isArray(message.content)
+        ? message.content
+            .filter((c) => c.type === 'text' && c.text)
+            .map((c) => c.text!)
+            .join('')
+        : '');
+
+  const text = isUser ? stripUserMetaPrefix(rawText) : rawText;
 
   return (
     <div
@@ -55,13 +86,14 @@ export default function MessageBubble({ message, isStreaming }: MessageBubblePro
           background: isUser ? 'var(--surface-hover)' : 'var(--surface)',
           border: `1px solid ${isUser ? 'var(--border-hover)' : 'var(--border)'}`,
           position: 'relative',
+          overflow: 'hidden',
         }}
       >
         {isUser ? (
-          <Text style={{ whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.6 }}>{text}</Text>
+          <Text style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 14, lineHeight: 1.6 }}>{text}</Text>
         ) : (
           <div
-            style={{ fontSize: 14, lineHeight: 1.6 }}
+            style={{ fontSize: 14, lineHeight: 1.6, overflow: 'hidden', wordBreak: 'break-word' }}
             className="markdown-body"
           >
             <ReactMarkdown

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useGatewayStore } from './gateway';
 
 export type PanelTab = 'library' | 'workspace' | 'tasks' | 'radar' | 'settings';
 
@@ -12,6 +13,29 @@ export interface Notification {
   timestamp: string;
   read: boolean;
   chatMessageId?: string;
+  /** Stable key for deduplication — same dedupKey won't create a second notification. */
+  dedupKey?: string;
+}
+
+// ── Persist read state across refreshes via localStorage ──────────────
+
+const READ_KEYS_STORAGE = 'rc-read-dedup-keys';
+const MAX_READ_KEYS = 200;
+
+function loadReadKeys(): Set<string> {
+  try {
+    const raw = localStorage.getItem(READ_KEYS_STORAGE);
+    if (raw) return new Set(JSON.parse(raw) as string[]);
+  } catch { /* ignore corrupt data */ }
+  return new Set();
+}
+
+function saveReadKeys(keys: Set<string>): void {
+  try {
+    // Cap to prevent localStorage bloat
+    const arr = [...keys].slice(-MAX_READ_KEYS);
+    localStorage.setItem(READ_KEYS_STORAGE, JSON.stringify(arr));
+  } catch { /* storage full — non-fatal */ }
 }
 
 interface UiState {
@@ -22,6 +46,11 @@ interface UiState {
   notifications: Notification[];
   unreadCount: number;
   agentStatus: AgentStatus;
+
+  /** Monotonically increasing counter — WorkspacePanel watches this to trigger refresh. */
+  workspaceRefreshKey: number;
+  /** Set by FileCard to request WorkspacePanel to open a file preview. */
+  pendingPreviewPath: string | null;
 
   setRightPanelTab: (tab: PanelTab) => void;
   toggleRightPanel: () => void;
@@ -34,9 +63,14 @@ interface UiState {
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: () => void;
   clearNotifications: () => void;
+  /** Poll rc.notifications.pending for overdue/upcoming tasks. */
+  checkNotifications: () => Promise<void>;
+  triggerWorkspaceRefresh: () => void;
+  requestWorkspacePreview: (path: string) => void;
+  clearPendingPreview: () => void;
 }
 
-export const useUiStore = create<UiState>()((set) => ({
+export const useUiStore = create<UiState>()((set, get) => ({
   rightPanelTab: 'library',
   rightPanelOpen: true,
   rightPanelWidth: 360,
@@ -44,6 +78,8 @@ export const useUiStore = create<UiState>()((set) => ({
   notifications: [],
   unreadCount: 0,
   agentStatus: 'disconnected',
+  workspaceRefreshKey: 0,
+  pendingPreviewPath: null,
 
   setRightPanelTab: (tab: PanelTab) => {
     set({ rightPanelTab: tab, rightPanelOpen: true });
@@ -74,21 +110,35 @@ export const useUiStore = create<UiState>()((set) => ({
   },
 
   addNotification: (n) => {
+    // Dedup: skip if a notification with the same dedupKey already exists
+    if (n.dedupKey) {
+      const existing = get().notifications;
+      if (existing.some((x) => x.dedupKey === n.dedupKey)) return;
+    }
+
+    // Check if this dedupKey was previously read (persisted across refreshes)
+    const alreadyRead = n.dedupKey ? loadReadKeys().has(n.dedupKey) : false;
+
     const notification: Notification = {
       ...n,
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
-      read: false,
+      read: alreadyRead,
     };
     set((s) => ({
-      notifications: [notification, ...s.notifications],
-      unreadCount: s.unreadCount + 1,
+      notifications: [notification, ...s.notifications].slice(0, 50),
+      unreadCount: alreadyRead ? s.unreadCount : s.unreadCount + 1,
     }));
   },
 
   markNotificationRead: (id: string) => {
     set((s) => {
       const found = s.notifications.find((n) => n.id === id && !n.read);
+      if (found?.dedupKey) {
+        const keys = loadReadKeys();
+        keys.add(found.dedupKey);
+        saveReadKeys(keys);
+      }
       return {
         notifications: s.notifications.map((n) => (n.id === id ? { ...n, read: true } : n)),
         unreadCount: found ? s.unreadCount - 1 : s.unreadCount,
@@ -97,6 +147,11 @@ export const useUiStore = create<UiState>()((set) => ({
   },
 
   markAllNotificationsRead: () => {
+    const keys = loadReadKeys();
+    for (const n of get().notifications) {
+      if (n.dedupKey && !n.read) keys.add(n.dedupKey);
+    }
+    saveReadKeys(keys);
     set((s) => ({
       notifications: s.notifications.map((n) => ({ ...n, read: true })),
       unreadCount: 0,
@@ -105,5 +160,64 @@ export const useUiStore = create<UiState>()((set) => ({
 
   clearNotifications: () => {
     set({ notifications: [], unreadCount: 0 });
+  },
+
+  triggerWorkspaceRefresh: () => {
+    set((s) => ({ workspaceRefreshKey: s.workspaceRefreshKey + 1 }));
+  },
+
+  requestWorkspacePreview: (path: string) => {
+    set({ pendingPreviewPath: path, rightPanelTab: 'workspace', rightPanelOpen: true });
+  },
+
+  clearPendingPreview: () => {
+    set({ pendingPreviewPath: null });
+  },
+
+  checkNotifications: async () => {
+    const client = useGatewayStore.getState().client;
+    if (!client || !client.isConnected) return;
+
+    try {
+      const result = await client.request<{
+        overdue: Array<{ id: string; title: string; deadline: string; priority: string }>;
+        upcoming: Array<{ id: string; title: string; deadline: string; priority: string }>;
+        custom?: Array<{ id: string; type: string; title: string; body: string | null; created_at: string }>;
+      }>('rc.notifications.pending', { hours: 48 });
+
+      const { addNotification } = get();
+
+      for (const task of result.overdue) {
+        addNotification({
+          type: 'deadline',
+          title: task.title,
+          body: `Overdue: ${task.deadline}`,
+          dedupKey: `overdue:${task.id}`,
+        });
+      }
+
+      for (const task of result.upcoming) {
+        addNotification({
+          type: 'deadline',
+          title: task.title,
+          body: `Due: ${task.deadline}`,
+          dedupKey: `upcoming:${task.id}`,
+        });
+      }
+
+      // Custom agent-sent notifications
+      if (result.custom) {
+        for (const n of result.custom) {
+          addNotification({
+            type: (n.type as Notification['type']) || 'system',
+            title: n.title,
+            body: n.body ?? undefined,
+            dedupKey: `custom:${n.id}`,
+          });
+        }
+      }
+    } catch {
+      // Non-fatal — notification check failure should not disrupt the UI
+    }
   },
 }));

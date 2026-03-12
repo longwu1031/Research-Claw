@@ -1,0 +1,63 @@
+# Research-Claw workspace — auto-generated
+# Large binary files (managed by size guard)
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+*.iso
+*.dmg
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.obj
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+*~
+*.log
+*.pid
+*.seed
+.DS_Store
+Thumbs.db
+
+# Media (large)
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.mp3
+*.wav
+*.flac
+
+# Python artifacts
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+# R artifacts
+.Rhistory
+.RData
+
+# Node
+node_modules/
+
+# Editor state
+.vscode/
+.idea/
+
+# Large data (user can remove lines to track specific files)
+*.h5
+*.hdf5
+*.parquet
+*.sqlite
+*.db
+
+# Environment / secrets
+.env
+.env.*

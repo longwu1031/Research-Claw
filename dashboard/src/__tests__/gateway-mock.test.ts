@@ -5,7 +5,7 @@ describe('GatewayClient (mock mode)', () => {
   it('connects and transitions through states', async () => {
     const states: string[] = [];
     const client = new GatewayClient({
-      url: 'ws://mock:18789',
+      url: 'ws://mock:28789',
       onStateChange: (s) => states.push(s),
       onHello: () => {},
     });
@@ -22,7 +22,7 @@ describe('GatewayClient (mock mode)', () => {
 
   it('request("health") returns { ok: true }', async () => {
     const client = new GatewayClient({
-      url: 'ws://mock:18789',
+      url: 'ws://mock:28789',
       onStateChange: () => {},
     });
 
@@ -35,7 +35,7 @@ describe('GatewayClient (mock mode)', () => {
 
   it('request while disconnected throws', async () => {
     const client = new GatewayClient({
-      url: 'ws://mock:18789',
+      url: 'ws://mock:28789',
       onStateChange: () => {},
     });
 
@@ -44,7 +44,7 @@ describe('GatewayClient (mock mode)', () => {
 
   it('mockResponse allows custom method responses', async () => {
     const client = new GatewayClient({
-      url: 'ws://mock:18789',
+      url: 'ws://mock:28789',
       onStateChange: () => {},
     });
 
@@ -58,7 +58,7 @@ describe('GatewayClient (mock mode)', () => {
 
   it('unknown method throws GatewayRequestError', async () => {
     const client = new GatewayClient({
-      url: 'ws://mock:18789',
+      url: 'ws://mock:28789',
       onStateChange: () => {},
     });
 
@@ -70,7 +70,7 @@ describe('GatewayClient (mock mode)', () => {
 
   it('subscribe and simulateEvent work', async () => {
     const client = new GatewayClient({
-      url: 'ws://mock:18789',
+      url: 'ws://mock:28789',
       onStateChange: () => {},
     });
 
@@ -87,7 +87,7 @@ describe('GatewayClient (mock mode)', () => {
 
   it('disconnect transitions to disconnected', async () => {
     const client = new GatewayClient({
-      url: 'ws://mock:18789',
+      url: 'ws://mock:28789',
       onStateChange: () => {},
     });
 
@@ -103,7 +103,7 @@ describe('GatewayClient (mock mode)', () => {
   it('onHello callback receives server info', async () => {
     const onHello = vi.fn();
     const client = new GatewayClient({
-      url: 'ws://mock:18789',
+      url: 'ws://mock:28789',
       onStateChange: () => {},
       onHello,
     });

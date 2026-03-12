@@ -67,7 +67,7 @@ import type {
 } from './types';
 
 interface GatewayClientOptions {
-  url: string;                              // ws://127.0.0.1:18789
+  url: string;                              // ws://127.0.0.1:28789
   token?: string;                           // Optional auth token
   clientName?: string;                      // "research-claw-dashboard"
   clientVersion?: string;                   // "0.1.0"
@@ -142,6 +142,12 @@ Browser                              Gateway
   │                                     │
   │  ═══ Connected ═══════════════════  │
 ```
+
+**Device Identity Authentication:** The dashboard uses Ed25519 device-identity signing
+(`device-identity.ts`) to authenticate with the gateway. On first run, a keypair is
+generated and persisted locally. During the handshake, the `connect` request payload is
+signed with the private key; the gateway verifies the signature against the stored
+public key as part of the v3 protocol hello sequence.
 
 ### 2.4 Reconnection Strategy
 
@@ -327,26 +333,41 @@ interface ChatState {
 
 ### 4.3 Sessions Store
 
+OpenClaw session model: keys are colon-delimited (`agent:{agentId}:{rest}`), default is `"main"` → canonicalized to `"agent:main:main"`. Sessions are implicit — created on first `chat.send` with a new `sessionKey`. Main session cannot be deleted.
+
 ```typescript
+export const MAIN_SESSION_KEY = 'main';
+
 interface SessionsState {
   sessions: Session[];
-  activeSessionKey: string | null;
+  activeSessionKey: string;  // persisted in localStorage('rc_active_session')
   loading: boolean;
 
-  loadSessions: () => Promise<void>;
-  switchSession: (key: string) => void;
-  createSession: () => Promise<string>;
-  deleteSession: (key: string) => Promise<void>;
+  loadSessions: () => Promise<void>;     // sessions.list RPC
+  switchSession: (key: string) => void;  // sets key + syncs chat store + loadHistory
+  createSession: () => Promise<string>;  // generates project-{uuid8}, adds local placeholder
+  deleteSession: (key: string) => Promise<void>;  // sessions.delete RPC, main protected
+  renameSession: (key: string, label: string) => Promise<void>; // sessions.patch RPC
+  isMainSession: (key: string) => boolean;  // checks 'main' and 'agent:main:main'
 }
 
 interface Session {
   key: string;
   label?: string;
-  createdAt: string;
-  lastMessageAt?: string;
-  messageCount: number;
+  displayName?: string;
+  derivedTitle?: string;
+  updatedAt?: number;
+  sessionId?: string;
+  kind?: string;
 }
 ```
+
+Key behaviors:
+- `switchSession` calls `useChatStore.setSessionKey()` + `loadHistory()` to refresh chat view
+- `createSession` adds a local placeholder session so it appears in the dropdown immediately (before first message creates it on the server)
+- `loadHistory` includes a stale-response guard: if `sessionKey` changed during the async request, the response is discarded
+- `deleteSession` falls back to `MAIN_SESSION_KEY` if the deleted session was active
+- Active session key persisted via `localStorage('rc_active_session')`, restored on page load
 
 ### 4.4 Library Store
 
@@ -406,7 +427,13 @@ interface ConfigState {
   locale: 'en' | 'zh-CN';
   model: string | null;
   provider: string | null;
-  proxy: ProxyConfig | null;
+  endpoint: string;
+  apiKey: string;
+  proxyUrl: string | null;               // Single URL string (e.g. "http://host:port")
+  notificationSound: boolean;
+  autoScroll: boolean;
+  fileOpenBehavior: 'system' | 'internal';
+  systemPromptAppend: string;
   setupComplete: boolean;
 
   setTheme: (t: 'dark' | 'light') => void;
@@ -414,13 +441,6 @@ interface ConfigState {
   loadConfig: () => Promise<void>;
   saveConfig: (patch: Partial<ConfigState>) => Promise<void>;
   completeSetup: (apiKey: string, provider: string) => Promise<void>;
-}
-
-interface ProxyConfig {
-  enabled: boolean;
-  type: 'http' | 'socks5';
-  host: string;
-  port: number;
 }
 ```
 
@@ -430,14 +450,25 @@ interface ProxyConfig {
 interface UiState {
   rightPanelTab: PanelTab;
   rightPanelOpen: boolean;
+  rightPanelWidth: number;
+  leftNavCollapsed: boolean;
+  agentStatus: string;
   notifications: Notification[];
   unreadCount: number;
+  workspaceRefreshKey: number;       // Monotonic counter — incremented after each chat turn to trigger WorkspacePanel reload
+  pendingPreviewPath: string | null; // FileCard sets this to request file preview in WorkspacePanel
 
   setRightPanelTab: (tab: PanelTab) => void;
   toggleRightPanel: () => void;
+  setRightPanelWidth: (w: number) => void;
+  setLeftNavCollapsed: (v: boolean) => void;
   addNotification: (n: Notification) => void;
   markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
   clearNotifications: () => void;
+  triggerWorkspaceRefresh: () => void;           // Increments workspaceRefreshKey
+  requestWorkspacePreview: (path: string) => void; // Sets pendingPreviewPath + opens workspace panel
+  clearPendingPreview: () => void;               // Resets pendingPreviewPath to null
 }
 
 type PanelTab = 'library' | 'workspace' | 'tasks' | 'radar' | 'settings';
@@ -471,11 +502,12 @@ App
 └── [if setupComplete]
     └── Workbench
         ├── TopBar ─────────────────────── grid-area: topbar
-        │   ├── Logo { text: "Research-Claw" }
+        │   ├── Logo { emoji: 🦞, text: t('app.name') }
         │   ├── Spacer
         │   ├── NotificationBell { count, onClick }
         │   ├── AgentStatusDot { state: ConnectionState }
-        │   └── ThemeToggle { theme, onToggle }
+        │   ├── LangToggle { EN | 中, onClick: setLocale }
+        │   └── ThemeToggle { Sun/Moon SVG, onClick: setTheme }
         │
         ├── LeftNav ────────────────────── grid-area: leftnav
         │   ├── ProjectSwitcher
@@ -498,11 +530,11 @@ App
         │   │       ├── [radar_digest] → RadarDigest component
         │   │       ├── [file_card] → FileCard component
         │   │       └── [code_block] → Shiki highlighted + copy/save
-        │   ├── StreamingIndicator { text, visible }
+        │   ├── StreamingIndicator { text, visible } (deferred)
         │   └── MessageInput
         │       ├── TextArea { value, onChange, onKeyDown }
-        │       ├── SlashCommandMenu { query, onSelect }
-        │       ├── AttachButton { onFiles }
+        │       ├── SlashCommandMenu { query, onSelect } (deferred)
+        │       ├── AttachButton { onFiles } (deferred)
         │       └── SendButton { onClick, disabled }
         │
         ├── RightPanel ─────────────────── grid-area: rightpanel
@@ -531,10 +563,9 @@ App
         │   │       └── DigestList { digests }
         │   └── [tab === 'settings']
         │       └── SettingsPanel (React.lazy)
-        │           ├── SettingsTabs { 'general' | 'model' | 'proxy' | 'about' }
-        │           ├── GeneralSettings { theme, locale }
+        │           ├── SettingsTabs { 'model' | 'proxy' | 'about' }
         │           ├── ModelSettings { provider, model, temperature }
-        │           ├── ProxySettings { proxy config }
+        │           ├── ProxySettings { proxy config, localStorage-only }
         │           └── AboutSettings { version, connections }
         │
         └── StatusBar ──────────────────── grid-area: statusbar
@@ -584,8 +615,9 @@ Mount / Tab Switch
 | Workspace | View file | Direct RPC: `rc.ws.read` | Simple |
 | Workspace | Restore version | Chat: confirmation needed | Potentially destructive |
 | Settings | Change theme | Local: configStore.setTheme | Instant, no RPC |
-| Settings | Change model | Direct RPC: `config.set` | Simple config update |
-| Settings | Update proxy | Direct RPC: `config.set` | Simple config update |
+| Settings | Change language | Local: configStore.setLocale | Instant, no RPC (TopBar toggle) |
+| Settings | Change model | Local: localStorage `rc-*` | No RPC — config.set requires full JSON5 raw |
+| Settings | Update proxy | Local: localStorage `rc-proxy` | No RPC — same config.set limitation |
 
 ---
 
@@ -892,10 +924,10 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5174,
+    port: 5175,
     proxy: {
-      '/ws': { target: 'ws://127.0.0.1:18789', ws: true },
-      '/socket.io': { target: 'http://127.0.0.1:18789' },
+      '/ws': { target: 'ws://127.0.0.1:28789', ws: true },
+      '/socket.io': { target: 'http://127.0.0.1:28789' },
     },
   },
 });
@@ -921,7 +953,7 @@ pnpm --filter dashboard dev
 pnpm dev
 ```
 
-Dev server at `http://localhost:5174` proxies WS and API requests to gateway at `127.0.0.1:18789`.
+Dev server at `http://localhost:5175` proxies WS and API requests to gateway at `127.0.0.1:28789`.
 
 ---
 

@@ -1,6 +1,6 @@
 /**
  * Config store unit tests.
- * Tests theme, locale, setup completion, and localStorage persistence.
+ * Tests theme, locale, bootState, evaluateConfig, and localStorage persistence.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useConfigStore } from './config';
@@ -12,18 +12,25 @@ vi.mock('../i18n', () => ({
   },
 }));
 
+// Mock gateway store
+vi.mock('./gateway', () => ({
+  useGatewayStore: {
+    getState: () => ({
+      client: null,
+    }),
+  },
+}));
+
 describe('Config store', () => {
   beforeEach(() => {
     localStorage.clear();
     useConfigStore.setState({
       theme: 'dark',
-      locale: 'en',
-      model: null,
-      provider: null,
-      endpoint: null,
-      apiKey: null,
-      proxyUrl: null,
-      setupComplete: false,
+      locale: 'zh-CN',
+      systemPromptAppend: '',
+      bootState: 'pending',
+      gatewayConfig: null,
+      gatewayConfigLoading: false,
     });
   });
 
@@ -51,7 +58,7 @@ describe('Config store', () => {
   });
 
   describe('setLocale', () => {
-    it('updates state to zh-CN', async () => {
+    it('updates state to zh-CN', () => {
       useConfigStore.getState().setLocale('zh-CN');
       expect(useConfigStore.getState().locale).toBe('zh-CN');
     });
@@ -68,78 +75,75 @@ describe('Config store', () => {
     });
   });
 
-  describe('setModel', () => {
-    it('updates model in state', () => {
-      useConfigStore.getState().setModel('claude-sonnet-4-5');
-      expect(useConfigStore.getState().model).toBe('claude-sonnet-4-5');
-    });
-
-    it('persists to localStorage', () => {
-      useConfigStore.getState().setModel('gpt-4o');
-      expect(localStorage.getItem('rc-model')).toBe('gpt-4o');
+  describe('setSystemPromptAppend', () => {
+    it('updates state and persists', () => {
+      useConfigStore.getState().setSystemPromptAppend('Be concise.');
+      expect(useConfigStore.getState().systemPromptAppend).toBe('Be concise.');
+      expect(localStorage.getItem('rc-system-prompt-append')).toBe('Be concise.');
     });
   });
 
-  describe('completeSetup', () => {
-    it('sets all credentials and marks setup complete', () => {
-      useConfigStore.getState().completeSetup(
-        'sk-test-key',
-        'anthropic',
-        'https://api.anthropic.com',
-      );
-
-      const state = useConfigStore.getState();
-      expect(state.setupComplete).toBe(true);
-      expect(state.apiKey).toBe('sk-test-key');
-      expect(state.provider).toBe('anthropic');
-      expect(state.endpoint).toBe('https://api.anthropic.com');
-      expect(state.proxyUrl).toBeNull();
+  describe('evaluateConfig', () => {
+    it('sets bootState to needs_setup when gatewayConfig is null', () => {
+      useConfigStore.setState({ gatewayConfig: null });
+      useConfigStore.getState().evaluateConfig();
+      expect(useConfigStore.getState().bootState).toBe('needs_setup');
     });
 
-    it('stores proxy when provided', () => {
-      useConfigStore.getState().completeSetup(
-        'sk-key',
-        'openai',
-        'https://api.openai.com',
-        'http://127.0.0.1:7890',
-      );
-
-      expect(useConfigStore.getState().proxyUrl).toBe('http://127.0.0.1:7890');
-      expect(localStorage.getItem('rc-proxy')).toBe('http://127.0.0.1:7890');
+    it('sets bootState to needs_setup when no model primary', () => {
+      useConfigStore.setState({
+        gatewayConfig: { agents: { defaults: {} }, models: { providers: {} } },
+      });
+      useConfigStore.getState().evaluateConfig();
+      expect(useConfigStore.getState().bootState).toBe('needs_setup');
     });
 
-    it('persists all values to localStorage', () => {
-      useConfigStore.getState().completeSetup('key', 'anthropic', 'https://api.anthropic.com');
+    it('sets bootState to needs_setup when provider missing', () => {
+      useConfigStore.setState({
+        gatewayConfig: {
+          agents: { defaults: { model: { primary: 'rc/gpt-4o' } } },
+          models: { providers: {} },
+        },
+      });
+      useConfigStore.getState().evaluateConfig();
+      expect(useConfigStore.getState().bootState).toBe('needs_setup');
+    });
 
-      expect(localStorage.getItem('rc-api-key')).toBe('key');
-      expect(localStorage.getItem('rc-provider')).toBe('anthropic');
-      expect(localStorage.getItem('rc-endpoint')).toBe('https://api.anthropic.com');
-      expect(localStorage.getItem('rc-setup-complete')).toBe('true');
+    it('sets bootState to ready when config is valid', () => {
+      useConfigStore.setState({
+        gatewayConfig: {
+          agents: { defaults: { model: { primary: 'rc/gpt-4o' } } },
+          models: {
+            providers: {
+              rc: { baseUrl: 'https://api.openai.com', models: [{ id: 'gpt-4o' }] },
+            },
+          },
+        },
+      });
+      useConfigStore.getState().evaluateConfig();
+      expect(useConfigStore.getState().bootState).toBe('ready');
+    });
+  });
+
+  describe('setBootState', () => {
+    it('sets bootState directly', () => {
+      useConfigStore.getState().setBootState('gateway_unreachable');
+      expect(useConfigStore.getState().bootState).toBe('gateway_unreachable');
     });
   });
 
   describe('loadConfig', () => {
-    it('restores state from localStorage', () => {
+    it('restores theme and locale from localStorage', () => {
       localStorage.setItem('rc-theme', 'light');
-      localStorage.setItem('rc-locale', 'zh-CN');
-      localStorage.setItem('rc-setup-complete', 'true');
-      localStorage.setItem('rc-provider', 'openai');
-      localStorage.setItem('rc-endpoint', 'https://api.openai.com');
-      localStorage.setItem('rc-api-key', 'sk-saved');
-      localStorage.setItem('rc-proxy', 'http://proxy:8080');
-      localStorage.setItem('rc-model', 'gpt-4o');
+      localStorage.setItem('rc-locale', 'en');
+      localStorage.setItem('rc-system-prompt-append', 'test prompt');
 
       useConfigStore.getState().loadConfig();
 
       const state = useConfigStore.getState();
       expect(state.theme).toBe('light');
-      expect(state.locale).toBe('zh-CN');
-      expect(state.setupComplete).toBe(true);
-      expect(state.provider).toBe('openai');
-      expect(state.endpoint).toBe('https://api.openai.com');
-      expect(state.apiKey).toBe('sk-saved');
-      expect(state.proxyUrl).toBe('http://proxy:8080');
-      expect(state.model).toBe('gpt-4o');
+      expect(state.locale).toBe('en');
+      expect(state.systemPromptAppend).toBe('test prompt');
     });
 
     it('sets data-theme attribute when loading', () => {
@@ -153,9 +157,10 @@ describe('Config store', () => {
       expect(useConfigStore.getState().theme).toBe('dark');
     });
 
-    it('defaults setupComplete to false when not in localStorage', () => {
+    it('does not touch bootState', () => {
+      useConfigStore.setState({ bootState: 'pending' });
       useConfigStore.getState().loadConfig();
-      expect(useConfigStore.getState().setupComplete).toBe(false);
+      expect(useConfigStore.getState().bootState).toBe('pending');
     });
   });
 });

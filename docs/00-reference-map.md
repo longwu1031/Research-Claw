@@ -95,7 +95,9 @@
 | 12 | `rc_activity_log` | 03b §2 | Task event tracking / audit log |
 | — | `rc_papers_fts` | 03a §2.9 | FTS5 virtual table on papers (title, authors, abstract, notes) |
 
-All tables prefixed `rc_` to avoid collision with OpenClaw internals. Database located at `.research-claw/library.db` (configured in `openclaw.json`). **12 regular tables + 1 FTS5 virtual table, 3 FTS sync triggers, 23 indexes.** Schema source of truth: `extensions/research-claw-core/src/db/schema.ts`.
+| 13 | `rc_agent_notifications` | — | Agent-sent notifications for dashboard bell (type, title, body, read) |
+
+All tables prefixed `rc_` to avoid collision with OpenClaw internals. Database located at `.research-claw/library.db` (configured in `openclaw.json`). **13 regular tables + 1 FTS5 virtual table, 3 FTS sync triggers, 23 indexes.** Schema source of truth: `extensions/research-claw-core/src/db/schema.ts`. Migration v3 adds `rc_agent_notifications`.
 
 **Obsolete tables from earlier specs** (do NOT exist in the actual schema):
 - ~~`rc_meta`~~ — replaced by `rc_schema_version`
@@ -110,7 +112,9 @@ All tables prefixed `rc_` to avoid collision with OpenClaw internals. Database l
 | `rc.lit.*` | 26 | 03a §5 | Literature CRUD, search, tags, reading sessions, citations, notes, collections, batch/import/export |
 | `rc.task.*` | 10 | 03b §5 | Task CRUD, complete, upcoming, overdue, link, notes |
 | `rc.ws.*` | 6 | 03c §4 | Workspace tree, read, history, diff, restore, save (upload is HTTP — see §3.6) |
-| `rc.cron.*` | 3 | 03b §5 | Cron preset list, activate, deactivate |
+| `rc.cron.*` | 4 | 03b §5 | Cron preset list, activate, deactivate, setJobId |
+| `rc.radar.*` | 3 | — | Radar config get/set, scan (arXiv + Semantic Scholar) |
+| `rc.notifications.*` | 2 | — | Pending notifications (tasks + custom) + mark-read for dashboard bell |
 
 **Full RPC method list** (canonical names from module docs):
 
@@ -133,6 +137,11 @@ rc.ws.restore        rc.ws.save
 (rc.ws.upload is HTTP POST, not WS RPC — see §3.6)
 
 rc.cron.presets.list rc.cron.presets.activate rc.cron.presets.deactivate
+rc.cron.presets.setJobId
+
+rc.radar.config.get  rc.radar.config.set  rc.radar.scan
+
+rc.notifications.pending  rc.notifications.markRead
 ```
 
 ### 3.3 Agent Tools
@@ -163,8 +172,12 @@ rc.cron.presets.list rc.cron.presets.activate rc.cron.presets.deactivate
 | `workspace_diff` | 03c §3 | Show changes to file |
 | `workspace_history` | 03c §3 | Show file edit history |
 | `workspace_restore` | 03c §3 | Restore previous file version |
+| `radar_configure` | — | Set radar tracking keywords, authors, journals |
+| `radar_get_config` | — | Read current radar configuration |
+| `radar_scan` | — | Scan arXiv + Semantic Scholar for new papers |
+| `send_notification` | — | Push a notification to the dashboard bell icon |
 
-**Config `tools.alsoAllow`** lists 24 tools (18 base + 6 extended: `library_batch_add`, `library_manage_collection`, `library_tag_paper`, `library_add_note`, `library_import_bibtex`, `library_citation_graph`).
+**Config `tools.alsoAllow`** lists 28 tools (18 base + 7 extended + 3 radar).
 
 ### 3.4 Message Card Types
 
@@ -189,10 +202,10 @@ Convention: fenced code blocks with card type as language tag. Standard code blo
 | `BOOTSTRAP.md` | 04 §6 | 6,363 | First-run onboarding (self-deletes after setup) |
 | `IDENTITY.md` | 04 §7 | 703 | Product identity, persona |
 | `USER.md` | 04 §8 | 970 | User profile template |
-| `TOOLS.md` | 04 §9 | 4,604 | API reference, local tools |
+| `TOOLS.md` | 04 §9 | 4,676 | API reference, local tools |
 | `MEMORY.md` | 04 §10 | 964 | Persistent memory template (v1.1: Global + Current Focus + Projects) |
 
-**Total:** ~38,290 chars (limit: 150K total, 20K per file).
+**Total:** ~38,362 chars (limit: 150K total, 20K per file).
 
 ### 3.6 HTTP Endpoints
 
@@ -210,7 +223,7 @@ Convention: fenced code blocks with card type as language tag. Standard code blo
 | **Bootstrap File** | Markdown files (SOUL.md, AGENTS.md, etc.) loaded into agent context at session start |
 | **Coupling Tier** | Dependency depth: L0 (filesystem) → L1 (Plugin SDK) → L2 (WS RPC) → L3 (pnpm patch) |
 | **Human-in-Loop (HiL)** | Agent must request human approval before irreversible actions |
-| **Gateway** | OpenClaw's local server providing WS RPC and HTTP endpoints on port 18789 |
+| **Gateway** | OpenClaw's local server providing WS RPC and HTTP endpoints on port 28789 |
 | **Message Card** | Structured data in fenced code blocks that the dashboard renders as rich UI components |
 | **Project (Workstream)** | Shared attention focus — NOT an isolated container. All projects share global MEMORY.md |
 | **Research-Claw** | English product name (科研龙虾 in Chinese). Local academic AI research assistant. |
@@ -219,7 +232,9 @@ Convention: fenced code blocks with card type as language tag. Standard code blo
 | **pnpm Patch** | ~20-line patch across 7 files for branding (CLI name, process title, system prompt, etc.) |
 | **HashMind** | Design language: Dark Cyberpunk Terminal Aesthetic. Lobster Red (#EF4444) + Academic Blue (#3B82F6) |
 | **Control UI** | Gateway-served web dashboard at `./dashboard/dist` |
-| **Cron Preset** | Pre-configured periodic tasks (arXiv scan, citation tracking, deadline reminders) |
+| **Cron Preset** | Pre-configured periodic tasks: arXiv scan, citation tracking, deadline reminders, group meeting prep, weekly report (5 total) |
+| **Exec SafeGuard** | `before_tool_call` hook blocking catastrophic CLI commands (rm -rf /, dd, mkfs, shred, fork bomb) outside workspace |
+| **Security Model** | 4-layer: L1 Network (local-only gateway) → L2 Workspace Sandbox (init scaffold + git) → L3 Exec Guard (before_tool_call hook) → L4 Git Versioning (auto-commit + restore) + Prompt HiL (AGENTS.md approval protocol) |
 
 ---
 
@@ -283,4 +298,26 @@ Finalized decisions that all docs must respect:
 
 ---
 
-*Updated: 2026-03-12 | OpenClaw: 2026.3.8 | Protocol: v3 | RPC: 46 methods | Tables: 12 + FTS5 | Tools: 24 | Cards: 6 | Indexes: 23*
+## 8. Security Model
+
+Research-Claw operates **entirely local** with a 4-layer defense model:
+
+| Layer | Mechanism | Scope |
+|-------|-----------|-------|
+| **L1 — Network** | Gateway binds to `loopback` only, auth mode `none` (local trust) | No remote access possible |
+| **L2 — Workspace Sandbox** | `workspace_save/read/list` enforce resolved-path boundary; scaffold created on init | Agent file writes contained |
+| **L3 — Exec Guard** | `before_tool_call` hook on `exec` tool: blocks catastrophic patterns (`rm -rf /`, `dd of=/dev/`, `mkfs`, `shred`, fork bomb) unless command targets workspace root | Prevents irreversible CLI ops |
+| **L4 — Git Versioning** | GitTracker auto-commits workspace changes; `workspace_restore` recovers any version | All writes reversible |
+| **L+ — Prompt HiL** | AGENTS.md §7 approval protocol: agent must ask before delete/bulk/destructive actions | Human confirmation gate |
+
+**Design principles:**
+- Block only catastrophic/irreversible operations; trust OpenClaw's agentic self-correction loop for recoverable errors
+- No `tools.deny` list — native tools (write, edit, exec) remain fully available for normal workflow
+- Security must never degrade normal user experience
+- Workspace path validation uses absolute resolved path, not string matching
+
+**Plugin hooks** (7 total): `before_prompt_build`, `prompt_build`, `after_response`, `before_tool_call` (exec guard), `agent_end`, `after_tool_call`, `gateway_start`.
+
+---
+
+*Updated: 2026-03-12 | OpenClaw: 2026.3.9 | Protocol: v3 | RPC: 51 WS + 1 HTTP = 52 methods | Tables: 13 + FTS5 | Tools: 28 | Cards: 6 | Hooks: 7 | Indexes: 23*

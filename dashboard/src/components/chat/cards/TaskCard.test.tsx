@@ -51,12 +51,12 @@ describe('TaskCard', () => {
     render(<TaskCard {...fullTask} />);
     expect(screen.getByText('Review transformer paper')).toBeInTheDocument();
     expect(screen.getByText('Read and annotate the attention paper')).toBeInTheDocument();
-    expect(screen.getByText('high')).toBeInTheDocument();
+    expect(screen.getByText('tasks.priority.high:{"defaultValue":"high"}')).toBeInTheDocument();
   });
 
   it('renders status badge', () => {
     render(<TaskCard {...fullTask} />);
-    expect(screen.getByText('in progress')).toBeInTheDocument();
+    expect(screen.getByText('tasks.status.in_progress:{"defaultValue":"in progress"}')).toBeInTheDocument();
   });
 
   it('renders related paper title', () => {
@@ -118,9 +118,9 @@ describe('TaskCard', () => {
   it('applies strikethrough for cancelled status', () => {
     render(<TaskCard {...fullTask} status="cancelled" />);
     const title = screen.getByText('Review transformer paper');
-    // antd Typography Text renders <span style="..."><strong>text</strong></span>
-    // The style is on the parent <span>, not on <strong>
     const styledParent = title.closest('span[style]');
     expect(styledParent).toHaveStyle({ textDecoration: 'line-through' });
+    // Status tag uses i18n key
+    expect(screen.getByText('tasks.status.cancelled:{"defaultValue":"cancelled"}')).toBeInTheDocument();
   });
 });

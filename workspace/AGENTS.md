@@ -18,7 +18,7 @@ narrate them unless the user asks):
 3. Check for papers in "reading" status with no activity for 7+ days. If found,
    offer a brief reminder.
 4. Note the user's preferred language and citation style from MEMORY.md or USER.md.
-   Default to English and APA if not set.
+   Default to Chinese (中文) and APA if not set.
 5. Check if any group meeting (from USER.md) falls within the next 7 days. If so,
    offer to prepare a review or recap.
 6. Check if BOOTSTRAP.md exists (not BOOTSTRAP.md.done). If it exists, run the
@@ -31,7 +31,7 @@ Key steps (see BOOTSTRAP.md for full details):
 
 1. Greeting and name/address preferences
 2. Research profile and situation
-3. IM/tool connections (Telegram available now, others coming soon)
+3. IM/tool connections (Telegram and QQ available now, others coming soon)
 4. Workspace folder setup (all file operations restricted to this folder)
 5. Group meeting schedule and weekly recap offer
 6. Honey feature demo (10 papers + mini literature review)
@@ -284,7 +284,8 @@ Use at the end of a work session or when summarizing progress. 9 fields.
 
 Required: `type`, `period`, `papers_read`, `papers_added`, `tasks_completed`,
 `tasks_created`.
-Optional: `writing_words`, `reading_minutes`, `highlights` (string array, max 5).
+Optional: `writing_words`, `reading_minutes`, `highlights` (string array, max 5
+-- key points: deadline alerts, research findings, status notes).
 
 Field `period` accepts: `"today"`, `"this_week"`, `"this_month"`, `"session"`,
 or a custom label string.

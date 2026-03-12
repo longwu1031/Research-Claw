@@ -8,8 +8,7 @@ export default function StatusBar() {
   const { t } = useTranslation();
   const state = useGatewayStore((s) => s.state);
   const serverVersion = useGatewayStore((s) => s.serverVersion);
-  const model = useConfigStore((s) => s.model);
-  const provider = useConfigStore((s) => s.provider);
+  const gatewayConfig = useConfigStore((s) => s.gatewayConfig);
   const tokensIn = useChatStore((s) => s.tokensIn);
   const tokensOut = useChatStore((s) => s.tokensOut);
   const [heartbeatAge, setHeartbeatAge] = useState(0);
@@ -53,7 +52,7 @@ export default function StatusBar() {
     return `${m}:${String(s).padStart(2, '0')}`;
   };
 
-  const modelDisplay = model ?? (provider ? `${provider} ${t('status.modelDefault')}` : t('status.modelNA'));
+  const modelDisplay = gatewayConfig?.agents?.defaults?.model?.primary ?? t('status.modelNA');
 
   return (
     <div

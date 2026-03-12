@@ -105,12 +105,34 @@ html, body {
   50% { opacity: 0; }
 }
 
+/* Chat input placeholder */
+.chat-textarea::placeholder {
+  color: var(--text-tertiary);
+  opacity: 1;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.chat-textarea:disabled::placeholder {
+  opacity: 0.5;
+}
+
 /* Primary CTA button hover glow */
 .ant-btn-primary:hover {
   box-shadow: var(--glow-red) !important;
 }
 
 /* Markdown body styles */
+.markdown-body {
+  overflow-wrap: break-word;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+}
+
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
@@ -144,9 +166,16 @@ html, body {
 }
 
 .markdown-body table {
+  display: block;
   width: 100%;
+  overflow-x: auto;
   border-collapse: collapse;
   margin: 8px 0;
+}
+
+.markdown-body pre {
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 .markdown-body th,

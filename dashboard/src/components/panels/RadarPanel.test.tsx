@@ -3,6 +3,9 @@ import { render, screen } from '@testing-library/react';
 import React from 'react';
 import RadarPanel from './RadarPanel';
 import { useConfigStore } from '../../stores/config';
+import { useGatewayStore } from '../../stores/gateway';
+import { useRadarStore } from '../../stores/radar';
+import { useCronStore } from '../../stores/cron';
 
 // Mock i18next
 vi.mock('react-i18next', () => ({
@@ -30,18 +33,27 @@ vi.mock('../../stores/chat', () => ({
 describe('RadarPanel', () => {
   beforeEach(() => {
     useConfigStore.setState({ theme: 'dark' });
+    // Default: disconnected, config not loaded — triggers empty state
+    useGatewayStore.setState({ client: null, state: 'disconnected' });
+    useRadarStore.setState({
+      config: { keywords: [], authors: [], journals: [], sources: [] },
+      configLoaded: false,
+    });
+    useCronStore.setState({ presets: [], presetsLoaded: false });
     mockChatState.send = vi.fn();
     mockChatState.messages = [];
   });
 
-  it('renders empty state when no tracking config and no digests', () => {
+  it('renders empty state when not connected and config not loaded', () => {
     render(<RadarPanel />);
     expect(screen.getByText('radar.empty')).toBeTruthy();
   });
 
-  it('renders "edit via chat" button in empty state', () => {
+  it('renders "add tracking" button when connected but no tracking items', () => {
+    useGatewayStore.setState({ state: 'connected' });
+    useRadarStore.setState({ configLoaded: true });
     render(<RadarPanel />);
-    expect(screen.getByText('radar.editViaChat')).toBeTruthy();
+    expect(screen.getByText('radar.addTracking')).toBeTruthy();
   });
 
   it('renders radar icon in empty state', () => {
@@ -50,24 +62,16 @@ describe('RadarPanel', () => {
     expect(emptyText).toBeTruthy();
   });
 
-  it('renders findings when radar_digest blocks exist in messages', () => {
-    const digestData = JSON.stringify({
-      source: 'arxiv',
-      query: 'transformer attention',
-      total_found: 12,
-      period: 'last 7 days',
+  it('renders tracking section and refresh button when config has keywords', () => {
+    useGatewayStore.setState({ state: 'connected' });
+    useRadarStore.setState({
+      config: { keywords: ['transformer', 'attention'], authors: [], journals: [], sources: [] },
+      configLoaded: true,
     });
 
-    mockChatState.messages = [
-      {
-        id: 'msg-1',
-        role: 'assistant',
-        text: `Here are your radar results:\n\n\`\`\`radar_digest\n${digestData}\n\`\`\``,
-      },
-    ];
-
     render(<RadarPanel />);
-    expect(screen.getByText('radar.findings')).toBeTruthy();
+    expect(screen.getByText('radar.tracking')).toBeTruthy();
     expect(screen.getByText('radar.refresh')).toBeTruthy();
+    expect(screen.getByText('radar.editViaChat')).toBeTruthy();
   });
 });

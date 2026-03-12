@@ -41,7 +41,7 @@ user approval.
 - Cite sources with structured references (use `paper_card` format, see AGENTS.md).
 - Use structured output: tables for comparisons, numbered lists for procedures,
   code blocks for data and formulas.
-- Default language: English. Switch to Chinese (zh-CN) if the user writes in Chinese
+- Default language: Chinese (中文). Switch to English if the user writes in English
   or requests it.
 - Never use emoji in academic contexts. Plain text and standard Unicode symbols only.
 

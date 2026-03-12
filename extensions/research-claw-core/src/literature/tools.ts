@@ -56,24 +56,29 @@ export function createLiteratureTools(service: LiteratureService): ToolDefinitio
       },
       required: ['title'],
     },
-    execute: async (params: Record<string, unknown>) => {
+    execute: async (_toolCallId: string, params: Record<string, unknown>) => {
       try {
+        // Defensive validation: LLM may omit or null-out required fields
+        if (typeof params.title !== 'string' || !params.title.trim()) {
+          return fail('title is required and must be a non-empty string');
+        }
+
         const input: PaperInput = {
-          title: params.title as string,
-          authors: (params.authors as string[]) ?? undefined,
-          doi: (params.doi as string) ?? undefined,
-          arxiv_id: (params.arxiv_id as string) ?? undefined,
-          venue: (params.venue as string) ?? undefined,
-          year: (params.year as number) ?? undefined,
-          tags: (params.tags as string[]) ?? undefined,
-          notes: (params.notes as string) ?? undefined,
-          pdf_path: (params.pdf_path as string) ?? undefined,
-          bibtex_key: (params.bibtex_key as string) ?? undefined,
-          metadata: (params.metadata as Record<string, unknown>) ?? undefined,
-          abstract: (params.abstract as string) ?? undefined,
-          url: (params.url as string) ?? undefined,
-          source: (params.source as string) ?? undefined,
-          source_id: (params.source_id as string) ?? undefined,
+          title: params.title.trim(),
+          authors: Array.isArray(params.authors) ? params.authors.filter((a): a is string => typeof a === 'string') : undefined,
+          doi: typeof params.doi === 'string' ? params.doi : undefined,
+          arxiv_id: typeof params.arxiv_id === 'string' ? params.arxiv_id : undefined,
+          venue: typeof params.venue === 'string' ? params.venue : undefined,
+          year: typeof params.year === 'number' ? params.year : undefined,
+          tags: Array.isArray(params.tags) ? params.tags.filter((t): t is string => typeof t === 'string') : undefined,
+          notes: typeof params.notes === 'string' ? params.notes : undefined,
+          pdf_path: typeof params.pdf_path === 'string' ? params.pdf_path : undefined,
+          bibtex_key: typeof params.bibtex_key === 'string' ? params.bibtex_key : undefined,
+          metadata: (typeof params.metadata === 'object' && params.metadata !== null) ? params.metadata as Record<string, unknown> : undefined,
+          abstract: typeof params.abstract === 'string' ? params.abstract : undefined,
+          url: typeof params.url === 'string' ? params.url : undefined,
+          source: typeof params.source === 'string' ? params.source : undefined,
+          source_id: typeof params.source_id === 'string' ? params.source_id : undefined,
         };
         const paper = service.add(input);
         return ok(
@@ -103,11 +108,14 @@ export function createLiteratureTools(service: LiteratureService): ToolDefinitio
       },
       required: ['query'],
     },
-    execute: async (params: Record<string, unknown>) => {
+    execute: async (_toolCallId: string, params: Record<string, unknown>) => {
       try {
-        const query = params.query as string;
-        const limit = (params.limit as number) ?? 50;
-        const offset = (params.offset as number) ?? 0;
+        if (typeof params.query !== 'string' || !params.query.trim()) {
+          return fail('query is required and must be a non-empty string');
+        }
+        const query = params.query.trim();
+        const limit = typeof params.limit === 'number' ? params.limit : 50;
+        const offset = typeof params.offset === 'number' ? params.offset : 0;
         const result = service.search(query, limit, offset);
         return ok(
           `Found ${result.total} paper(s) matching "${query}" (showing ${result.items.length})`,
@@ -149,26 +157,29 @@ export function createLiteratureTools(service: LiteratureService): ToolDefinitio
       },
       required: ['id'],
     },
-    execute: async (params: Record<string, unknown>) => {
+    execute: async (_toolCallId: string, params: Record<string, unknown>) => {
       try {
-        const id = params.id as string;
+        if (typeof params.id !== 'string' || !params.id.trim()) {
+          return fail('id is required and must be a non-empty string');
+        }
+        const id = params.id.trim();
         const patch: PaperPatch = {};
-        if (params.title !== undefined) patch.title = params.title as string;
-        if (params.authors !== undefined) patch.authors = params.authors as string[];
-        if (params.abstract !== undefined) patch.abstract = params.abstract as string;
-        if (params.doi !== undefined) patch.doi = params.doi as string;
-        if (params.url !== undefined) patch.url = params.url as string;
-        if (params.arxiv_id !== undefined) patch.arxiv_id = params.arxiv_id as string;
-        if (params.pdf_path !== undefined) patch.pdf_path = params.pdf_path as string;
-        if (params.source !== undefined) patch.source = params.source as string;
-        if (params.source_id !== undefined) patch.source_id = params.source_id as string;
-        if (params.venue !== undefined) patch.venue = params.venue as string;
-        if (params.year !== undefined) patch.year = params.year as number;
-        if (params.read_status !== undefined) patch.read_status = params.read_status as string;
-        if (params.rating !== undefined) patch.rating = params.rating as number;
-        if (params.notes !== undefined) patch.notes = params.notes as string;
-        if (params.bibtex_key !== undefined) patch.bibtex_key = params.bibtex_key as string;
-        if (params.metadata !== undefined) patch.metadata = params.metadata as Record<string, unknown>;
+        if (params.title !== undefined && typeof params.title === 'string') patch.title = params.title;
+        if (params.authors !== undefined && Array.isArray(params.authors)) patch.authors = params.authors.filter((a): a is string => typeof a === 'string');
+        if (params.abstract !== undefined && typeof params.abstract === 'string') patch.abstract = params.abstract;
+        if (params.doi !== undefined && typeof params.doi === 'string') patch.doi = params.doi;
+        if (params.url !== undefined && typeof params.url === 'string') patch.url = params.url;
+        if (params.arxiv_id !== undefined && typeof params.arxiv_id === 'string') patch.arxiv_id = params.arxiv_id;
+        if (params.pdf_path !== undefined && typeof params.pdf_path === 'string') patch.pdf_path = params.pdf_path;
+        if (params.source !== undefined && typeof params.source === 'string') patch.source = params.source;
+        if (params.source_id !== undefined && typeof params.source_id === 'string') patch.source_id = params.source_id;
+        if (params.venue !== undefined && typeof params.venue === 'string') patch.venue = params.venue;
+        if (params.year !== undefined && typeof params.year === 'number') patch.year = params.year;
+        if (params.read_status !== undefined && typeof params.read_status === 'string') patch.read_status = params.read_status;
+        if (params.rating !== undefined && typeof params.rating === 'number') patch.rating = params.rating;
+        if (params.notes !== undefined && typeof params.notes === 'string') patch.notes = params.notes;
+        if (params.bibtex_key !== undefined && typeof params.bibtex_key === 'string') patch.bibtex_key = params.bibtex_key;
+        if (params.metadata !== undefined && typeof params.metadata === 'object' && params.metadata !== null) patch.metadata = params.metadata as Record<string, unknown>;
 
         const paper = service.update(id, patch);
         return ok(`Updated paper "${paper.title}" (id: ${paper.id})`, paper);
@@ -191,9 +202,12 @@ export function createLiteratureTools(service: LiteratureService): ToolDefinitio
       },
       required: ['id'],
     },
-    execute: async (params: Record<string, unknown>) => {
+    execute: async (_toolCallId: string, params: Record<string, unknown>) => {
       try {
-        const id = params.id as string;
+        if (typeof params.id !== 'string' || !params.id.trim()) {
+          return fail('id is required and must be a non-empty string');
+        }
+        const id = params.id.trim();
         const paper = service.get(id);
         if (!paper) {
           return fail(`Paper not found: ${id}`);
@@ -220,13 +234,13 @@ export function createLiteratureTools(service: LiteratureService): ToolDefinitio
         all: { type: 'boolean', description: 'Export entire library' },
       },
     },
-    execute: async (params: Record<string, unknown>) => {
+    execute: async (_toolCallId: string, params: Record<string, unknown>) => {
       try {
         const result = service.exportBibtex({
-          paperIds: (params.paper_ids as string[]) ?? undefined,
-          tag: (params.tag as string) ?? undefined,
-          collection: (params.collection as string) ?? undefined,
-          all: (params.all as boolean) ?? undefined,
+          paperIds: Array.isArray(params.paper_ids) ? params.paper_ids.filter((id): id is string => typeof id === 'string') : undefined,
+          tag: typeof params.tag === 'string' ? params.tag : undefined,
+          collection: typeof params.collection === 'string' ? params.collection : undefined,
+          all: typeof params.all === 'boolean' ? params.all : undefined,
         });
         return ok(`Exported ${result.count} paper(s) as BibTeX`, result);
       } catch (err) {
@@ -248,7 +262,7 @@ export function createLiteratureTools(service: LiteratureService): ToolDefinitio
         period: { type: 'string', description: 'Time period filter (reserved for future use)' },
       },
     },
-    execute: async () => {
+    execute: async (_toolCallId: string) => {
       try {
         const stats = service.getStats();
         return ok(
@@ -302,9 +316,34 @@ export function createLiteratureTools(service: LiteratureService): ToolDefinitio
       },
       required: ['papers'],
     },
-    execute: async (params: Record<string, unknown>) => {
+    execute: async (_toolCallId: string, params: Record<string, unknown>) => {
       try {
-        const papers = params.papers as PaperInput[];
+        if (!Array.isArray(params.papers) || params.papers.length === 0) {
+          return fail('papers is required and must be a non-empty array');
+        }
+        // Validate each paper has at least a title string
+        const papers: PaperInput[] = params.papers
+          .filter((p): p is Record<string, unknown> => typeof p === 'object' && p !== null && typeof (p as Record<string, unknown>).title === 'string')
+          .map((p) => ({
+            title: (p.title as string).trim(),
+            authors: Array.isArray(p.authors) ? p.authors.filter((a): a is string => typeof a === 'string') : undefined,
+            doi: typeof p.doi === 'string' ? p.doi : undefined,
+            arxiv_id: typeof p.arxiv_id === 'string' ? p.arxiv_id : undefined,
+            venue: typeof p.venue === 'string' ? p.venue : undefined,
+            year: typeof p.year === 'number' ? p.year : undefined,
+            tags: Array.isArray(p.tags) ? p.tags.filter((t): t is string => typeof t === 'string') : undefined,
+            notes: typeof p.notes === 'string' ? p.notes : undefined,
+            pdf_path: typeof p.pdf_path === 'string' ? p.pdf_path : undefined,
+            bibtex_key: typeof p.bibtex_key === 'string' ? p.bibtex_key : undefined,
+            abstract: typeof p.abstract === 'string' ? p.abstract : undefined,
+            url: typeof p.url === 'string' ? p.url : undefined,
+            source: typeof p.source === 'string' ? p.source : undefined,
+            source_id: typeof p.source_id === 'string' ? p.source_id : undefined,
+            metadata: typeof p.metadata === 'object' && p.metadata !== null ? p.metadata as Record<string, unknown> : undefined,
+          }));
+        if (papers.length === 0) {
+          return fail('no valid papers found — each paper must have a title string');
+        }
         const result = service.batchAdd(papers);
         const parts: string[] = [`Added ${result.added.length} paper(s)`];
         if (result.duplicates.length > 0) parts.push(`${result.duplicates.length} duplicate(s) skipped`);
@@ -335,15 +374,18 @@ export function createLiteratureTools(service: LiteratureService): ToolDefinitio
       },
       required: ['action'],
     },
-    execute: async (params: Record<string, unknown>) => {
+    execute: async (_toolCallId: string, params: Record<string, unknown>) => {
       try {
-        const action = params.action as string;
+        if (typeof params.action !== 'string' || !params.action.trim()) {
+          return fail('action is required and must be a non-empty string');
+        }
+        const action = params.action.trim();
         const result = service.manageCollection(action, {
-          id: (params.id as string) ?? undefined,
-          name: (params.name as string) ?? undefined,
-          description: (params.description as string) ?? undefined,
-          color: (params.color as string) ?? undefined,
-          paper_ids: (params.paper_ids as string[]) ?? undefined,
+          id: typeof params.id === 'string' ? params.id : undefined,
+          name: typeof params.name === 'string' ? params.name : undefined,
+          description: typeof params.description === 'string' ? params.description : undefined,
+          color: typeof params.color === 'string' ? params.color : undefined,
+          paper_ids: Array.isArray(params.paper_ids) ? params.paper_ids.filter((id): id is string => typeof id === 'string') : undefined,
         });
         return ok(`Collection ${result.action}: ${result.id}`, result);
       } catch (err) {
@@ -371,12 +413,18 @@ export function createLiteratureTools(service: LiteratureService): ToolDefinitio
       },
       required: ['paper_id', 'tag_name'],
     },
-    execute: async (params: Record<string, unknown>) => {
+    execute: async (_toolCallId: string, params: Record<string, unknown>) => {
       try {
-        const paperId = params.paper_id as string;
-        const tagName = params.tag_name as string;
-        const action = (params.action as string) ?? 'add';
-        const color = (params.color as string) ?? undefined;
+        if (typeof params.paper_id !== 'string' || !params.paper_id.trim()) {
+          return fail('paper_id is required and must be a non-empty string');
+        }
+        if (typeof params.tag_name !== 'string' || !params.tag_name.trim()) {
+          return fail('tag_name is required and must be a non-empty string');
+        }
+        const paperId = params.paper_id.trim();
+        const tagName = params.tag_name.trim();
+        const action = typeof params.action === 'string' ? params.action : 'add';
+        const color = typeof params.color === 'string' ? params.color : undefined;
 
         let tags: string[];
         if (action === 'remove') {
@@ -406,12 +454,18 @@ export function createLiteratureTools(service: LiteratureService): ToolDefinitio
       },
       required: ['paper_id', 'note_text'],
     },
-    execute: async (params: Record<string, unknown>) => {
+    execute: async (_toolCallId: string, params: Record<string, unknown>) => {
       try {
-        const paperId = params.paper_id as string;
-        const noteText = params.note_text as string;
-        const page = (params.page as number) ?? undefined;
-        const highlight = (params.highlight as string) ?? undefined;
+        if (typeof params.paper_id !== 'string' || !params.paper_id.trim()) {
+          return fail('paper_id is required and must be a non-empty string');
+        }
+        if (typeof params.note_text !== 'string' || !params.note_text.trim()) {
+          return fail('note_text is required and must be a non-empty string');
+        }
+        const paperId = params.paper_id.trim();
+        const noteText = params.note_text.trim();
+        const page = typeof params.page === 'number' ? params.page : undefined;
+        const highlight = typeof params.highlight === 'string' ? params.highlight : undefined;
         const note = service.addNote(paperId, noteText, page, highlight);
         return ok(
           `Added note to paper ${paperId}` +
@@ -437,9 +491,12 @@ export function createLiteratureTools(service: LiteratureService): ToolDefinitio
       },
       required: ['bibtex_content'],
     },
-    execute: async (params: Record<string, unknown>) => {
+    execute: async (_toolCallId: string, params: Record<string, unknown>) => {
       try {
-        const bibtexContent = params.bibtex_content as string;
+        if (typeof params.bibtex_content !== 'string' || !params.bibtex_content.trim()) {
+          return fail('bibtex_content is required and must be a non-empty string');
+        }
+        const bibtexContent = params.bibtex_content.trim();
         const result = service.importBibtex(bibtexContent);
         return ok(
           `Imported ${result.imported} paper(s), skipped ${result.skipped}`,
@@ -478,11 +535,14 @@ export function createLiteratureTools(service: LiteratureService): ToolDefinitio
       },
       required: ['paper_id'],
     },
-    execute: async (params: Record<string, unknown>) => {
+    execute: async (_toolCallId: string, params: Record<string, unknown>) => {
       try {
-        const paperId = params.paper_id as string;
-        const direction = (params.direction as string) ?? 'both';
-        const depth = Math.min(Math.max((params.depth as number) ?? 1, 1), 3);
+        if (typeof params.paper_id !== 'string' || !params.paper_id.trim()) {
+          return fail('paper_id is required and must be a non-empty string');
+        }
+        const paperId = params.paper_id.trim();
+        const direction = typeof params.direction === 'string' ? params.direction : 'both';
+        const depth = Math.min(Math.max(typeof params.depth === 'number' ? params.depth : 1, 1), 3);
 
         // Depth-1: current behavior (direct citations)
         const result = service.getCitations(paperId, direction);

@@ -61,8 +61,8 @@ Cross-references: [`05` Plugin SDK details](./modules/05-plugin-sdk.md) | [`03e`
  │  WS RPC v3       │          │                                                 │   │
  │                  │  ┌───────┴──────────────┐    ┌──────────────────────────┐  │   │
  │                  │  │    Dashboard SPA      │◄──►│    Gateway WS RPC       │  │   │
- │                  │  │    React + Vite       │    │    ws://127.0.0.1:18789 │  │   │
- │                  │  │    (port 5174 dev)    │    │    Protocol v3          │  │   │
+ │                  │  │    React + Vite       │    │    ws://127.0.0.1:28789 │  │   │
+ │                  │  │    (port 5175 dev)    │    │    Protocol v3          │  │   │
  │                  │  └──────────────────────┘    └──────────────────────────┘  │   │
  │                  │                                                            │   │
  └──────────────────┼────────────────────────────────────────────────────────────┘   │
@@ -344,7 +344,7 @@ research-claw/
 
 ## 4. WS RPC Protocol v3
 
-The gateway exposes a WebSocket endpoint at `ws://127.0.0.1:18789`. All communication between the dashboard and gateway uses JSON-encoded frames over this single connection. The protocol version is `3` (constant `PROTOCOL_VERSION`).
+The gateway exposes a WebSocket endpoint at `ws://127.0.0.1:28789`. All communication between the dashboard and gateway uses JSON-encoded frames over this single connection. The protocol version is `3` (constant `PROTOCOL_VERSION`).
 
 ### 4.1 Frame Types
 
@@ -525,7 +525,7 @@ export interface HelloOk {
 
 | Mode | When | Mechanism |
 |------|------|-----------|
-| `loopback` | Dashboard served from `127.0.0.1:18789` | No credentials needed. Gateway verifies source IP is loopback. Nonce echoed back to prove WS connection is real. |
+| `loopback` | Dashboard served from `127.0.0.1:28789` | No credentials needed. Gateway verifies source IP is loopback. Nonce echoed back to prove WS connection is real. |
 | `device-token` | Remote/mobile clients | Device identity token from prior pairing. Not used by dashboard. |
 | `session-key` | API integrations | Bearer-style session key. Not used by dashboard. |
 
@@ -1302,7 +1302,7 @@ The dashboard uses Zustand for all client-side state. Seven stores handle distin
 │        │             │                 │             │
 │  ┌─────┴─────────────┴─────────────────┴──────────┐ │
 │  │           GatewayClient (singleton)             │ │
-│  │      ws://127.0.0.1:18789  WS RPC v3           │ │
+│  │      ws://127.0.0.1:28789  WS RPC v3           │ │
 │  └─────────────────────────────────────────────────┘ │
 │        │             │                 │             │
 │  ┌─────┴─────┐  ┌───┴──────┐  ┌──────┴──────────┐  │
@@ -1623,23 +1623,23 @@ After `pnpm install` completes, the production-ready artifacts are:
 ```bash
 pnpm dev
 # Runs via concurrently:
-#   1. pnpm --filter dashboard dev   → Vite dev server on port 5174
-#   2. pnpm start                     → OpenClaw gateway on port 18789
+#   1. pnpm --filter dashboard dev   → Vite dev server on port 5175
+#   2. pnpm start                     → OpenClaw gateway on port 28789
 ```
 
-The Vite dev server on port 5174 proxies WebSocket connections to the gateway on port 18789:
+The Vite dev server on port 5175 proxies WebSocket connections to the gateway on port 28789:
 
 ```typescript
 // dashboard/vite.config.ts
 server: {
-  port: 5174,
+  port: 5175,
   proxy: {
     '/ws': {
-      target: 'ws://127.0.0.1:18789',
+      target: 'ws://127.0.0.1:28789',
       ws: true,
     },
     '/socket.io': {
-      target: 'http://127.0.0.1:18789',
+      target: 'http://127.0.0.1:28789',
     },
   },
 },
@@ -1655,10 +1655,10 @@ During development:
 
 | Port | Process | Access |
 |------|---------|--------|
-| 5174 | Vite dev server (dashboard HMR) | `http://localhost:5174` |
-| 18789 | OpenClaw gateway (WS RPC + production SPA) | `http://127.0.0.1:18789` |
+| 5175 | Vite dev server (dashboard HMR) | `http://localhost:5175` |
+| 28789 | OpenClaw gateway (WS RPC + production SPA) | `http://127.0.0.1:28789` |
 
-In production, only port 18789 is used. The Vite dev server is not present.
+In production, only port 28789 is used. The Vite dev server is not present.
 
 ### 10.3 Extension Development
 
@@ -1686,7 +1686,7 @@ git clone https://github.com/wentorai/research-claw.git
 cd research-claw
 pnpm install          # Install deps + apply patch + build
 pnpm setup            # Interactive: API provider, key, proxy → .env
-pnpm start            # Gateway starts on 127.0.0.1:18789
+pnpm start            # Gateway starts on 127.0.0.1:28789
 ```
 
 The `pnpm setup` script (`scripts/setup.sh`) prompts for:
@@ -1809,10 +1809,10 @@ E2E tests verify critical user flows through the dashboard UI.
 // playwright.config.ts (future)
 {
   webServer: [
-    { command: 'pnpm start', port: 18789 },
+    { command: 'pnpm start', port: 28789 },
   ],
   use: {
-    baseURL: 'http://127.0.0.1:18789',
+    baseURL: 'http://127.0.0.1:28789',
   },
 }
 ```
@@ -1854,10 +1854,10 @@ export class GatewayMock {
 
 ### 12.1 Network Binding
 
-The gateway binds exclusively to the loopback interface (`127.0.0.1:18789`). It is **not** accessible from the network. This is enforced by:
+The gateway binds exclusively to the loopback interface (`127.0.0.1:28789`). It is **not** accessible from the network. This is enforced by:
 
 1. OpenClaw config: `"gateway.mode": "local"`
-2. Node.js `server.listen('127.0.0.1', 18789)`
+2. Node.js `server.listen('127.0.0.1', 28789)`
 3. No reverse proxy, no tunnel, no port forwarding
 
 **There is no authentication required for loopback connections.** The `loopback` auth mode in the handshake only verifies the source IP is `127.0.0.1` or `::1`. This is the same security model as VS Code's Language Server Protocol.
@@ -1925,8 +1925,8 @@ The SQLite database at `.research-claw/library.db`:
 |--------|--------|-------------|
 | Initial JS bundle (gzip) | < 500 KB | `vite build` output, `dist/assets/*.js` |
 | Initial CSS (gzip) | < 80 KB | `vite build` output, `dist/assets/*.css` |
-| First Contentful Paint | < 1.5s | Lighthouse on `127.0.0.1:18789` |
-| Time to Interactive | < 2.5s | Lighthouse on `127.0.0.1:18789` |
+| First Contentful Paint | < 1.5s | Lighthouse on `127.0.0.1:28789` |
+| Time to Interactive | < 2.5s | Lighthouse on `127.0.0.1:28789` |
 | WS connection established | < 200ms | Time from page load to `hello-ok` |
 | Largest Contentful Paint | < 2.0s | Lighthouse |
 

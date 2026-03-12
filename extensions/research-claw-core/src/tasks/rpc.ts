@@ -1,7 +1,7 @@
 /**
  * Research-Claw Core — Task RPC Handlers
  *
- * 13 gateway RPC method handlers for the task management module:
+ * 15 gateway RPC method handlers for the task management module:
  *
  * Task methods (rc.task.*):
  *   1.  rc.task.list           — List/filter tasks with pagination
@@ -19,6 +19,14 @@
  *   11. rc.cron.presets.list       — List all cron presets with state
  *   12. rc.cron.presets.activate   — Activate a cron preset
  *   13. rc.cron.presets.deactivate — Deactivate a cron preset
+ *   14. rc.cron.presets.setJobId   — Store gateway cron job ID
+ *
+ * Notification methods (rc.notifications.*):
+ *   15. rc.notifications.pending   — Query pending deadline/overdue notifications
+ *
+ * Error codes: rc.task.* and rc.cron.* use string-based error codes
+ * (INVALID_PARAMS, SERVICE_ERROR) via RpcValidationError, not numeric JSON-RPC codes.
+ * This differs from rc.lit.* which uses numeric codes -32001 to -32012.
  *
  * All RPC handlers are registered via api.registerGatewayMethod().
  * Task mutations use actor = 'human'. Cron preset state is managed via the TaskService.
@@ -33,6 +41,7 @@ import {
   type TaskPriority,
   type ListParams,
 } from './service.js';
+import type { RegisterMethod } from '../types.js';
 
 // ── Validation Helpers ───────────────────────────────────────────────────
 
@@ -150,10 +159,6 @@ function mapServiceError(err: unknown): { error: string; message: string } {
   const message = err instanceof Error ? err.message : String(err);
   return { error: 'SERVICE_ERROR', message };
 }
-
-// ── Types ────────────────────────────────────────────────────────────────
-
-type RegisterMethod = (method: string, handler: unknown) => void;
 
 // ── Registration ─────────────────────────────────────────────────────────
 
@@ -391,6 +396,70 @@ export function registerTaskRpc(registerMethod: RegisterMethod, service: TaskSer
       const presetId = requireString(params.preset_id, 'preset_id');
 
       return service.cronPresetsDeactivate(presetId);
+    } catch (err) {
+      throw err instanceof RpcValidationError ? new Error(err.message) : err;
+    }
+  });
+
+  // ── 14. rc.cron.presets.setJobId ──────────────────────────────────
+
+  registerMethod('rc.cron.presets.setJobId', async (params: Record<string, unknown>) => {
+    try {
+      const presetId = requireString(params.preset_id, 'preset_id');
+      const jobId = requireString(params.job_id, 'job_id');
+
+      return service.cronPresetsSetJobId(presetId, jobId);
+    } catch (err) {
+      throw err instanceof RpcValidationError ? new Error(err.message) : err;
+    }
+  });
+
+  // ── 15. rc.notifications.pending ────────────────────────────────
+  //
+  // Returns overdue + upcoming tasks for the dashboard notification bell.
+  // Dashboard polls this on connect, after chat turns, and on a 60s timer.
+
+  registerMethod('rc.notifications.pending', async (params: Record<string, unknown>) => {
+    try {
+      const hours = optionalNumber(params.hours, 'hours', 1, 720) ?? 48;
+      const overdue = service.overdue();
+      const upcoming = service.upcoming(hours);
+      const custom = service.getUnreadNotifications(20);
+
+      return {
+        overdue: overdue.map((t) => ({
+          id: t.id,
+          title: t.title,
+          deadline: t.deadline,
+          priority: t.priority,
+        })),
+        upcoming: upcoming.map((t) => ({
+          id: t.id,
+          title: t.title,
+          deadline: t.deadline,
+          priority: t.priority,
+        })),
+        custom: custom.map((n) => ({
+          id: n.id,
+          type: n.type,
+          title: n.title,
+          body: n.body,
+          created_at: n.created_at,
+        })),
+        timestamp: new Date().toISOString(),
+      };
+    } catch (err) {
+      throw err instanceof RpcValidationError ? new Error(err.message) : err;
+    }
+  });
+
+  // ── 16. rc.notifications.markRead ───────────────────────────────
+
+  registerMethod('rc.notifications.markRead', async (params: Record<string, unknown>) => {
+    try {
+      const id = requireString(params.id, 'id');
+      service.markNotificationRead(id);
+      return { ok: true };
     } catch (err) {
       throw err instanceof RpcValidationError ? new Error(err.message) : err;
     }

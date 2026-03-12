@@ -81,7 +81,7 @@ export interface ProgressCard {
   writing_words?: number;
   /** Estimated reading time in minutes. */
   reading_minutes?: number;
-  /** List of notable achievements or milestones. Max 5 items. */
+  /** Key points: deadlines, alerts, findings, or milestones. Max 5 items. */
   highlights?: string[];
 }
 

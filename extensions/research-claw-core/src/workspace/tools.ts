@@ -12,6 +12,7 @@
 // The spec suggests TypeBox (@sinclair/typebox) but raw schemas are
 // functionally equivalent and avoid an additional abstraction layer.
 
+import * as path from 'node:path';
 import type { WorkspaceService, TreeNode } from './service.js';
 
 // ---------------------------------------------------------------------------
@@ -21,6 +22,16 @@ import type { WorkspaceService, TreeNode } from './service.js';
 function ok(text: string, details: unknown): unknown {
   return { content: [{ type: 'text', text }], details };
 }
+
+// MIME extension → card mime_type mapping
+const EXT_MIME: Record<string, string> = {
+  md: 'text/markdown', txt: 'text/plain', tex: 'text/x-latex', bib: 'application/x-bibtex',
+  csv: 'text/csv', json: 'application/json', yaml: 'text/x-yaml', yml: 'text/x-yaml',
+  py: 'text/x-python', r: 'text/x-r', jl: 'text/x-julia', m: 'text/x-matlab',
+  js: 'text/javascript', ts: 'text/typescript',
+  pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+  svg: 'image/svg+xml', gif: 'image/gif',
+};
 
 function fail(message: string): unknown {
   return { content: [{ type: 'text', text: `Error: ${message}` }], details: { error: message } };
@@ -111,16 +122,35 @@ export function createWorkspaceTools(service: WorkspaceService): ToolDefinition[
         },
       },
     },
-    async execute(params: Record<string, unknown>) {
+    async execute(_toolCallId: string, params: Record<string, unknown>) {
       try {
-        const filePath = params.path as string;
-        const content = params.content as string;
-        const commitMessage = params.commit_message as string | undefined;
+        if (typeof params.path !== 'string' || !params.path.trim()) {
+          return fail('path is required and must be a non-empty string');
+        }
+        if (typeof params.content !== 'string') {
+          return fail('content is required and must be a string');
+        }
+        const filePath = params.path.trim();
+        const content = params.content;
+        const commitMessage = typeof params.commit_message === 'string' ? params.commit_message : undefined;
 
         const result = await service.save(filePath, content, commitMessage);
 
+        // Build file_card JSON block so the LLM includes it in its response
+        const ext = path.extname(filePath).slice(1).toLowerCase();
+        const mimeType = EXT_MIME[ext] ?? 'application/octet-stream';
+        const gitStatus = result.committed ? 'committed' : 'new';
+        const cardJson = JSON.stringify({
+          type: 'file_card',
+          name: path.basename(filePath),
+          path: result.path,
+          size_bytes: result.size,
+          mime_type: mimeType,
+          git_status: gitStatus,
+        });
+
         return ok(
-          `Saved ${result.path} (${result.size} bytes, committed: ${result.committed})`,
+          `Saved ${result.path} (${result.size} bytes, committed: ${result.committed})\n\nInclude this card in your response:\n\`\`\`file_card\n${cardJson}\n\`\`\``,
           { path: result.path, size: result.size, committed: result.committed, commit_hash: result.commit_hash },
         );
       } catch (err) {
@@ -149,9 +179,12 @@ export function createWorkspaceTools(service: WorkspaceService): ToolDefinition[
         },
       },
     },
-    async execute(params: Record<string, unknown>) {
+    async execute(_toolCallId: string, params: Record<string, unknown>) {
       try {
-        const filePath = params.path as string;
+        if (typeof params.path !== 'string' || !params.path.trim()) {
+          return fail('path is required and must be a non-empty string');
+        }
+        const filePath = params.path.trim();
 
         const result = await service.read(filePath);
 
@@ -199,11 +232,11 @@ export function createWorkspaceTools(service: WorkspaceService): ToolDefinition[
         },
       },
     },
-    async execute(params: Record<string, unknown>) {
+    async execute(_toolCallId: string, params: Record<string, unknown>) {
       try {
-        const directory = params.directory as string | undefined;
-        const recursive = params.recursive as boolean | undefined;
-        const pattern = params.pattern as string | undefined;
+        const directory = typeof params.directory === 'string' ? params.directory : undefined;
+        const recursive = typeof params.recursive === 'boolean' ? params.recursive : undefined;
+        const pattern = typeof params.pattern === 'string' ? params.pattern : undefined;
 
         // Use depth 1 for non-recursive, 10 for recursive
         const depth = recursive ? 10 : 1;
@@ -267,10 +300,10 @@ export function createWorkspaceTools(service: WorkspaceService): ToolDefinition[
         },
       },
     },
-    async execute(params: Record<string, unknown>) {
+    async execute(_toolCallId: string, params: Record<string, unknown>) {
       try {
-        const filePath = params.path as string | undefined;
-        const commitRange = params.commit_range as string | undefined;
+        const filePath = typeof params.path === 'string' ? params.path : undefined;
+        const commitRange = typeof params.commit_range === 'string' ? params.commit_range : undefined;
 
         // Parse commit_range "from..to" into separate from/to values
         let from: string | undefined;
@@ -323,10 +356,10 @@ export function createWorkspaceTools(service: WorkspaceService): ToolDefinition[
         },
       },
     },
-    async execute(params: Record<string, unknown>) {
+    async execute(_toolCallId: string, params: Record<string, unknown>) {
       try {
-        const filePath = params.path as string | undefined;
-        const rawLimit = params.limit as number | undefined;
+        const filePath = typeof params.path === 'string' ? params.path : undefined;
+        const rawLimit = typeof params.limit === 'number' ? params.limit : undefined;
         const limit = Math.min(Math.max(rawLimit ?? 20, 1), 100);
 
         const result = await service.history(filePath, limit);
@@ -368,10 +401,16 @@ export function createWorkspaceTools(service: WorkspaceService): ToolDefinition[
         },
       },
     },
-    async execute(params: Record<string, unknown>) {
+    async execute(_toolCallId: string, params: Record<string, unknown>) {
       try {
-        const filePath = params.path as string;
-        const commitHash = params.commit_hash as string;
+        if (typeof params.path !== 'string' || !params.path.trim()) {
+          return fail('path is required and must be a non-empty string');
+        }
+        if (typeof params.commit_hash !== 'string' || !params.commit_hash.trim()) {
+          return fail('commit_hash is required and must be a non-empty string');
+        }
+        const filePath = params.path.trim();
+        const commitHash = params.commit_hash.trim();
 
         const result = await service.restore(filePath, commitHash);
 

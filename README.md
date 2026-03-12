@@ -29,7 +29,7 @@ pnpm setup
 
 ```bash
 pnpm start
-# Dashboard: http://127.0.0.1:18789
+# Dashboard: http://127.0.0.1:28789
 ```
 
 ### Build
@@ -42,8 +42,8 @@ pnpm install && pnpm build && pnpm start
 
 ```bash
 pnpm dev
-# Dashboard dev server: http://localhost:5174
-# Gateway: http://127.0.0.1:18789
+# Dashboard dev server: http://localhost:5175
+# Gateway: http://127.0.0.1:28789
 ```
 
 ### Test
@@ -81,7 +81,7 @@ research-claw/
 Edit `config/openclaw.json` to customize:
 
 - **provider** / **model** / **apiKey** — LLM provider settings
-- **gateway.port** — WebSocket gateway port (default: 18789)
+- **gateway.port** — WebSocket gateway port (default: 28789)
 - **proxy** — HTTP proxy for API calls
 - **plugins** — Enabled plugin list
 
@@ -102,7 +102,7 @@ Copy from template: `cp config/openclaw.example.json config/openclaw.json`
 │        ▼               ▼                ▼       │
 │  ┌──────────────────────────────────────────┐   │
 │  │           OpenClaw (npm dep)             │   │
-│  │     Gateway WS RPC v3 · Port 18789      │   │
+│  │     Gateway WS RPC v3 · Port 28789      │   │
 │  └──────────────────────────────────────────┘   │
 │        │                                         │
 │  ┌─────┴─────┐                                  │
@@ -123,4 +123,6 @@ See [`docs/00-reference-map.md`](docs/00-reference-map.md) for the complete docu
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+[BSL 1.1](LICENSE) — Free for personal and academic research use.
+Commercial use requires a separate license from [Wentor AI](https://wentor.ai).
+Converts to Apache 2.0 on 2030-03-12.

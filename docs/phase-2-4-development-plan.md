@@ -983,7 +983,7 @@ deleteSession: async (key: string) => {
 **About** (01 §7.6.5):
 - Version: Research-Claw v0.1.0
 - OpenClaw version: from `gatewayStore.serverVersion`
-- Gateway endpoint: ws://127.0.0.1:18789
+- Gateway endpoint: ws://127.0.0.1:28789
 - Plugin status: research-claw-core (loaded/error)
 - Bootstrap files list
 - "Copy diagnostics" button

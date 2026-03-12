@@ -22,7 +22,7 @@
  */
 
 // ── Current schema version ──────────────────────────────────────────
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 // ── CREATE TABLE statements ─────────────────────────────────────────
 
@@ -161,6 +161,16 @@ CREATE TABLE IF NOT EXISTS rc_activity_log (
   created_at TEXT NOT NULL
 );`;
 
+const RC_RADAR_CONFIG = `
+CREATE TABLE IF NOT EXISTS rc_radar_config (
+  id         TEXT PRIMARY KEY DEFAULT 'default',
+  keywords   TEXT NOT NULL DEFAULT '[]',
+  authors    TEXT NOT NULL DEFAULT '[]',
+  journals   TEXT NOT NULL DEFAULT '[]',
+  sources    TEXT NOT NULL DEFAULT '["arxiv","semantic_scholar"]',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`;
+
 // ── Aggregate table creation list ───────────────────────────────────
 
 export const CREATE_TABLES_SQL: readonly string[] = [
@@ -176,6 +186,7 @@ export const CREATE_TABLES_SQL: readonly string[] = [
   RC_PAPER_NOTES,
   RC_TASKS,
   RC_ACTIVITY_LOG,
+  RC_RADAR_CONFIG,
 ];
 
 // ── Indexes ─────────────────────────────────────────────────────────

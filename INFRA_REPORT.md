@@ -45,10 +45,10 @@ Patch applies automatically on `pnpm install --frozen-lockfile`.
 
 ## Gateway Startup
 
-- **Start command**: `node ./node_modules/openclaw/dist/entry.js gateway run --allow-unconfigured --port 18789`
+- **Start command**: `node ./node_modules/openclaw/dist/entry.js gateway run --allow-unconfigured --port 28789`
 - **`--config` flag does NOT exist** — gateway discovers config via `~/.openclaw/` or `--dev` flag
-- **Healthz**: `curl http://127.0.0.1:18789/healthz` → HTTP 200, `{"ok":true,"status":"live"}`
-- **WS endpoint**: `ws://127.0.0.1:18789`
+- **Healthz**: `curl http://127.0.0.1:28789/healthz` → HTTP 200, `{"ok":true,"status":"live"}`
+- **WS endpoint**: `ws://127.0.0.1:28789`
 - **Plugins auto-load**: research-plugins discovered from `~/.openclaw/extensions/`
 
 ## System Dependencies

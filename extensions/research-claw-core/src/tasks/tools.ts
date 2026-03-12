@@ -1,13 +1,14 @@
 /**
  * Research-Claw Core — Task Agent Tools
  *
- * 6 agent tools for the task management module:
- *   1. task_create   — Create a new research task
- *   2. task_list     — List/filter tasks with smart sorting
- *   3. task_complete — Mark a task as done
- *   4. task_update   — Update task fields (state-machine validated)
- *   5. task_link     — Link a task to a paper
- *   6. task_note     — Append a timestamped note to a task
+ * 7 agent tools for the task management module:
+ *   1. task_create        — Create a new research task
+ *   2. task_list          — List/filter tasks with smart sorting
+ *   3. task_complete      — Mark a task as done
+ *   4. task_update        — Update task fields (state-machine validated)
+ *   5. task_link          — Link a task to a paper
+ *   6. task_note          — Append a timestamped note to a task
+ *   7. send_notification  — Push a notification to the dashboard bell
  *
  * Each tool uses plain JSON Schema objects for parameters (no TypeBox).
  * Registered via api.registerTool() from the OpenClaw plugin SDK.
@@ -103,18 +104,34 @@ export function createTaskTools(service: TaskService): ToolDefinition[] {
       },
       required: ['title', 'task_type'],
     },
-    async execute(params: Record<string, unknown>): Promise<unknown> {
+    async execute(_toolCallId: string, params: Record<string, unknown>): Promise<unknown> {
       try {
+        // Defensive validation: LLM may omit or null-out required fields
+        if (typeof params.title !== 'string' || !params.title.trim()) {
+          return fail('title is required and must be a non-empty string');
+        }
+        const validTaskTypes = ['human', 'agent', 'mixed'] as const;
+        const rawType = typeof params.task_type === 'string' ? params.task_type : 'agent';
+        if (!validTaskTypes.includes(rawType as typeof validTaskTypes[number])) {
+          return fail(`task_type must be one of: ${validTaskTypes.join(', ')} (got "${rawType}")`);
+        }
+
+        const validPriorities = ['urgent', 'high', 'medium', 'low'] as const;
+        const rawPriority = typeof params.priority === 'string' ? params.priority : undefined;
+        if (rawPriority !== undefined && !validPriorities.includes(rawPriority as typeof validPriorities[number])) {
+          return fail(`priority must be one of: ${validPriorities.join(', ')} (got "${rawPriority}")`);
+        }
+
         const input: TaskInput = {
-          title: params.title as string,
-          task_type: params.task_type as TaskInput['task_type'],
-          description: params.description as string | undefined,
-          priority: params.priority as TaskInput['priority'],
-          deadline: params.deadline as string | undefined,
-          parent_task_id: params.parent_task_id as string | undefined,
-          related_paper_id: params.related_paper_id as string | undefined,
-          tags: params.tags as string[] | undefined,
-          notes: params.notes as string | undefined,
+          title: params.title.trim(),
+          task_type: rawType as TaskInput['task_type'],
+          description: typeof params.description === 'string' ? params.description : undefined,
+          priority: rawPriority as TaskInput['priority'],
+          deadline: typeof params.deadline === 'string' ? params.deadline : undefined,
+          parent_task_id: typeof params.parent_task_id === 'string' ? params.parent_task_id : undefined,
+          related_paper_id: typeof params.related_paper_id === 'string' ? params.related_paper_id : undefined,
+          tags: Array.isArray(params.tags) ? params.tags.filter((t): t is string => typeof t === 'string') : undefined,
+          notes: typeof params.notes === 'string' ? params.notes : undefined,
         };
 
         const task = service.create(input, 'agent');
@@ -170,14 +187,14 @@ export function createTaskTools(service: TaskService): ToolDefinition[] {
         },
       },
     },
-    async execute(params: Record<string, unknown>): Promise<unknown> {
+    async execute(_toolCallId: string, params: Record<string, unknown>): Promise<unknown> {
       try {
         const result = service.list({
-          status: params.status as TaskStatus | undefined,
-          priority: params.priority as TaskPriority | undefined,
-          task_type: params.task_type as TaskType | undefined,
-          sort: params.sort_by as string | undefined,
-          include_completed: (params.include_completed as boolean) ?? false,
+          status: typeof params.status === 'string' ? params.status as TaskStatus : undefined,
+          priority: typeof params.priority === 'string' ? params.priority as TaskPriority : undefined,
+          task_type: typeof params.task_type === 'string' ? params.task_type as TaskType : undefined,
+          sort: typeof params.sort_by === 'string' ? params.sort_by : undefined,
+          include_completed: typeof params.include_completed === 'boolean' ? params.include_completed : false,
         });
 
         let summary: string;
@@ -217,10 +234,13 @@ export function createTaskTools(service: TaskService): ToolDefinition[] {
       },
       required: ['id'],
     },
-    async execute(params: Record<string, unknown>): Promise<unknown> {
+    async execute(_toolCallId: string, params: Record<string, unknown>): Promise<unknown> {
       try {
-        const id = params.id as string;
-        const notes = params.notes as string | undefined;
+        if (typeof params.id !== 'string' || !params.id.trim()) {
+          return fail('id is required and must be a non-empty string');
+        }
+        const id = params.id.trim();
+        const notes = typeof params.notes === 'string' ? params.notes : undefined;
 
         const task = service.complete(id, notes, 'agent');
 
@@ -297,23 +317,26 @@ export function createTaskTools(service: TaskService): ToolDefinition[] {
       },
       required: ['id'],
     },
-    async execute(params: Record<string, unknown>): Promise<unknown> {
+    async execute(_toolCallId: string, params: Record<string, unknown>): Promise<unknown> {
       try {
-        const id = params.id as string;
+        if (typeof params.id !== 'string' || !params.id.trim()) {
+          return fail('id is required and must be a non-empty string');
+        }
+        const id = params.id.trim();
 
         const patch: TaskPatch = {};
 
-        if (params.title !== undefined) patch.title = params.title as string;
-        if (params.description !== undefined) patch.description = params.description as string | null;
-        if (params.task_type !== undefined) patch.task_type = params.task_type as TaskPatch['task_type'];
-        if (params.status !== undefined) patch.status = params.status as TaskPatch['status'];
-        if (params.priority !== undefined) patch.priority = params.priority as TaskPatch['priority'];
-        if (params.deadline !== undefined) patch.deadline = params.deadline as string | null;
-        if (params.parent_task_id !== undefined) patch.parent_task_id = params.parent_task_id as string | null;
-        if (params.related_paper_id !== undefined) patch.related_paper_id = params.related_paper_id as string | null;
-        if (params.agent_session_id !== undefined) patch.agent_session_id = params.agent_session_id as string | null;
-        if (params.tags !== undefined) patch.tags = params.tags as string[];
-        if (params.notes !== undefined) patch.notes = params.notes as string | null;
+        if (params.title !== undefined) patch.title = typeof params.title === 'string' ? params.title : String(params.title);
+        if (params.description !== undefined) patch.description = params.description === null ? null : typeof params.description === 'string' ? params.description : undefined;
+        if (params.task_type !== undefined && typeof params.task_type === 'string') patch.task_type = params.task_type as TaskPatch['task_type'];
+        if (params.status !== undefined && typeof params.status === 'string') patch.status = params.status as TaskPatch['status'];
+        if (params.priority !== undefined && typeof params.priority === 'string') patch.priority = params.priority as TaskPatch['priority'];
+        if (params.deadline !== undefined) patch.deadline = params.deadline === null ? null : typeof params.deadline === 'string' ? params.deadline : undefined;
+        if (params.parent_task_id !== undefined) patch.parent_task_id = params.parent_task_id === null ? null : typeof params.parent_task_id === 'string' ? params.parent_task_id : undefined;
+        if (params.related_paper_id !== undefined) patch.related_paper_id = params.related_paper_id === null ? null : typeof params.related_paper_id === 'string' ? params.related_paper_id : undefined;
+        if (params.agent_session_id !== undefined) patch.agent_session_id = params.agent_session_id === null ? null : typeof params.agent_session_id === 'string' ? params.agent_session_id : undefined;
+        if (params.tags !== undefined && Array.isArray(params.tags)) patch.tags = params.tags.filter((t): t is string => typeof t === 'string');
+        if (params.notes !== undefined) patch.notes = params.notes === null ? null : typeof params.notes === 'string' ? params.notes : undefined;
 
         const task = service.update(id, patch, 'agent');
 
@@ -346,10 +369,16 @@ export function createTaskTools(service: TaskService): ToolDefinition[] {
       },
       required: ['task_id', 'paper_id'],
     },
-    async execute(params: Record<string, unknown>): Promise<unknown> {
+    async execute(_toolCallId: string, params: Record<string, unknown>): Promise<unknown> {
       try {
-        const taskId = params.task_id as string;
-        const paperId = params.paper_id as string;
+        if (typeof params.task_id !== 'string' || !params.task_id.trim()) {
+          return fail('task_id is required and must be a non-empty string');
+        }
+        if (typeof params.paper_id !== 'string' || !params.paper_id.trim()) {
+          return fail('paper_id is required and must be a non-empty string');
+        }
+        const taskId = params.task_id.trim();
+        const paperId = params.paper_id.trim();
 
         service.link(taskId, paperId);
 
@@ -378,10 +407,16 @@ export function createTaskTools(service: TaskService): ToolDefinition[] {
       },
       required: ['task_id', 'note'],
     },
-    async execute(params: Record<string, unknown>): Promise<unknown> {
+    async execute(_toolCallId: string, params: Record<string, unknown>): Promise<unknown> {
       try {
-        const taskId = params.task_id as string;
-        const note = params.note as string;
+        if (typeof params.task_id !== 'string' || !params.task_id.trim()) {
+          return fail('task_id is required and must be a non-empty string');
+        }
+        if (typeof params.note !== 'string' || !params.note.trim()) {
+          return fail('note is required and must be a non-empty string');
+        }
+        const taskId = params.task_id.trim();
+        const note = params.note.trim();
 
         const entry = service.addNote(taskId, note, 'agent');
 
@@ -392,6 +427,52 @@ export function createTaskTools(service: TaskService): ToolDefinition[] {
         ].join('\n');
 
         return ok(summary, entry);
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    },
+  });
+
+  // ── 7. send_notification ────────────────────────────────────────
+
+  tools.push({
+    name: 'send_notification',
+    description:
+      'Send a notification to the user\'s dashboard bell icon. Use this to proactively alert ' +
+      'the user about important events: task deadlines, paper discoveries, completed analyses, ' +
+      'or anything that warrants their attention. The notification appears in the top-right bell ' +
+      'dropdown without interrupting their workflow.',
+    parameters: {
+      type: 'object',
+      properties: {
+        type: {
+          type: 'string',
+          enum: ['deadline', 'heartbeat', 'system', 'error'],
+          description: 'Notification type: deadline (time-sensitive), heartbeat (progress update), system (informational), error (requires attention)',
+        },
+        title: { type: 'string', description: 'Short notification title (displayed in bold)' },
+        body: { type: 'string', description: 'Optional detail text (displayed below title)' },
+      },
+      required: ['type', 'title'],
+    },
+    async execute(_toolCallId: string, params: Record<string, unknown>): Promise<unknown> {
+      try {
+        if (typeof params.title !== 'string' || !params.title.trim()) {
+          return fail('title is required and must be a non-empty string');
+        }
+        const validTypes = ['deadline', 'heartbeat', 'system', 'error'];
+        const rawType = typeof params.type === 'string' ? params.type : 'system';
+        if (!validTypes.includes(rawType)) {
+          return fail(`type must be one of: ${validTypes.join(', ')} (got "${rawType}")`);
+        }
+        const body = typeof params.body === 'string' ? params.body : undefined;
+
+        const notification = service.sendNotification(rawType, params.title.trim(), body);
+
+        return ok(
+          `Notification sent: "${notification.title}" (type: ${notification.type}, id: ${notification.id})`,
+          notification,
+        );
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }

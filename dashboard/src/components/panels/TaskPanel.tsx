@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Checkbox, Collapse, Segmented, Typography } from 'antd';
+import { Button, Checkbox, Collapse, Segmented, Switch, Typography } from 'antd';
 import { CheckSquareOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useTasksStore, type Task, type TaskPriority } from '../../stores/tasks';
+import { useGatewayStore } from '../../stores/gateway';
 import { useChatStore } from '../../stores/chat';
 import { getThemeTokens } from '../../styles/theme';
 import { useConfigStore } from '../../stores/config';
@@ -43,6 +44,7 @@ interface TaskRowProps {
 function TaskRow({ task, tokens }: TaskRowProps) {
   const { t } = useTranslation();
   const completeTask = useTasksStore((s) => s.completeTask);
+  const reopenTask = useTasksStore((s) => s.reopenTask);
   const send = useChatStore((s) => s.send);
   const priorityColor = PRIORITY_COLORS[task.priority];
   const overdue = isOverdue(task.deadline);
@@ -51,7 +53,9 @@ function TaskRow({ task, tokens }: TaskRowProps) {
 
   const handleCheck = (e: { stopPropagation: () => void }) => {
     e.stopPropagation();
-    if (!isDone) {
+    if (isDone) {
+      reopenTask(task.id);
+    } else {
       completeTask(task.id);
     }
   };
@@ -136,11 +140,16 @@ export default function TaskPanel() {
   const showCompleted = useTasksStore((s) => s.showCompleted);
   const toggleCompleted = useTasksStore((s) => s.toggleCompleted);
   const loadTasks = useTasksStore((s) => s.loadTasks);
+  const connState = useGatewayStore((s) => s.state);
 
+  // Load tasks when gateway connection is established (or re-established)
   useEffect(() => {
-    loadTasks();
+    if (connState === 'connected') {
+      console.log('[TaskPanel] connected → loading tasks');
+      loadTasks();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [connState]);
 
   useEffect(() => {
     loadTasks();
@@ -215,6 +224,12 @@ export default function TaskPanel() {
           block
           size="small"
         />
+      </div>
+
+      {/* Show completed toggle */}
+      <div style={{ padding: '0 16px 8px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+        <Text style={{ fontSize: 12, color: tokens.text.muted }}>{t('tasks.showCompleted')}</Text>
+        <Switch size="small" checked={showCompleted} onChange={() => toggleCompleted()} />
       </div>
 
       {/* Task sections */}

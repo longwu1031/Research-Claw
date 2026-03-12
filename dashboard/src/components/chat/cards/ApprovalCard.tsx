@@ -190,6 +190,7 @@ export default function ApprovalCard(props: ApprovalCardProps) {
               type="primary"
               size="small"
               onClick={() => handleResolve('allow-once')}
+              aria-label={t('card.approval.approve')}
               style={{
                 background: '#22C55E',
                 borderColor: '#22C55E',
@@ -207,13 +208,14 @@ export default function ApprovalCard(props: ApprovalCardProps) {
                 items: [
                   {
                     key: 'always',
-                    label: t('card.approval.approve') + ' (Always)',
+                    label: t('card.approval.approveAlways'),
                     onClick: () => handleResolve('allow-always'),
                   },
                 ],
               }}
               buttonsRender={([leftButton, rightButton]) => [
                 React.cloneElement(leftButton as React.ReactElement, {
+                  'aria-label': t('card.approval.approve'),
                   style: {
                     background: '#22C55E',
                     borderColor: '#22C55E',
@@ -221,6 +223,7 @@ export default function ApprovalCard(props: ApprovalCardProps) {
                   },
                 }),
                 React.cloneElement(rightButton as React.ReactElement, {
+                  'aria-label': t('card.approval.approveAlways'),
                   style: {
                     background: '#22C55E',
                     borderColor: '#22C55E',
@@ -238,6 +241,7 @@ export default function ApprovalCard(props: ApprovalCardProps) {
             size="small"
             danger
             onClick={() => handleResolve('deny')}
+            aria-label={t('card.approval.reject')}
             style={{
               borderColor: '#EF4444',
               color: '#EF4444',

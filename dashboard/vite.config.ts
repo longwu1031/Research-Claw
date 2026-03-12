@@ -18,6 +18,9 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
     chunkSizeWarningLimit: 600,
+    // Disable module-preload polyfill to avoid inline scripts that violate
+    // OpenClaw's "script-src 'self'" CSP header.
+    modulePreload: { polyfill: false },
     rollupOptions: {
       output: {
         manualChunks: {
@@ -29,14 +32,17 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5174,
+    port: 5175,
     proxy: {
       '/ws': {
-        target: 'ws://127.0.0.1:18789',
+        target: 'ws://127.0.0.1:28789',
         ws: true,
       },
       '/socket.io': {
-        target: 'http://127.0.0.1:18789',
+        target: 'http://127.0.0.1:28789',
+      },
+      '/rc': {
+        target: 'http://127.0.0.1:28789',
       },
     },
   },

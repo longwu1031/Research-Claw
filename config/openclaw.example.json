@@ -5,7 +5,7 @@
 
   "gateway": {
     "mode": "local",              // "local" = loopback only, no remote access
-    "port": 18789,                // Default OpenClaw gateway port
+    "port": 28789,                // Research-Claw gateway port (avoids OpenClaw default 18789)
     "controlUi": {
       "root": "./dashboard/dist"  // Path to built dashboard SPA
     }
@@ -29,6 +29,12 @@
 
   "plugins": {
     "enabled": true,
+    "load": {
+      "paths": [
+        "./extensions/research-claw-core",
+        "./node_modules/@wentorai/research-plugins"
+      ]
+    },
     "entries": {
       "research-claw-core": {
         "enabled": true,
@@ -59,21 +65,19 @@
       "workspace_diff", "workspace_history", "workspace_restore",
       // Extended tools (batch, collection, annotation, citation graph)
       "library_batch_add", "library_manage_collection", "library_tag_paper",
-      "library_add_note", "library_import_bibtex", "library_citation_graph"
+      "library_add_note", "library_import_bibtex", "library_citation_graph",
+      // Research-plugins agent tools (13 tools across 6 APIs)
+      "search_papers", "get_paper", "get_citations",           // Semantic Scholar
+      "search_openalex", "get_work", "get_author_openalex",    // OpenAlex
+      "resolve_doi", "search_crossref",                         // CrossRef
+      "search_arxiv", "get_arxiv_paper",                        // arXiv
+      "search_pubmed", "get_article",                           // PubMed
+      "find_oa_version"                                          // Unpaywall
     ]
   },
 
   "agents": {
-    "defaults": {
-      "heartbeat": {
-        "enabled": true,
-        "intervalMinutes": 30     // [configurable] Heartbeat check interval
-      }
-    }
-  },
-
-  "cron": {
-    "enabled": true               // Enable cron jobs (arXiv scan, citation tracking, etc.)
+    "defaults": {}
   },
 
   // Proxy for China users (uncomment and set):

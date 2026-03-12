@@ -1,11 +1,12 @@
 import React, { useEffect, useCallback, Suspense, useState } from 'react';
-import { ConfigProvider, Spin } from 'antd';
+import { ConfigProvider, Spin, Result, Button } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { getAntdThemeConfig } from './styles/theme';
 import { useConfigStore } from './stores/config';
 import { useGatewayStore } from './stores/gateway';
 import { useChatStore } from './stores/chat';
 import { useUiStore, type PanelTab } from './stores/ui';
+import { useSessionsStore, MAIN_SESSION_KEY } from './stores/sessions';
 import ErrorBoundary from './components/ErrorBoundary';
 import TopBar from './components/TopBar';
 import LeftNav from './components/LeftNav';
@@ -15,10 +16,13 @@ import StatusBar from './components/StatusBar';
 import SetupWizard from './components/setup/SetupWizard';
 import type { ChatStreamEvent } from './gateway/types';
 
-const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ?? 'ws://127.0.0.1:18789';
+const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ?? 'ws://127.0.0.1:28789';
 
 const BP_MOBILE = 1024;
 const BP_TABLET = 1440;
+
+/** Timeout (ms) before showing "gateway unreachable" */
+const BOOT_TIMEOUT_MS = 10_000;
 
 type PanelMode = 'inline' | 'overlay' | 'modal';
 
@@ -49,8 +53,9 @@ const PANEL_TAB_ORDER: PanelTab[] = ['library', 'workspace', 'tasks', 'radar', '
 export default function App() {
   const { t } = useTranslation();
   const theme = useConfigStore((s) => s.theme);
-  const setupComplete = useConfigStore((s) => s.setupComplete);
+  const bootState = useConfigStore((s) => s.bootState);
   const loadConfig = useConfigStore((s) => s.loadConfig);
+  const setBootState = useConfigStore((s) => s.setBootState);
   const connect = useGatewayStore((s) => s.connect);
   const client = useGatewayStore((s) => s.client);
   const connState = useGatewayStore((s) => s.state);
@@ -66,27 +71,38 @@ export default function App() {
 
   const panelMode = usePanelMode();
 
-  // Load persisted config on mount
+  // Load persisted UI config (theme/locale) on mount
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
 
-  // Auto-connect gateway when setup is complete
+  // Always connect to gateway on mount
   useEffect(() => {
-    if (setupComplete) {
-      connect(GATEWAY_URL);
-    }
-  }, [setupComplete, connect]);
+    connect(GATEWAY_URL);
+  }, [connect]);
+
+  // Boot timeout: if still pending after 10s and not connected, show unreachable
+  useEffect(() => {
+    if (bootState !== 'pending') return;
+    const timer = setTimeout(() => {
+      const { bootState: current } = useConfigStore.getState();
+      const { state } = useGatewayStore.getState();
+      if (current === 'pending' && state !== 'connected') {
+        setBootState('gateway_unreachable');
+      }
+    }, BOOT_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [bootState, setBootState]);
 
   // Subscribe to chat events
   useEffect(() => {
     if (!client) return;
 
-    const unsubChat = client.subscribe('chat.message', (payload) => {
+    const unsubChat = client.subscribe('chat', (payload) => {
       handleChatEvent(payload as ChatStreamEvent);
     });
 
-    const unsubAgent = client.subscribe('agent.status', (payload) => {
+    const unsubAgent = client.subscribe('agent', (payload) => {
       const status = payload as { state?: string };
       if (status.state) {
         setAgentStatus(status.state as 'idle' | 'thinking' | 'tool_running' | 'streaming' | 'error');
@@ -99,15 +115,32 @@ export default function App() {
     };
   }, [client, handleChatEvent, setAgentStatus]);
 
-  // Load history on connection
+  // On connection: restore persisted session, load history + session list + check notifications
   useEffect(() => {
     if (connState === 'connected') {
+      // Sync chat store's sessionKey with the persisted active session
+      const persistedKey = useSessionsStore.getState().activeSessionKey;
+      if (persistedKey && persistedKey !== MAIN_SESSION_KEY) {
+        useChatStore.getState().setSessionKey(persistedKey);
+      }
       loadHistory();
+      useSessionsStore.getState().loadSessions();
       setAgentStatus('idle');
+      // Initial notification check
+      useUiStore.getState().checkNotifications();
     } else if (connState === 'disconnected' || connState === 'reconnecting') {
       setAgentStatus('disconnected');
     }
   }, [connState, loadHistory, setAgentStatus]);
+
+  // Poll for deadline notifications every 60s while connected
+  useEffect(() => {
+    if (connState !== 'connected') return;
+    const timer = setInterval(() => {
+      useUiStore.getState().checkNotifications();
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, [connState]);
 
   // Responsive breakpoint listener
   const handleResize = useCallback(() => {
@@ -116,7 +149,6 @@ export default function App() {
       setLeftNavCollapsed(true);
       setRightPanelOpen(false);
     } else if (w < BP_TABLET) {
-      // 2-column: right panel as overlay (managed by toggle), left nav stays
       setRightPanelOpen(false);
     }
   }, [setLeftNavCollapsed, setRightPanelOpen]);
@@ -145,7 +177,39 @@ export default function App() {
 
   const antdTheme = getAntdThemeConfig(theme);
 
-  if (!setupComplete) {
+  // --- Boot state guards ---
+
+  if (bootState === 'pending') {
+    return (
+      <ConfigProvider theme={antdTheme}>
+        <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', gap: 16 }}>
+          <Spin size="large" />
+          <span style={{ color: 'var(--text-secondary)', fontSize: 14 }}>{t('boot.connecting')}</span>
+        </div>
+      </ConfigProvider>
+    );
+  }
+
+  if (bootState === 'gateway_unreachable') {
+    return (
+      <ConfigProvider theme={antdTheme}>
+        <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+          <Result
+            status="error"
+            title={t('boot.gatewayUnreachable')}
+            subTitle={t('boot.gatewayHint')}
+            extra={
+              <Button type="primary" onClick={() => { setBootState('pending'); connect(GATEWAY_URL); }}>
+                {t('boot.retryConnect')}
+              </Button>
+            }
+          />
+        </div>
+      </ConfigProvider>
+    );
+  }
+
+  if (bootState === 'needs_setup') {
     return (
       <ConfigProvider theme={antdTheme}>
         <SetupWizard />
@@ -153,6 +217,7 @@ export default function App() {
     );
   }
 
+  // bootState === 'ready'
   const leftNavWidth = leftNavCollapsed ? 56 : 240;
   const isInline = panelMode === 'inline';
   const showInlinePanel = isInline && rightPanelOpen;
@@ -234,6 +299,7 @@ export default function App() {
         <>
           {/* Backdrop */}
           <div
+            aria-hidden="true"
             onClick={() => setRightPanelOpen(false)}
             style={{
               position: 'fixed',

@@ -4,7 +4,7 @@
 # Full logic defined in docs/06-install-startup-design.md
 set -euo pipefail
 
-PORT="${1:-18789}"
+PORT="${1:-28789}"
 BASE="http://127.0.0.1:${PORT}"
 
 echo "=== Research-Claw Health Check ==="
