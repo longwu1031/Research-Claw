@@ -284,6 +284,9 @@ docker compose up -d --build
 
 #### 3. 直接拉取预构建镜像（海外用户或有加速器时）
 
+> 预构建镜像即将上线 GHCR，届时可以直接拉取，无需本地构建。当前请使用上方的本地构建方式。
+
+<!--
 ```bash
 docker pull ghcr.io/wentorai/research-claw:latest
 
@@ -294,6 +297,7 @@ docker run -d --name research-claw \
   -v rc-workspace:/app/workspace \
   ghcr.io/wentorai/research-claw:latest
 ```
+-->
 
 #### 4. 配置 & 使用
 
