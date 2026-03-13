@@ -20,12 +20,14 @@
 
 ---
 
+仅适用于 macOS 和 Linux（Ubuntu）：
+
 ```bash
 curl -fsSL https://wentor.ai/install.sh | bash
 ```
 
 > **同一条命令：首次安装 · 版本更新 · 重新启动**
-> Windows 用户 → [Docker 部署](#docker-部署windows-推荐)（推荐）或 [WSL2 手动安装](docs/WINDOWS_INSTALL.md)
+> Windows 用户 → [Docker 一键部署](#docker-一键部署windows-推荐)（推荐）或 [WSL2 手动安装](docs/WINDOWS_INSTALL.md)
 
 ---
 
@@ -252,37 +254,11 @@ pnpm start
 
 安装完成后浏览器自动打开 `http://127.0.0.1:28789`，在 **Setup Wizard** 中配置 API Key，无需编辑任何配置文件。
 
-### Docker 部署（Windows 推荐）
+### Docker 一键部署（Windows 推荐）
 
 Windows 用户推荐用 Docker Desktop，无需安装 WSL2 或 Node.js。macOS / Linux 同样适用。
 
-#### 1. 配置 Docker 镜像加速（大陆必做）
-
-Docker Hub 在大陆被墙，需要先配置镜像加速器。打开 Docker Desktop → Settings → Docker Engine，添加：
-
-```json
-{
-  "registry-mirrors": [
-    "https://docker.1panel.live",
-    "https://docker.xuanyuan.me"
-  ]
-}
-```
-
-> 公共加速器随时可能失效。如果拉取超时，搜索「Docker 镜像加速 2026」获取最新可用地址，或使用云厂商提供的加速器（阿里云、腾讯云控制台申请）。
-
-#### 2. 本地构建并启动
-
-```bash
-git clone https://github.com/wentorai/Research-Claw.git
-cd Research-Claw
-docker compose up -d --build
-```
-
-> Dockerfile 已内置清华 apt 源 + npmmirror，构建过程无需翻墙。
-> 如果 `git clone` 也超时，可在 `docker-compose.yml` 中取消注释 `HTTP_PROXY` 行并填入你的代理地址。
-
-#### 3. 直接拉取预构建镜像（海外用户或有加速器时）
+#### 1. 直接拉取预构建镜像（推荐）
 
 无需克隆代码，一条命令即可运行：
 
@@ -296,6 +272,34 @@ docker run -d --name research-claw \
   -v rc-workspace:/app/workspace \
   ghcr.io/wentorai/research-claw:latest
 ```
+
+> 大陆用户如果拉取超时，请先配置 Docker 镜像加速（见下方），或使用方式 2 本地构建。
+
+#### 2. 本地构建并启动（大陆用户备选）
+
+```bash
+git clone https://github.com/wentorai/Research-Claw.git
+cd Research-Claw
+docker compose up -d --build
+```
+
+> Dockerfile 已内置清华 apt 源 + npmmirror，构建过程无需翻墙。
+> 如果 `git clone` 也超时，可在 `docker-compose.yml` 中取消注释 `HTTP_PROXY` 行并填入你的代理地址。
+
+#### 3. 配置 Docker 镜像加速（大陆必做）
+
+GHCR / Docker Hub 在大陆被墙，需要先配置镜像加速器。打开 Docker Desktop → Settings → Docker Engine，添加：
+
+```json
+{
+  "registry-mirrors": [
+    "https://docker.1panel.live",
+    "https://docker.xuanyuan.me"
+  ]
+}
+```
+
+> 公共加速器随时可能失效。如果拉取超时，搜索「Docker 镜像加速 2026」获取最新可用地址，或使用云厂商提供的加速器（阿里云、腾讯云控制台申请）。
 
 #### 4. 配置 & 使用
 

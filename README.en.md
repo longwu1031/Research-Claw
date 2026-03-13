@@ -20,12 +20,14 @@ You define the question. Research-Claw runs the lab. 24/7 on your machine. Every
 
 ---
 
+macOS and Linux (Ubuntu) only:
+
 ```bash
 curl -fsSL https://wentor.ai/install.sh | bash
 ```
 
 > **One command: Install · Update · Restart**
-> Windows → [Docker deploy](#docker-windows-recommended) (recommended) or [WSL2 manual install](docs/WINDOWS_INSTALL.md)
+> Windows → [Docker One-Click Deploy](#docker-one-click-deploy-windows-recommended) (recommended) or [WSL2 manual install](docs/WINDOWS_INSTALL.md)
 
 ---
 
@@ -252,21 +254,11 @@ pnpm start
 
 After install, your browser opens `http://127.0.0.1:28789`. Follow the **Setup Wizard** to configure your LLM provider and API key — no config file editing needed.
 
-### Docker (Windows recommended)
+### Docker One-Click Deploy (Windows recommended)
 
 No WSL2 or Node.js required — just [Docker Desktop](https://www.docker.com/products/docker-desktop/). Also works on macOS / Linux.
 
-**Option A: Build locally** (recommended for China mainland users)
-
-```bash
-git clone https://github.com/wentorai/Research-Claw.git
-cd Research-Claw
-docker compose up -d --build
-```
-
-> The Dockerfile uses Chinese mirrors (TUNA apt + npmmirror) by default. If you need a proxy for GitHub, uncomment the `HTTP_PROXY` lines in `docker-compose.yml`.
-
-**Option B: Pull pre-built image** (fast outside China)
+#### 1. Pull pre-built image (recommended)
 
 No need to clone — one command to run:
 
@@ -281,7 +273,36 @@ docker run -d --name research-claw \
   ghcr.io/wentorai/research-claw:latest
 ```
 
-Visit `http://127.0.0.1:28789` → Setup Wizard → enter your API key.
+> China mainland users: if the pull times out, configure a Docker mirror accelerator (see step 3) or use the local build method below.
+
+#### 2. Build locally (alternative for China mainland)
+
+```bash
+git clone https://github.com/wentorai/Research-Claw.git
+cd Research-Claw
+docker compose up -d --build
+```
+
+> The Dockerfile uses Chinese mirrors (TUNA apt + npmmirror) by default. If you need a proxy for GitHub, uncomment the `HTTP_PROXY` lines in `docker-compose.yml`.
+
+#### 3. Configure Docker mirror accelerator (required for China mainland)
+
+GHCR / Docker Hub is blocked in mainland China. Open Docker Desktop → Settings → Docker Engine, and add:
+
+```json
+{
+  "registry-mirrors": [
+    "https://docker.1panel.live",
+    "https://docker.xuanyuan.me"
+  ]
+}
+```
+
+> Public accelerators may go offline at any time. If pulls time out, search for the latest working mirrors, or use your cloud provider's accelerator (Alibaba Cloud / Tencent Cloud console).
+
+#### 4. Configure & Use
+
+Visit `http://127.0.0.1:28789` → **Setup Wizard** → enter your API key.
 
 > **Persistence**: database, config, and workspace are stored in named volumes — data survives container restarts and removal.
 >
