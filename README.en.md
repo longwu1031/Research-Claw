@@ -249,10 +249,10 @@ git clone https://github.com/wentorai/Research-Claw.git
 cd Research-Claw
 pnpm install && pnpm build
 cp config/openclaw.example.json config/openclaw.json
-pnpm start
+pnpm serve
 ```
 
-After install, your browser opens `http://127.0.0.1:28789`. Follow the **Setup Wizard** to configure your LLM provider and API key — no config file editing needed.
+After install, your browser opens `http://127.0.0.1:28789`. Follow the **Setup Wizard** to configure your LLM provider and API key — no config file editing needed. Config changes auto-restart the gateway.
 
 ### Docker One-Click Deploy (Windows recommended)
 
@@ -317,12 +317,15 @@ Visit `http://127.0.0.1:28789` → **Setup Wizard** → enter your API key.
 ### Commands
 
 ```bash
-pnpm start          # Start (no update)
+pnpm serve          # Start (auto-restart on config change)
+pnpm start          # Single run (no auto-restart)
 pnpm dev            # Dev mode (Dashboard: localhost:5175)
 pnpm test           # Run unit tests
 pnpm health         # Health check
 pnpm backup         # Backup database
 ```
+
+> `pnpm serve` is the recommended way to run. When you change API key / model in the browser, the gateway restarts automatically — no manual intervention needed.
 
 ### Update
 

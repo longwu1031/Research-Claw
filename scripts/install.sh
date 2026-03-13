@@ -129,9 +129,11 @@ info "Installing dependencies..."
 pnpm install --frozen-lockfile 2>/dev/null || pnpm install
 ok "Dependencies installed"
 
-if [ ! -f config/openclaw.json ] && [ -f config/openclaw.example.json ]; then
-  cp config/openclaw.example.json config/openclaw.json
-  ok "Config created"
+if [ ! -f config/openclaw.json ]; then
+  if [ -f config/openclaw.example.json ]; then
+    cp config/openclaw.example.json config/openclaw.json
+    ok "Config created"
+  fi
 fi
 
 info "Building..."
@@ -146,15 +148,17 @@ ok "Research-plugins (487 skills)"
 printf "\n  ${G}${B}Ready!${N}\n\n"
 printf "  ${B}Dashboard:${N}  ${C}http://127.0.0.1:$PORT${N}\n"
 printf "  ${B}Location:${N}   $INSTALL_DIR\n"
-printf "  ${B}Start:${N}      cd $INSTALL_DIR && pnpm start\n"
+printf "  ${B}Start:${N}      cd $INSTALL_DIR && pnpm serve\n"
 printf "  ${B}Update:${N}     curl -fsSL https://wentor.ai/install.sh | bash\n\n"
 
 if [ "${SKIP_START:-0}" = "1" ]; then
   exit 0
 fi
 
-# --- Launch ---
-info "Starting gateway..."
+# --- Launch with auto-restart ---
+# The gateway exits on SIGUSR1 after config save (API key, model, etc.),
+# expecting an external supervisor to restart it. This loop handles that.
+info "Starting gateway (auto-restart on config change)..."
 
 # Open browser when ready (background)
 (for _ in $(seq 1 30); do
@@ -169,8 +173,22 @@ info "Starting gateway..."
   sleep 1
 done) &
 
-# Start gateway (foreground, Ctrl+C to stop)
+STOP=false
+trap 'STOP=true' INT TERM
+set +e
+
 cd "$INSTALL_DIR"
-exec env OPENCLAW_CONFIG_PATH=./config/openclaw.json \
-  node ./node_modules/openclaw/dist/entry.js \
-  gateway run --allow-unconfigured --auth none --port "$PORT" --force
+while true; do
+  env OPENCLAW_CONFIG_PATH=./config/openclaw.json \
+    node ./node_modules/openclaw/dist/entry.js \
+    gateway run --allow-unconfigured --auth none --port "$PORT" --force
+  CODE=$?
+
+  if $STOP; then
+    printf "\n  ${G}Stopped.${N}\n"
+    exit 0
+  fi
+
+  printf "  ${C}▸${N} Gateway exited (code $CODE) — restarting in 1s...\n"
+  sleep 1
+done

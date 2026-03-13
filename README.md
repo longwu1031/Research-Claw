@@ -249,10 +249,10 @@ git clone https://github.com/wentorai/Research-Claw.git
 cd Research-Claw
 pnpm install && pnpm build
 cp config/openclaw.example.json config/openclaw.json
-pnpm start
+pnpm serve
 ```
 
-安装完成后浏览器自动打开 `http://127.0.0.1:28789`，在 **Setup Wizard** 中配置 API Key，无需编辑任何配置文件。
+安装完成后浏览器自动打开 `http://127.0.0.1:28789`，在 **Setup Wizard** 中配置 API Key，无需编辑任何配置文件。修改配置后网关自动重启，无需手动操作。
 
 ### Docker 一键部署（Windows 推荐）
 
@@ -318,12 +318,15 @@ GHCR / Docker Hub 在大陆被墙，需要先配置镜像加速器。打开 Dock
 ### 常用命令
 
 ```bash
-pnpm start          # 启动（不拉取更新）
+pnpm serve          # 启动（配置保存后自动重启）
+pnpm start          # 单次启动（不自动重启）
 pnpm dev            # 开发模式（Dashboard dev: localhost:5175）
 pnpm test           # 运行单元测试
 pnpm health         # 检查运行状态
 pnpm backup         # 备份数据库
 ```
+
+> `pnpm serve` 是推荐的日常启动方式。修改 API Key / 模型等配置后，网关会自动重启，无需手动操作。
 
 ### 更新
 
