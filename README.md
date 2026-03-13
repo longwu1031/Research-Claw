@@ -20,14 +20,16 @@
 
 ---
 
-仅适用于 macOS 和 Linux（Ubuntu）：
+> Windows 用户 → [Docker 一键部署](#docker-一键部署windows-推荐)（推荐）或 [WSL2 手动安装](docs/WINDOWS_INSTALL.md)
+
+下方指令仅适用于 macOS 和 Linux（Ubuntu）：
 
 ```bash
 curl -fsSL https://wentor.ai/install.sh | bash
 ```
 
 > **同一条命令：首次安装 · 版本更新 · 重新启动**
-> Windows 用户 → [Docker 一键部署](#docker-一键部署windows-推荐)（推荐）或 [WSL2 手动安装](docs/WINDOWS_INSTALL.md)
+
 
 ---
 
