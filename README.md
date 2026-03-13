@@ -11,7 +11,7 @@
 [![Version](https://img.shields.io/badge/version-v0.1.0-EF4444?style=flat-square&logo=github)](https://github.com/wentorai/Research-Claw/releases)
 [![License](https://img.shields.io/badge/license-BSL_1.1-3B82F6?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/Node.js-%3E%3D22-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
-[![Platform](https://img.shields.io/badge/platform-macOS_%7C_Linux-lightgrey?style=flat-square)](#)
+[![Platform](https://img.shields.io/badge/platform-macOS_%7C_Linux_%7C_Windows-lightgrey?style=flat-square)](#)
 [![Skills](https://img.shields.io/badge/skills-487-EF4444?style=flat-square)](https://www.npmjs.com/package/@wentorai/research-plugins)
 
 [🌐 wentor.ai](https://wentor.ai) · [🇬🇧 English](README.en.md) · [📖 文档](docs/00-reference-map.md) · [🪲 问题反馈](https://github.com/wentorai/Research-Claw/issues)
@@ -25,7 +25,7 @@ curl -fsSL https://wentor.ai/install.sh | bash
 ```
 
 > **同一条命令：首次安装 · 版本更新 · 重新启动**
-> Windows 用户 → [手动安装指南](docs/WINDOWS_INSTALL.md)（推荐 WSL2）
+> Windows 用户 → [Docker 部署](#docker-部署windows-推荐)（推荐）或 [WSL2 手动安装](docs/WINDOWS_INSTALL.md)
 
 ---
 
@@ -228,10 +228,13 @@ openclaw plugins install @wentorai/research-plugins
 
 ### 系统要求
 
-- macOS（Intel / Apple Silicon）或 Linux
-- Git（install 脚本自动安装）
-- Node.js >= 22（install 脚本通过 fnm 自动安装）
-- LLM API Key（推荐 Anthropic Claude 或 OpenAI，支持国内中转 API）
+| 平台 | 方案 | 依赖 |
+|:--|:--|:--|
+| macOS / Linux | 一键安装脚本 | Git（自动安装）· Node.js 22（自动安装）|
+| Windows | Docker Desktop | [Docker Desktop](https://www.docker.com/products/docker-desktop/) |
+| Windows | WSL2 手动安装 | WSL2 Ubuntu · Git · Node.js 22 |
+
+所有平台均需 LLM API Key（推荐 Anthropic Claude / OpenAI，支持国内中转 API）。
 
 ### 安装
 
@@ -247,6 +250,30 @@ pnpm start
 ```
 
 安装完成后浏览器自动打开 `http://127.0.0.1:28789`，在 **Setup Wizard** 中配置 API Key，无需编辑任何配置文件。
+
+### Docker 部署（Windows 推荐）
+
+Windows 用户推荐用 Docker Desktop，无需安装 WSL2 或 Node.js：
+
+```bash
+# 拉取镜像
+docker pull ghcr.io/wentorai/research-claw:latest
+
+# 启动
+docker compose up -d
+
+# 或一行命令：
+docker run -d --name research-claw \
+  -p 28789:28789 \
+  -v rc-config:/app/config \
+  -v rc-data:/root/.research-claw \
+  -v rc-workspace:/app/workspace \
+  ghcr.io/wentorai/research-claw:latest
+```
+
+浏览器访问 `http://127.0.0.1:28789` → Setup Wizard → 填入 API Key，即可使用。
+
+> **数据持久化**：数据库、配置、工作区均挂载在具名 volume，容器删除后数据不丢失。
 
 ### 常用命令
 

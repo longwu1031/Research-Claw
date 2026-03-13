@@ -11,7 +11,7 @@ You define the question. Research-Claw runs the lab. 24/7 on your machine. Every
 [![Version](https://img.shields.io/badge/version-v0.1.0-EF4444?style=flat-square&logo=github)](https://github.com/wentorai/Research-Claw/releases)
 [![License](https://img.shields.io/badge/license-BSL_1.1-3B82F6?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/Node.js-%3E%3D22-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
-[![Platform](https://img.shields.io/badge/platform-macOS_%7C_Linux-lightgrey?style=flat-square)](#)
+[![Platform](https://img.shields.io/badge/platform-macOS_%7C_Linux_%7C_Windows-lightgrey?style=flat-square)](#)
 [![Skills](https://img.shields.io/badge/skills-487-EF4444?style=flat-square)](https://www.npmjs.com/package/@wentorai/research-plugins)
 
 [🌐 wentor.ai](https://wentor.ai) · [🇨🇳 中文](README.md) · [📖 Docs](docs/00-reference-map.md) · [🪲 Issues](https://github.com/wentorai/Research-Claw/issues)
@@ -25,7 +25,7 @@ curl -fsSL https://wentor.ai/install.sh | bash
 ```
 
 > **One command: Install · Update · Restart**
-> Windows → [Manual Install Guide](docs/WINDOWS_INSTALL.md) (WSL2 recommended)
+> Windows → [Docker deploy](#docker-windows-recommended) (recommended) or [WSL2 manual install](docs/WINDOWS_INSTALL.md)
 
 ---
 
@@ -228,15 +228,18 @@ Four layers of defense-in-depth. The first three are hard constraints enforced i
 
 ### Requirements
 
-- macOS (Intel / Apple Silicon) or Linux
-- Git (auto-installed by script)
-- Node.js >= 22 (auto-installed via fnm)
-- An LLM API key (Anthropic Claude or OpenAI recommended)
+| Platform | Method | Prerequisites |
+|:--|:--|:--|
+| macOS / Linux | One-click script | Git · Node.js 22 (auto-installed) |
+| Windows | Docker Desktop | [Docker Desktop](https://www.docker.com/products/docker-desktop/) |
+| Windows | WSL2 manual | WSL2 Ubuntu · Git · Node.js 22 |
+
+All platforms require an LLM API key (Anthropic Claude / OpenAI recommended).
 
 ### Install
 
 ```bash
-# Option 1: One-click (recommended)
+# Option 1: One-click (macOS / Linux, recommended)
 curl -fsSL https://wentor.ai/install.sh | bash
 
 # Option 2: Manual
@@ -247,6 +250,30 @@ pnpm start
 ```
 
 After install, your browser opens `http://127.0.0.1:28789`. Follow the **Setup Wizard** to configure your LLM provider and API key — no config file editing needed.
+
+### Docker (Windows recommended)
+
+No WSL2 or Node.js required — just [Docker Desktop](https://www.docker.com/products/docker-desktop/):
+
+```bash
+# Pull image
+docker pull ghcr.io/wentorai/research-claw:latest
+
+# Start with docker compose
+docker compose up -d
+
+# Or single command:
+docker run -d --name research-claw \
+  -p 28789:28789 \
+  -v rc-config:/app/config \
+  -v rc-data:/root/.research-claw \
+  -v rc-workspace:/app/workspace \
+  ghcr.io/wentorai/research-claw:latest
+```
+
+Visit `http://127.0.0.1:28789` → Setup Wizard → enter your API key.
+
+> **Persistence**: database, config, and workspace are stored in named volumes — data survives container restarts and removal.
 
 ### Commands
 
