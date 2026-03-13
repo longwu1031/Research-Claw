@@ -258,6 +258,12 @@ After install, your browser opens `http://127.0.0.1:28789`. Follow the **Setup W
 
 No WSL2 or Node.js required — just [Docker Desktop](https://www.docker.com/products/docker-desktop/). Also works on macOS / Linux.
 
+#### 0. Install Docker Desktop
+
+Download and install from the [Docker Desktop official page](https://docs.docker.com/desktop/setup/install/windows-install/). After installation, launch Docker Desktop and make sure the whale icon in the system tray shows **Running**.
+
+> macOS / Linux users also need Docker Desktop or Docker Engine. See [Docker official docs](https://docs.docker.com/engine/install/).
+
 #### 1. Pull pre-built image (recommended)
 
 No need to clone — one command to run:

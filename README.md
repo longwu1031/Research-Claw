@@ -258,6 +258,12 @@ pnpm start
 
 Windows 用户推荐用 Docker Desktop，无需安装 WSL2 或 Node.js。macOS / Linux 同样适用。
 
+#### 0. 安装 Docker Desktop
+
+前往 [Docker Desktop 官方下载页](https://docs.docker.com/desktop/setup/install/windows-install/) 下载并安装。安装完成后启动 Docker Desktop，确保系统托盘出现鲸鱼图标且显示 **Running**。
+
+> macOS / Linux 用户同样需要安装 Docker Desktop 或 Docker Engine。详见 [Docker 官方文档](https://docs.docker.com/engine/install/)。
+
 #### 1. 直接拉取预构建镜像（推荐）
 
 无需克隆代码，一条命令即可运行：
