@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # ============================================================================
 # Research-Claw (科研龙虾) — Install / Update / Start
+# Hosted at: https://wentor.ai/install.sh
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/wentorai/research-claw/main/scripts/install.sh | bash
+#   curl -fsSL https://wentor.ai/install.sh | bash
 #
 # Idempotent: first run = install, subsequent runs = update + start.
 # All configuration is handled in the browser via Setup Wizard.
 #
-# Environment variables (optional):
+# Options (environment variables):
 #   INSTALL_DIR  — where to install (default: ~/research-claw)
 #   SKIP_START   — set to 1 to install only, don't launch gateway
 # ============================================================================
@@ -131,7 +132,7 @@ printf "\n  ${G}${B}Ready!${N}\n\n"
 printf "  ${B}Dashboard:${N}  ${C}http://127.0.0.1:$PORT${N}\n"
 printf "  ${B}Location:${N}   $INSTALL_DIR\n"
 printf "  ${B}Start:${N}      cd $INSTALL_DIR && pnpm start\n"
-printf "  ${B}Update:${N}     re-run this script\n\n"
+printf "  ${B}Update:${N}     curl -fsSL https://wentor.ai/install.sh | bash\n\n"
 
 [ "${SKIP_START:-0}" = "1" ] && exit 0
 
