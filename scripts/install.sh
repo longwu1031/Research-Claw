@@ -289,7 +289,8 @@ fi
 SQLITE_NODE="node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/build/Release/better_sqlite3.node"
 if ls $SQLITE_NODE &>/dev/null; then
   # Resolve the better-sqlite3 package directory (absolute path for pnpm compatibility)
-  SQLITE_PKG="$(cd "$(dirname "$(dirname "$(ls $SQLITE_NODE | head -1)")")" && pwd)"
+  # Path: .../better-sqlite3/build/Release/better_sqlite3.node → 3 levels up
+  SQLITE_PKG="$(cd "$(dirname "$(dirname "$(dirname "$(ls $SQLITE_NODE | head -1)")")")" && pwd)"
 
   # Detect which Node the gateway actually uses.
   # The openclaw CLI activates conda env "openclaw" which has its own Node.
