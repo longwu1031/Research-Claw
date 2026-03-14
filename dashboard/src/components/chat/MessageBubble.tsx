@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Typography, Image } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { ChatMessage } from '../../gateway/types';
+import { useGatewayStore } from '../../stores/gateway';
 import CodeBlock from './CodeBlock';
 
 const { Text } = Typography;
@@ -12,6 +13,9 @@ interface ImageBlock {
   url: string;
   alt?: string;
 }
+
+/** Pattern for workspace image markers embedded by chat.send image routing. */
+const RC_IMAGE_RE = /\[rc-image:([\w./_-]+)\]/g;
 
 /**
  * Extract image blocks from message content array.
@@ -158,6 +162,56 @@ function extractThinking(message: ChatMessage): string | null {
   return extracted.length > 0 ? extracted.join('\n') : null;
 }
 
+/**
+ * Hook: resolve [rc-image:...] markers in message text into displayable images.
+ * Loads the image from workspace via rc.ws.read (returns base64 for binary files).
+ */
+function useWorkspaceImages(text: string): ImageBlock[] {
+  const [wsImages, setWsImages] = useState<ImageBlock[]>([]);
+  const client = useGatewayStore((s) => s.client);
+
+  useEffect(() => {
+    RC_IMAGE_RE.lastIndex = 0;
+    const matches = [...text.matchAll(RC_IMAGE_RE)];
+    if (matches.length === 0) { setWsImages([]); return; }
+
+    let cancelled = false;
+    (async () => {
+      const loaded: ImageBlock[] = [];
+      for (const m of matches) {
+        const wsPath = m[1];
+        try {
+          const result = await client?.request<{
+            content: string;
+            encoding: 'utf-8' | 'base64';
+            mime_type?: string;
+          }>('rc.ws.read', { path: wsPath });
+          if (cancelled) return;
+          if (result?.encoding === 'base64') {
+            const mime = result.mime_type || 'image/png';
+            loaded.push({ url: `data:${mime};base64,${result.content}`, alt: wsPath });
+          }
+        } catch {
+          // Image may have been deleted — skip silently
+        }
+      }
+      if (!cancelled) setWsImages(loaded);
+    })();
+
+    return () => { cancelled = true; };
+  }, [text, client]);
+
+  return wsImages;
+}
+
+/** Strip [rc-image:...] markers and [User attached...] lines from display text. */
+function stripImageMarkers(text: string): string {
+  return text
+    .replace(RC_IMAGE_RE, '')
+    .replace(/\n*\[User attached \d+ image\(s\):[^\]]*\]/g, '')
+    .trimEnd();
+}
+
 interface MessageBubbleProps {
   message: ChatMessage;
   isStreaming?: boolean;
@@ -184,14 +238,20 @@ export default function MessageBubble({ message, isStreaming }: MessageBubblePro
   // For user messages: strip meta prefix
   // For assistant messages: strip thinking tags from displayed text
   // Source: message-extract.ts:10-11 — if (role === "assistant") return stripThinkingTags(text);
-  const text = isUser ? stripUserMetaPrefix(rawText) : stripThinkingTags(rawText);
+  const preText = isUser ? stripUserMetaPrefix(rawText) : stripThinkingTags(rawText);
+
+  // Strip [rc-image:...] markers from display (images rendered separately)
+  const text = stripImageMarkers(preText);
 
   // Extract thinking content for separate rendering (assistant only)
   // Source: message-extract.ts:41-69 (extractThinking)
   // Source: grouped-render.ts:245-246 — only for assistant role
   const thinkingContent = extractThinking(message);
 
-  const images = extractImages(message);
+  // Images from content blocks (immediate send) + workspace markers (after refresh)
+  const contentImages = extractImages(message);
+  const wsImages = useWorkspaceImages(rawText);
+  const images = contentImages.length > 0 ? contentImages : wsImages;
 
   return (
     <div

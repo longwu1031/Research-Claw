@@ -1,6 +1,6 @@
 {
   "name": "research-claw",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Research-Claw (科研龙虾) — AI-powered local academic research assistant, built as an OpenClaw satellite",
   "private": true,
   "type": "module",
@@ -9,8 +9,8 @@
   },
   "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "start": "OPENCLAW_CONFIG_PATH=./config/openclaw.json node ./node_modules/openclaw/dist/entry.js gateway run --allow-unconfigured --auth none --port 28789 --force",
-    "dev": "concurrently \"pnpm --filter dashboard dev\" \"OPENCLAW_CONFIG_PATH=./config/openclaw.json node ./node_modules/openclaw/dist/entry.js gateway run --allow-unconfigured --auth none --port 28789\"",
+    "start": "bash scripts/run.sh",
+    "dev": "concurrently \"pnpm --filter dashboard dev\" \"bash scripts/run.sh\"",
     "build": "pnpm build:extensions && pnpm build:dashboard",
     "build:dashboard": "pnpm --filter dashboard build",
     "build:extensions": "pnpm --filter './extensions/*' build",

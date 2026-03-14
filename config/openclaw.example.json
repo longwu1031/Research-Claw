@@ -1,32 +1,49 @@
 {
-  // Research-Claw Configuration Reference
-  // Copy to openclaw.json and customize.
-  // Environment variables: use ${VAR_NAME} syntax.
-
-  "gateway": {
-    "mode": "local",              // "local" = loopback only, no remote access
-    "port": 28789,                // Research-Claw gateway port (avoids OpenClaw default 18789)
-    "controlUi": {
-      "root": "./dashboard/dist",  // Path to built dashboard SPA
-      "dangerouslyAllowHostHeaderOriginFallback": true  // Required for Docker (non-loopback bind)
-    }
+  "env": {
+    "vars": {}
   },
-
   "ui": {
     "assistant": {
-      "name": "Research-Claw"     // Display name in chat
-      // "avatar": "./assets/avatar.png"  // Optional custom avatar
+      "name": "Research-Claw"
     }
   },
-
+  "agents": {
+    "defaults": {
+      "workspace": "./workspace",
+      "compaction": {
+        "mode": "safeguard"
+      },
+      "thinkingDefault": "medium",
+      "subagents": {
+        "announceTimeoutMs": 480000
+      }
+    }
+  },
+  "gateway": {
+    "port": 28789,
+    "mode": "local",
+    "bind": "loopback",
+    "controlUi": {
+      "root": "./dashboard/dist",
+      "allowedOrigins": [
+        "http://127.0.0.1:28789",
+        "http://localhost:28789",
+        "http://127.0.0.1:5175",
+        "http://localhost:5175"
+      ],
+      "dangerouslyDisableDeviceAuth": true
+    },
+    "auth": {
+      "mode": "none"
+    }
+  },
   "skills": {
     "load": {
       "extraDirs": [
-        "./skills"                                            // Local custom skills
+        "./skills"
       ]
     }
   },
-
   "plugins": {
     "enabled": true,
     "load": {
@@ -34,63 +51,74 @@
         "./extensions/research-claw-core"
       ]
     },
-    // research-plugins is installed via: openclaw plugins install @wentorai/research-plugins
-    // It auto-discovers from ~/.openclaw/extensions/ (no node_modules needed).
     "entries": {
       "research-claw-core": {
         "enabled": true,
         "config": {
-          "dbPath": ".research-claw/library.db",        // SQLite database location
-          "autoTrackGit": true,                          // Auto-commit workspace changes
-          "defaultCitationStyle": "apa",                 // apa | mla | chicago | ieee | bibtex
-          "heartbeatDeadlineWarningHours": 48            // [configurable] Hours before deadline warning
+          "dbPath": ".research-claw/library.db",
+          "autoTrackGit": true,
+          "defaultCitationStyle": "apa",
+          "heartbeatDeadlineWarningHours": 48
         }
       }
     }
   },
-
   "tools": {
-    "profile": "full",            // Enable all built-in tools
+    "profile": "full",
     "alsoAllow": [
-      // Literature tools
-      "library_add_paper", "library_search", "library_update_paper",
-      "library_get_paper", "library_export_bibtex", "library_reading_stats",
-      // Task tools
-      "task_create", "task_list", "task_complete",
-      "task_update", "task_link", "task_note",
-      // Workspace tools
-      "workspace_save", "workspace_read", "workspace_list",
-      "workspace_diff", "workspace_history", "workspace_restore",
-      // Notification
+      "library_add_paper",
+      "library_search",
+      "library_update_paper",
+      "library_get_paper",
+      "library_export_bibtex",
+      "library_reading_stats",
+      "library_batch_add",
+      "library_manage_collection",
+      "library_tag_paper",
+      "library_add_note",
+      "library_import_bibtex",
+      "library_citation_graph",
+      "task_create",
+      "task_list",
+      "task_complete",
+      "task_update",
+      "task_link",
+      "task_note",
       "send_notification",
-      // Radar tools
-      "radar_configure", "radar_get_config", "radar_scan",
-      // Extended tools (batch, collection, annotation, citation graph)
-      "library_batch_add", "library_manage_collection", "library_tag_paper",
-      "library_add_note", "library_import_bibtex", "library_citation_graph",
-      // Research-plugins agent tools (13 tools across 6 APIs)
-      "search_papers", "get_paper", "get_citations",           // Semantic Scholar
-      "search_openalex", "get_work", "get_author_openalex",    // OpenAlex
-      "resolve_doi", "search_crossref",                         // CrossRef
-      "search_arxiv", "get_arxiv_paper",                        // arXiv
-      "search_pubmed", "get_article",                           // PubMed
-      "find_oa_version"                                          // Unpaywall
-    ]
+      "workspace_save",
+      "workspace_read",
+      "workspace_list",
+      "workspace_diff",
+      "workspace_history",
+      "workspace_restore",
+      "radar_configure",
+      "radar_get_config",
+      "radar_scan",
+      "search_papers",
+      "get_paper",
+      "get_citations",
+      "search_openalex",
+      "get_work",
+      "get_author_openalex",
+      "resolve_doi",
+      "search_crossref",
+      "search_arxiv",
+      "get_arxiv_paper",
+      "search_pubmed",
+      "get_article",
+      "find_oa_version"
+    ],
+    "sessions": {
+      "visibility": "all"
+    }
   },
-
-  "agents": {
-    "defaults": {}
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true,
+    "ownerDisplay": "raw"
   },
-
-  // Proxy for China users (uncomment and set):
-  // "env": {
-  //   "vars": {
-  //     "HTTP_PROXY": "http://127.0.0.1:7890",
-  //     "HTTPS_PROXY": "http://127.0.0.1:7890"
-  //   }
-  // }
-
-  "env": {
-    "vars": {}
+  "cron": {
+    "enabled": true
   }
 }

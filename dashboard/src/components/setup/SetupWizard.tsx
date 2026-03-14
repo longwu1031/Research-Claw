@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { useGatewayStore } from '../../stores/gateway';
 import { useConfigStore } from '../../stores/config';
 import { buildSaveConfig, extractConfigFields } from '../../utils/config-patch';
-import { PROVIDER_PRESETS, detectPresetFromProvider, getPreset } from '../../utils/provider-presets';
+import { PROVIDER_PRESETS, detectPresetFromProvider, getPreset, type ProviderPreset } from '../../utils/provider-presets';
 
 const { Title, Text } = Typography;
 
@@ -30,19 +30,20 @@ export default function SetupWizard() {
 
   const gatewayConfig = useConfigStore((s) => s.gatewayConfig);
 
-  // --- Text endpoint ---
+  // --- Text endpoint (initialize from default provider preset) ---
+  const defaultPreset = getPreset('zai');
   const [provider, setProvider] = useState('zai');
-  const [baseUrl, setBaseUrl] = useState('');
-  const [api, setApi] = useState('openai-completions');
+  const [baseUrl, setBaseUrl] = useState(defaultPreset.baseUrl);
+  const [api, setApi] = useState<ProviderPreset['api']>(defaultPreset.api);
   const [apiKey, setApiKey] = useState('');
-  const [textModel, setTextModel] = useState('');
+  const [textModel, setTextModel] = useState(defaultPreset.models[0]?.id ?? '');
 
   // --- Vision ---
   const [visionEnabled, setVisionEnabled] = useState(false);
   const [visionProvider, setVisionProvider] = useState('zai');
   const [visionModel, setVisionModel] = useState('');
   const [visionBaseUrl, setVisionBaseUrl] = useState('');
-  const [visionApi, setVisionApi] = useState('openai-completions');
+  const [visionApi, setVisionApi] = useState<ProviderPreset['api']>('openai-completions');
   const [visionApiKey, setVisionApiKey] = useState('');
 
   // --- Network ---
@@ -90,7 +91,7 @@ export default function SetupWizard() {
 
     if (fields.baseUrl || fields.textModel) {
       setBaseUrl(fields.baseUrl);
-      setApi(fields.api);
+      setApi(fields.api as ProviderPreset['api']);
       if (fields.apiKey) setApiKey(fields.apiKey);
       setTextModel(fields.textModel);
       setProvider(detectPresetFromProvider(fields.provider, fields.baseUrl));
@@ -100,7 +101,7 @@ export default function SetupWizard() {
         setVisionModel(fields.visionModel);
         setVisionProvider(detectPresetFromProvider(fields.visionProvider, fields.visionBaseUrl));
         setVisionBaseUrl(fields.visionBaseUrl || fields.baseUrl);
-        setVisionApi(fields.visionApi);
+        setVisionApi(fields.visionApi as ProviderPreset['api']);
         if (fields.visionApiKey) setVisionApiKey(fields.visionApiKey);
       }
 
@@ -136,12 +137,15 @@ export default function SetupWizard() {
 
     try {
       const configSnapshot = await client.request<{
+        parsed?: Record<string, unknown>;
         config?: Record<string, unknown>;
         hash?: string;
       }>('config.get', {});
 
+      // OpenClaw returns `parsed` (the project config before resolution).
+      // Fall back to `config` for compatibility.
       const fullConfig = buildSaveConfig(
-        (configSnapshot.config ?? null) as Record<string, unknown> | null,
+        (configSnapshot.parsed ?? configSnapshot.config ?? null) as Record<string, unknown> | null,
         {
           provider,
           baseUrl: baseUrl.trim(),

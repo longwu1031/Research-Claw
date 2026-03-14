@@ -39,11 +39,11 @@ export interface GatewayConfig {
   projectConfig?: Record<string, unknown> | null;
 }
 
-export type BootState = 'pending' | 'ready' | 'needs_setup' | 'gateway_unreachable';
+export type BootState = 'pending' | 'ready' | 'needs_setup' | 'gateway_unreachable' | 'needs_token';
 
 /** Maximum retries for config loading after reconnect (handles race with gateway startup) */
-const CONFIG_RETRY_MAX = 3;
-const CONFIG_RETRY_DELAY_MS = 1500;
+const CONFIG_RETRY_MAX = 5;
+const CONFIG_RETRY_DELAY_MS = 2000;
 
 interface ConfigState {
   theme: 'dark' | 'light';
@@ -139,14 +139,22 @@ export const useConfigStore = create<ConfigState>()((set, get) => {
         };
         set({ gatewayConfig: gc, gatewayConfigLoading: false });
         get().evaluateConfig();
-      } catch {
+      } catch (err) {
+        console.warn('[config] loadGatewayConfig failed:', err);
         set({ gatewayConfigLoading: false });
+        // On error, still trigger evaluation so retries can continue
+        get().evaluateConfig();
       }
     },
 
     evaluateConfig: () => {
-      const { gatewayConfig, _configRetryCount } = get();
+      const { gatewayConfig, bootState: currentBoot, _configRetryCount } = get();
+
+      // Guard: never downgrade from 'ready' to 'needs_setup'
+      if (currentBoot === 'ready') return;
+
       const configRecord = gatewayConfig as Record<string, unknown> | null;
+      const gwConnected = useGatewayStore.getState().state === 'connected';
 
       // Level 1: Strict validation — model ref + matching provider
       if (isConfigValid(configRecord)) {
@@ -157,15 +165,47 @@ export const useConfigStore = create<ConfigState>()((set, get) => {
       // Level 2: Relaxed validation — gateway is connected and has a model configured.
       // If the gateway responded to hello-ok, it validated its own config on startup.
       // The dashboard may fail strict validation due to resolved config structure differences.
-      const gwConnected = useGatewayStore.getState().state === 'connected';
       if (gwConnected && hasModelConfigured(configRecord)) {
         console.warn('[config] Strict validation failed but gateway is connected with model — accepting config');
         set({ bootState: 'ready', _configRetryCount: 0 });
         return;
       }
 
+      // Level 2.5: Check project-level config (pre-resolution) as fallback.
+      // The resolved config may restructure fields; the raw project config preserves them.
+      if (gwConnected && gatewayConfig?.projectConfig) {
+        const pc = gatewayConfig.projectConfig;
+        if (isConfigValid(pc) || hasModelConfigured(pc)) {
+          console.warn('[config] Resolved config failed validation but project config is valid — accepting');
+          set({ bootState: 'ready', _configRetryCount: 0 });
+          return;
+        }
+      }
+
+      // Level 2.75: Gateway connected — directly check model ref on typed GatewayConfig.
+      // Bypasses the Record<string,unknown> cast (which may lose type info) and validates
+      // model.primary format (provider/model) consistent with OpenClaw's own validation.
+      if (gwConnected && gatewayConfig?.agents?.defaults?.model?.primary) {
+        const primary = gatewayConfig.agents.defaults.model.primary;
+        if (primary.includes('/')) {
+          console.warn('[config] Direct gatewayConfig.model.primary check passed — accepting');
+          set({ bootState: 'ready', _configRetryCount: 0 });
+          return;
+        }
+      }
+
+      // Fast path: if gateway is connected and config clearly has NO model providers,
+      // this is a genuine cold start — show wizard immediately instead of retrying.
+      if (gwConnected && gatewayConfig && !gatewayConfig.models?.providers) {
+        console.log('[config] No model providers configured — showing setup wizard');
+        set({ bootState: 'needs_setup', _configRetryCount: 0 });
+        return;
+      }
+
       // Level 3: Retry — gateway may not have fully loaded its config yet (race condition).
       if (_configRetryCount < CONFIG_RETRY_MAX) {
+        console.log(`[config] Validation failed, retry ${_configRetryCount + 1}/${CONFIG_RETRY_MAX}`,
+          { gwConnected, hasConfig: !!gatewayConfig, agents: !!gatewayConfig?.agents, models: !!gatewayConfig?.models });
         set({ _configRetryCount: _configRetryCount + 1 });
         setTimeout(() => {
           get().loadGatewayConfig();
@@ -175,6 +215,8 @@ export const useConfigStore = create<ConfigState>()((set, get) => {
       }
 
       // All levels exhausted — genuinely needs setup
+      console.warn('[config] All validation levels exhausted — showing setup wizard',
+        { gwConnected, config: gatewayConfig });
       set({ bootState: 'needs_setup', _configRetryCount: 0 });
     },
 
@@ -189,3 +231,36 @@ export const useConfigStore = create<ConfigState>()((set, get) => {
 (window as unknown as Record<string, unknown>).__resetSetup = () => {
   useConfigStore.setState({ bootState: 'needs_setup' });
 };
+
+/**
+ * Check whether the primary model supports inline image input.
+ * Used by chat.send() to decide whether to route images through workspace
+ * for the /image tool (imageModel) instead of sending as chat attachments.
+ */
+export function primaryModelSupportsVision(): boolean {
+  const cfg = useConfigStore.getState().gatewayConfig;
+  if (!cfg) return false;
+
+  const primaryRef = cfg.agents?.defaults?.model?.primary;
+  if (!primaryRef) return false;
+
+  // primaryRef = "zai/glm-5" → provider="zai", modelId="glm-5"
+  const slashIdx = primaryRef.indexOf('/');
+  if (slashIdx < 0) return false;
+
+  const providerKey = primaryRef.slice(0, slashIdx);
+  const modelId = primaryRef.slice(slashIdx + 1);
+  const providerDef = cfg.models?.providers?.[providerKey];
+  const modelDef = providerDef?.models?.find((m) => m.id === modelId);
+
+  return modelDef?.input?.includes('image') ?? false;
+}
+
+/**
+ * Check whether an imageModel is configured (for /image tool fallback).
+ */
+export function hasImageModelConfigured(): boolean {
+  const cfg = useConfigStore.getState().gatewayConfig;
+  const ref = cfg?.agents?.defaults?.imageModel?.primary;
+  return !!ref && ref.includes('/');
+}

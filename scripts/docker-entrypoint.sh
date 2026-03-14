@@ -2,16 +2,28 @@
 # Research-Claw Docker entrypoint with auto-restart.
 # Gateway exits on SIGUSR1 after config save — this loop restarts it.
 
-# Seed config on first run
-if [ ! -f /app/config/openclaw.json ]; then
-  mkdir -p /app/config
-  cp /defaults/openclaw.example.json /app/config/openclaw.json
-  echo "[research-claw] Config initialized from template"
+CONFIG_DIR=/app/config
+CONFIG_FILE=$CONFIG_DIR/openclaw.json
+CONFIG_VERSION_FILE=$CONFIG_DIR/.config-version
+IMAGE_VERSION="0.3.0"
+
+# Seed or refresh config when image version changes
+mkdir -p "$CONFIG_DIR"
+CURRENT_VERSION=""
+if [ -f "$CONFIG_VERSION_FILE" ]; then
+  CURRENT_VERSION=$(cat "$CONFIG_VERSION_FILE")
 fi
 
-# Generate a gateway token if not provided via env
+if [ ! -f "$CONFIG_FILE" ] || [ "$CURRENT_VERSION" != "$IMAGE_VERSION" ]; then
+  cp /defaults/openclaw.example.json "$CONFIG_FILE"
+  echo "$IMAGE_VERSION" > "$CONFIG_VERSION_FILE"
+  echo "[research-claw] Config initialized/updated for v$IMAGE_VERSION"
+fi
+
+# Default gateway token matches dashboard's DEFAULT_TOKEN for seamless access.
+# Override via env: docker run -e OPENCLAW_GATEWAY_TOKEN=your-secret ...
 if [ -z "$OPENCLAW_GATEWAY_TOKEN" ]; then
-  OPENCLAW_GATEWAY_TOKEN=$(head -c 32 /dev/urandom | od -A n -t x1 | tr -d ' \n')
+  OPENCLAW_GATEWAY_TOKEN="research-claw"
   export OPENCLAW_GATEWAY_TOKEN
 fi
 
@@ -24,7 +36,7 @@ STOP=false
 trap 'STOP=true' INT TERM
 
 while true; do
-  OPENCLAW_CONFIG_PATH=/app/config/openclaw.json \
+  OPENCLAW_CONFIG_PATH=$CONFIG_FILE \
     node /app/node_modules/openclaw/dist/entry.js \
     gateway run --allow-unconfigured --auth token --port 28789 --bind lan --force
   CODE=$?

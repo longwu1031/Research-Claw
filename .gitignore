@@ -46,16 +46,24 @@ coverage/
 
 # Temp
 .tmp/
+dashboard/test-image-send.mjs
 
 # Lock files (using pnpm, not npm)
 extensions/*/package-lock.json
 
-# Workspace runtime data (keep only bootstrap .md files)
+# Workspace runtime data (keep only bootstrap .md files: AGENTS/BOOTSTRAP/HEARTBEAT/IDENTITY/MEMORY/SOUL/TOOLS/USER)
 workspace/.openclaw/
 workspace/memory/
 workspace/sources/
 workspace/skills_collection/
+workspace/outputs/
+workspace/workspace/
 workspace/*.csv
 workspace/*.bib
 workspace/*.json
+workspace/*.py
+workspace/*.ipynb
+workspace/*.txt
 workspace/helloworld.md
+workspace/test-scenarios.md
+workspace/*_report*.md

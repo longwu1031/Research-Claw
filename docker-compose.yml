@@ -10,7 +10,7 @@ services:
       #   HTTP_PROXY: http://host.docker.internal:7890
       #   HTTPS_PROXY: http://host.docker.internal:7890
     ports:
-      - "28789:28789"
+      - "127.0.0.1:28789:28789"
     environment:
       - OPENCLAW_GATEWAY_TOKEN=research-claw
     volumes:

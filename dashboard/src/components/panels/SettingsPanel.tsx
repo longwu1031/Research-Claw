@@ -1,15 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  App,
   AutoComplete,
   Button,
   Divider,
   Input,
-  Modal,
   Segmented,
   Select,
   Spin,
   Typography,
-  message,
 } from 'antd';
 import { CopyOutlined, LoadingOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -62,13 +61,14 @@ function SettingRow({
 
 function AboutSection() {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const serverVersion = useGatewayStore((s) => s.serverVersion);
   const configTheme = useConfigStore((s) => s.theme);
   const tokens = useMemo(() => getThemeTokens(configTheme), [configTheme]);
 
   const handleCopyDiagnostics = async () => {
     const diagnostics = [
-      `Research-Claw v0.3.0`,
+      `Research-Claw v0.3.1`,
       `Powered by OpenClaw ${serverVersion ?? 'unknown'}`,
       `Gateway: ws://127.0.0.1:28789`,
       `Platform: ${navigator.platform}`,
@@ -113,7 +113,7 @@ function AboutSection() {
               letterSpacing: 1,
             }}
           >
-            Research-Claw v0.3.0
+            Research-Claw v0.3.1
           </span>
         </a>
       </div>
@@ -169,6 +169,7 @@ function AboutSection() {
 
 export default function SettingsPanel() {
   const { t } = useTranslation();
+  const { modal, message } = App.useApp();
   const configTheme = useConfigStore((s) => s.theme);
   const tokens = useMemo(() => getThemeTokens(configTheme), [configTheme]);
   const state = useGatewayStore((s) => s.state);
@@ -301,7 +302,7 @@ export default function SettingsPanel() {
     }
 
     const modalTokens = getThemeTokens(useConfigStore.getState().theme);
-    Modal.confirm({
+    modal.confirm({
       title: t('settings.restartConfirmTitle'),
       content: t('settings.restartConfirmContent'),
       okText: t('settings.save'),
@@ -372,11 +373,11 @@ export default function SettingsPanel() {
         }
       },
     });
-  }, [baseUrl, api, apiKey, provider, textModel, visionEnabled, visionProvider, visionModel, visionBaseUrl, visionApi, visionApiKey, visionSeparateProvider, proxyEnabled, proxyUrl, t]);
+  }, [baseUrl, api, apiKey, provider, textModel, visionEnabled, visionProvider, visionModel, visionBaseUrl, visionApi, visionApiKey, visionSeparateProvider, proxyEnabled, proxyUrl, t, modal, message]);
 
   const handleSavePrompt = useCallback(() => {
     message.success(t('settings.saved'));
-  }, [t]);
+  }, [t, message]);
 
   if (state !== 'connected') {
     return (

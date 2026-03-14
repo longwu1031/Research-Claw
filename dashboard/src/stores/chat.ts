@@ -7,6 +7,8 @@ import { useSessionsStore } from './sessions';
 import { useRadarStore } from './radar';
 import { useCronStore } from './cron';
 import { useUiStore } from './ui';
+import { primaryModelSupportsVision, hasImageModelConfigured } from './config';
+import i18n from '../i18n';
 
 const SILENT_REPLY_PATTERN = /^\s*NO_REPLY\s*$/;
 
@@ -242,16 +244,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     }));
 
     try {
-      // Convert attachments to RPC format expected by OpenClaw gateway
+      // Convert attachments to RPC format
       const rpcAttachments = attachments?.map((att, idx) => {
-        // Strip data URL prefix: "data:image/png;base64,ABC..." -> "ABC..."
         const match = /^data:[^;]+;base64,(.+)$/.exec(att.dataUrl);
         const content = match ? match[1] : att.dataUrl;
-        // Derive file extension from MIME (e.g. image/png → .png)
         const ext = att.mimeType.split('/')[1]?.replace('jpeg', 'jpg') ?? 'png';
-        console.log(
-          `[Chat] attachment[${idx}]: type=${att.mimeType}, b64len=${content.length}, prefix_stripped=${!!match}`,
-        );
         return {
           type: 'image',
           mimeType: att.mimeType,
@@ -260,11 +257,82 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         };
       });
 
+      // -----------------------------------------------------------------
+      // Unified image handling:
+      //
+      // OpenClaw does NOT persist image data in chat.history (it strips
+      // base64 from content blocks on purpose). So chat images disappear
+      // after refresh. Additionally, text-only primary models cause
+      // detectAndLoadPromptImages to silently DROP all chat attachments.
+      //
+      // Solution: ALWAYS save images to workspace for persistence +
+      // agent access. Then:
+      //   - Vision primary: also send as attachments (inline to model)
+      //   - Text-only primary: only send file paths (agent uses /image tool)
+      //
+      // Workspace paths are embedded as [rc-image:uploads/xxx.png] markers
+      // in the message text, which MessageBubble can detect and render
+      // after history reload.
+      // -----------------------------------------------------------------
+      let finalMessage = text;
+      let finalAttachments = rpcAttachments;
+      const visionCapable = primaryModelSupportsVision();
+
+      // Scenario 3 guard: text-only primary, no imageModel configured.
+      // The gateway would silently drop attachments AND there's no /image tool
+      // fallback. Block the send with a clear error instead of a cryptic 400.
+      if (rpcAttachments?.length && !visionCapable && !hasImageModelConfigured()) {
+        set({
+          sending: false,
+          lastError: i18n.t('chat.imageNotSupported'),
+        });
+        return;
+      }
+
+      if (rpcAttachments?.length) {
+        const savedPaths: string[] = [];
+        for (const att of rpcAttachments) {
+          const ts = Date.now();
+          const safeName = att.fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const wsPath = `uploads/${ts}-${safeName}`;
+          try {
+            await client.request('rc.ws.saveImage', {
+              path: wsPath,
+              base64: att.content,
+            });
+            savedPaths.push(wsPath);
+          } catch (err) {
+            console.warn('[Chat] Failed to save image to workspace:', err);
+          }
+        }
+
+        if (savedPaths.length > 0) {
+          // Embed markers for MessageBubble to render after history reload
+          const markers = savedPaths.map((p) => `[rc-image:${p}]`).join(' ');
+
+          if (!visionCapable) {
+            // Text-only primary: agent needs file paths for /image tool.
+            // Paths are relative to workspace root (NOT prefixed with "workspace/")
+            // because the /image tool already resolves relative to workspace.
+            const pathList = savedPaths.join(', ');
+            finalMessage = text
+              + `\n\n${markers}`
+              + `\n[User attached ${savedPaths.length} image(s): ${pathList}]`;
+            finalAttachments = undefined; // would be dropped by gateway anyway
+            console.log('[Chat] Text-only primary — images routed to workspace for /image tool');
+          } else {
+            // Vision primary: send attachments inline + markers for persistence
+            finalMessage = text + (savedPaths.length ? `\n\n${markers}` : '');
+            console.log('[Chat] Vision primary — images sent inline + saved to workspace');
+          }
+        }
+      }
+
       const result = await client.request<{ runId: string }>('chat.send', {
-        message: text,
+        message: finalMessage,
         sessionKey: get().sessionKey,
         idempotencyKey: crypto.randomUUID(),
-        ...(rpcAttachments?.length ? { attachments: rpcAttachments } : {}),
+        ...(finalAttachments?.length ? { attachments: finalAttachments } : {}),
       });
       set({ runId: result.runId, sending: false, streaming: true });
     } catch (err) {

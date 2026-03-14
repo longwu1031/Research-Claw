@@ -149,7 +149,7 @@ describe('Config store', () => {
       mockGatewayState = { client: null, state: 'disconnected' };
       useConfigStore.setState({
         gatewayConfig: null,
-        _configRetryCount: 3,
+        _configRetryCount: 5,
       });
       useConfigStore.getState().evaluateConfig();
       expect(useConfigStore.getState().bootState).toBe('needs_setup');
@@ -157,15 +157,16 @@ describe('Config store', () => {
     });
 
     it('sets needs_setup when gatewayConfig is null and retries exhausted', () => {
-      useConfigStore.setState({ gatewayConfig: null, _configRetryCount: 3 });
+      useConfigStore.setState({ gatewayConfig: null, _configRetryCount: 5 });
       useConfigStore.getState().evaluateConfig();
       expect(useConfigStore.getState().bootState).toBe('needs_setup');
     });
 
     it('sets needs_setup when no model primary and retries exhausted', () => {
+      mockGatewayState = { client: null, state: 'disconnected' };
       useConfigStore.setState({
         gatewayConfig: { agents: { defaults: {} }, models: { providers: {} } },
-        _configRetryCount: 3,
+        _configRetryCount: 5,
       });
       useConfigStore.getState().evaluateConfig();
       expect(useConfigStore.getState().bootState).toBe('needs_setup');

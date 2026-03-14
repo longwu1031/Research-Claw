@@ -33,6 +33,7 @@ export interface GatewayClientOptions {
   onClose?: (code: number, reason: string) => void;
   onStateChange?: (state: ConnectionState) => void;
   onGap?: (expected: number, actual: number) => void;
+  onConnectError?: (code: string, message: string) => void;
 }
 
 interface PendingRequest {
@@ -45,6 +46,7 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const NON_RECOVERABLE_CODES = new Set([
   'UNAUTHORIZED',
   'FORBIDDEN',
+  'NOT_PAIRED',
   'DEVICE_AUTH_PUBLIC_KEY_INVALID',
   'DEVICE_AUTH_DEVICE_ID_MISMATCH',
 ]);
@@ -109,6 +111,7 @@ export class GatewayClient {
     };
 
     ws.onclose = (ev: CloseEvent) => {
+      console.warn(`[GatewayClient] WebSocket closed: code=${ev.code} reason="${ev.reason}" state=${this.state}`);
       const wasConnected = this.state === 'connected';
       this.opts.onClose?.(ev.code, ev.reason);
 
@@ -199,7 +202,8 @@ export class GatewayClient {
     let identity;
     try {
       identity = await getDeviceIdentity();
-    } catch {
+    } catch (e) {
+      console.error('[GatewayClient] Device identity generation failed:', e);
       this.reconnector.cancel();
       this.ws?.close(1000, 'device identity unavailable');
       this.setState('disconnected');
@@ -253,7 +257,7 @@ export class GatewayClient {
         maxProtocol: MAX_PROTOCOL,
         client: {
           id: clientId,
-          version: this.opts.clientVersion ?? '0.3.0',
+          version: this.opts.clientVersion ?? '0.3.1',
           platform,
           mode: clientMode,
           displayName: this.opts.clientName ?? 'Research-Claw Dashboard',
@@ -286,10 +290,16 @@ export class GatewayClient {
         this.opts.onHello?.(hello);
       },
       reject: (err) => {
-        if (err instanceof GatewayRequestError && NON_RECOVERABLE_CODES.has(err.code)) {
-          this.reconnector.cancel();
-          this.ws?.close();
-          this.setState('disconnected');
+        console.error('[GatewayClient] Connect handshake rejected:', err instanceof GatewayRequestError ? `${err.code}: ${err.message}` : err);
+        if (err instanceof GatewayRequestError) {
+          this.opts.onConnectError?.(err.code, err.message);
+          const isNonRecoverable = NON_RECOVERABLE_CODES.has(err.code) ||
+            (err.code === 'INVALID_REQUEST' && err.message.includes('token'));
+          if (isNonRecoverable) {
+            this.reconnector.cancel();
+            this.ws?.close();
+            this.setState('disconnected');
+          }
         }
       },
       timer,

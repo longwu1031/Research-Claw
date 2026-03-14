@@ -2,24 +2,29 @@
  * Integration Tests: Issues 6, 7, 8
  *
  * Issue 6: Settings save confirmation dialog (Modal.confirm before config.apply)
- * Issue 7: Version v0.3.0 + glow header + GitHub link
+ * Issue 7: Version v0.3.1 + glow header + GitHub link
  * Issue 8: Notification system (Channel A polling, Channel B card extraction, dedup, read persistence)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 
-// --- Mock antd Modal.confirm ---
+// --- Mock antd App.useApp (modal.confirm + message) ---
 const mockModalConfirm = vi.fn();
+const mockMessageSuccess = vi.fn();
+const mockMessageError = vi.fn();
 vi.mock('antd', async () => {
   const actual = await vi.importActual<typeof import('antd')>('antd');
-  return {
-    ...actual,
-    Modal: {
-      ...actual.Modal,
-      confirm: (...args: unknown[]) => mockModalConfirm(...args),
-    },
-  };
+  // App.useApp() must return theme-aware modal/message instances
+  const MockApp = Object.assign(
+    (props: Record<string, unknown>) => (actual.App as unknown as (p: unknown) => unknown)(props),
+    { ...actual.App, useApp: () => ({
+      modal: { confirm: (...args: unknown[]) => mockModalConfirm(...args) },
+      message: { success: mockMessageSuccess, error: mockMessageError },
+      notification: {},
+    }) },
+  );
+  return { ...actual, App: MockApp };
 });
 
 // --- Mock i18n ---
@@ -257,10 +262,10 @@ describe('Issue 6: Settings save confirmation dialog', () => {
 });
 
 // ============================================================
-// Issue 7: Version v0.3.0 + GitHub link
+// Issue 7: Version v0.3.1 + GitHub link
 // ============================================================
 
-describe('Issue 7: Version v0.3.0 and GitHub link', () => {
+describe('Issue 7: Version v0.3.1 and GitHub link', () => {
   beforeEach(() => {
     useGatewayStore.setState({
       client: createMockClient(),
@@ -274,11 +279,11 @@ describe('Issue 7: Version v0.3.0 and GitHub link', () => {
     });
   });
 
-  it('renders "Research-Claw v0.3.0" text in the about section', () => {
+  it('renders "Research-Claw v0.3.1" text in the about section', () => {
     render(<SettingsPanel />);
 
     // The glowing header should contain the version string
-    expect(screen.getByText('Research-Claw v0.3.0')).toBeInTheDocument();
+    expect(screen.getByText('Research-Claw v0.3.1')).toBeInTheDocument();
   });
 
   it('renders a link to the GitHub repository', () => {
@@ -311,21 +316,21 @@ describe('Issue 7: Version v0.3.0 and GitHub link', () => {
     }
   });
 
-  it('contains v0.3.0 in the glow header (info row removed to avoid duplication)', () => {
+  it('contains v0.3.1 in the glow header (info row removed to avoid duplication)', () => {
     render(<SettingsPanel />);
 
     // Version is shown only in the glow header, not as a separate info row
-    expect(screen.getByText('Research-Claw v0.3.0')).toBeInTheDocument();
+    expect(screen.getByText('Research-Claw v0.3.1')).toBeInTheDocument();
   });
 
-  it('diagnostics copy text contains v0.3.0', () => {
-    // Verify by reading the source — the diagnostics array includes 'Research-Claw v0.3.0'
+  it('diagnostics copy text contains v0.3.1', () => {
+    // Verify by reading the source — the diagnostics array includes 'Research-Claw v0.3.1'
     // This is a structural test: the AboutSection handleCopyDiagnostics builds the string
-    // with a hardcoded 'Research-Claw v0.3.0' on line 71 of SettingsPanel.tsx.
+    // with a hardcoded 'Research-Claw v0.3.1' on line 71 of SettingsPanel.tsx.
     // We verify the rendered component has the version header which uses the same string.
     render(<SettingsPanel />);
 
-    const versionHeader = screen.getByText('Research-Claw v0.3.0');
+    const versionHeader = screen.getByText('Research-Claw v0.3.1');
     expect(versionHeader).toBeInTheDocument();
 
     // The version header should be styled with the red glow color

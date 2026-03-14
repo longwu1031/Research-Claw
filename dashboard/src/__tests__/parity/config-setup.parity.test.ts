@@ -457,7 +457,7 @@ describe('Full SetupWizard flow — config.get -> edit -> config.apply', () => {
       expect(parsed.models.providers.zai.apiKey).toBe('sk-test-key-12345');
       expect(parsed.models.providers.zai.api).toBe('openai-completions');
 
-      // Model metadata from preset
+      // Model metadata from preset (text-only per preset, gateway uses /image tool for vision)
       const models = parsed.models.providers.zai.models;
       expect(models[0].id).toBe('glm-5');
       expect(models[0].reasoning).toBe(true);

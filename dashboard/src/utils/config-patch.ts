@@ -64,6 +64,15 @@ function cleanUrl(url: string): string {
 /**
  * Resolve full model definition from provider presets.
  * Returns all metadata fields (input, contextWindow, maxTokens, reasoning).
+ *
+ * Uses the preset's actual `input` capability so that OpenClaw's model routing
+ * works correctly:
+ *   - Text-only primary model → detectAndLoadPromptImages skips images →
+ *     agent uses `/image` tool with imageModel (e.g. glm-4.6v) instead.
+ *   - Vision-capable primary model → images sent inline to the primary model.
+ *
+ * Unknown models (not in preset) default to ['text', 'image'] so that custom
+ * models don't silently drop images.
  */
 function resolveModelDef(provider: string, modelId: string): Record<string, unknown> {
   const preset = getPreset(provider);

@@ -32,13 +32,15 @@ export const useGatewayStore = create<GatewayState>()((set, get) => ({
       url,
       token,
       clientName: 'research-claw-dashboard',
-      clientVersion: '0.3.0',
+      clientVersion: '0.3.1',
       platform: 'browser',
       onStateChange: (state: ConnectionState) => {
         set({ state });
       },
       onHello: (hello: HelloOk) => {
         get().setServerInfo(hello);
+        // Reset retry counter for fresh evaluation on (re)connection
+        useConfigStore.setState({ _configRetryCount: 0 });
         // Auto-fetch config on every (re)connection
         useConfigStore.getState().loadGatewayConfig();
       },
@@ -47,6 +49,12 @@ export const useGatewayStore = create<GatewayState>()((set, get) => ({
       },
       onGap: (expected: number, actual: number) => {
         console.warn(`[Gateway] Event sequence gap: expected ${expected}, got ${actual}`);
+      },
+      onConnectError: (code: string, message: string) => {
+        if (code === 'NOT_PAIRED' || code === 'UNAUTHORIZED' ||
+            (code === 'INVALID_REQUEST' && message.includes('token'))) {
+          useConfigStore.getState().setBootState('needs_token');
+        }
       },
     });
 

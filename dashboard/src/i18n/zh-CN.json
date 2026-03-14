@@ -32,7 +32,8 @@
     "imageOnly": "仅支持图片文件",
     "imageTooLarge": "图片超过 5MB 限制",
     "dragDropHint": "拖放图片到此处",
-    "thinkingLabel": "思考过程"
+    "thinkingLabel": "思考过程",
+    "imageNotSupported": "当前模型不支持图片处理。请在设置中启用独立视觉模型，或切换到支持图片的主模型（如 Claude、GPT-4o）。"
   },
   "library": {
     "title": "文献库",
@@ -319,7 +320,11 @@
     "connecting": "正在连接网关...",
     "gatewayUnreachable": "无法连接网关",
     "retryConnect": "重试连接",
-    "gatewayHint": "请确保 OpenClaw 网关正在运行：openclaw gateway --force"
+    "gatewayHint": "请确保 OpenClaw 网关正在运行：openclaw gateway --force",
+    "needsToken": "需要网关令牌",
+    "needsTokenHint": "请输入网关令牌以连接。令牌可在 Docker 日志或 .env 文件中找到。",
+    "tokenPlaceholder": "网关令牌",
+    "connectWithToken": "连接"
   },
   "status": {
     "connected": "已连接",
@@ -332,7 +337,7 @@
     "tokensOut": "输出",
     "heartbeat": "心跳",
     "version": "v{{version}}",
-    "versionFallback": "v0.3.0",
+    "versionFallback": "v0.3.1",
     "modelDefault": "（默认）",
     "modelNA": "N/A"
   },

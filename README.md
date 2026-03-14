@@ -8,7 +8,7 @@
 
 你做导师，科研龙虾做团队。24/7 本地运行，一切产出专属于你。
 
-[![Version](https://img.shields.io/badge/version-v0.3.0-EF4444?style=flat-square&logo=github)](https://github.com/wentorai/Research-Claw/releases)
+[![Version](https://img.shields.io/badge/version-v0.3.1-EF4444?style=flat-square&logo=github)](https://github.com/wentorai/Research-Claw/releases)
 [![License](https://img.shields.io/badge/license-BSL_1.1-3B82F6?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/Node.js-%3E%3D22-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![Platform](https://img.shields.io/badge/platform-macOS_%7C_Windows-lightgrey?style=flat-square)](#)
@@ -314,9 +314,23 @@ GHCR / Docker Hub 在大陆被墙，需要先配置镜像加速器。打开 Dock
 
 #### 4. 配置 & 使用
 
-浏览器访问 `http://127.0.0.1:28789` → **Setup Wizard** → 填入 API Key → 开始使用。
+启动后查看日志获取 Dashboard 地址（含 token）：
 
-> **数据持久化**：数据库、配置、工作区均挂载在具名 volume，容器删除后数据不丢失。
+```bash
+docker logs research-claw
+# 找到: [research-claw] Open dashboard: http://127.0.0.1:28789/?token=xxx
+```
+
+浏览器打开该链接 → **Setup Wizard** → 填入 API Key → 开始使用。
+
+> **Token 认证**：Docker 模式使用 token 认证（`--auth token`），因为容器内无法完成本地安装默认的浏览器设备认证流程。
+> - **docker run**：不设环境变量时，每次启动自动生成随机 token，通过 `docker logs` 查看。
+> - **docker compose**：`docker-compose.yml` 中默认 token 为 `research-claw`，直接访问 `http://127.0.0.1:28789/?token=research-claw`。
+> - **自定义 token**：设置环境变量 `OPENCLAW_GATEWAY_TOKEN=your-token`（docker run 用 `-e`，compose 在 `environment` 中修改）。
+>
+> **安全说明**：配置文件中的 `dangerouslyDisableDeviceAuth: true` 是 Docker 部署的必要设置——容器网络桥接非 loopback，无法通过设备配对认证。`allowedOrigins` 限制仅允许 `127.0.0.1` 和 `localhost` 访问 Dashboard，端口默认仅映射到 `127.0.0.1:28789`（不对外暴露）。
+
+> **数据持久化**：数据库、配置、工作区均挂载在具名 volume（`rc-config`、`rc-data`、`rc-workspace`），容器删除后数据不丢失。
 >
 > **代理设置**：如果你的 LLM API（如 OpenAI）需要代理访问，取消 `docker-compose.yml` 中 `environment` 部分的注释，填入 `http://host.docker.internal:7890`（Docker 容器访问宿主机代理的标准地址）。
 

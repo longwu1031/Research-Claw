@@ -224,7 +224,7 @@ export const SAMPLE_CONNECT_PARAMS = {
   maxProtocol: 3,
   client: {
     id: 'openclaw-control-ui',
-    version: '0.3.0',
+    version: '0.3.1',
     platform: 'browser',
     mode: 'ui',
     displayName: 'Research-Claw Dashboard',

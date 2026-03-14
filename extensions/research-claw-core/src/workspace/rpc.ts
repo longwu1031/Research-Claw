@@ -209,7 +209,25 @@ export function registerWorkspaceRpc(
   });
 
   // -----------------------------------------------------------------------
-  // 8. rc.ws.openExternal — Open a file with the system default application
+  // 8. rc.ws.saveImage — Save a base64-encoded image to workspace
+  //    params: { path: string, base64: string, mimeType?: string }
+  //    Used by the dashboard to persist chat image uploads so that the
+  //    agent's /image tool (imageModel) can access them by file path.
+  // -----------------------------------------------------------------------
+  registerMethod('rc.ws.saveImage', async (params: Record<string, unknown>) => {
+    try {
+      const filePath = requireString(params, 'path');
+      const base64 = requireString(params, 'base64');
+      const buffer = Buffer.from(base64, 'base64');
+      const result = await service.save(filePath, buffer, 'Upload chat image');
+      return { path: result.path, size: result.size };
+    } catch (err) {
+      mapError(err);
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // 9. rc.ws.openExternal — Open a file with the system default application
   //    params: { path: string }
   // -----------------------------------------------------------------------
   registerMethod('rc.ws.openExternal', async (params: Record<string, unknown>) => {

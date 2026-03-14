@@ -30,7 +30,7 @@ describe('buildSaveConfig', () => {
     expect((defaults.imageModel as Record<string, string>).primary).toBe('openai/gpt-4o');
   });
 
-  it('marks text-only models correctly from preset (ZAI glm-5)', () => {
+  it('respects preset input capabilities — text-only models stay text-only', () => {
     const config = buildSaveConfig(null, {
       provider: 'zai',
       baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
@@ -40,7 +40,7 @@ describe('buildSaveConfig', () => {
 
     const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
     const models = providers.zai.models as Array<{ id: string; input: string[] }>;
-    // glm-5 is text-only in the preset → must NOT include 'image'
+    // glm-5 is text-only in preset → gateway uses /image tool with imageModel instead
     expect(models[0].id).toBe('glm-5');
     expect(models[0].input).toEqual(['text']);
   });

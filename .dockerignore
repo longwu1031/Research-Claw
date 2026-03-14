@@ -15,9 +15,14 @@ workspace/.openclaw
 workspace/memory
 workspace/sources
 workspace/skills_collection
+workspace/outputs
+workspace/workspace
 workspace/*.csv
 workspace/*.bib
 workspace/*.json
+workspace/*.py
+workspace/*.ipynb
+workspace/*.txt
 
 # Git
 .git

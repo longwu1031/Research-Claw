@@ -1,6 +1,0 @@
-skills名称,skills来源链接,skills英文介绍,skills中文介绍,skills_类型,是否完全离线可运行,是否安全
-claude-scientific-skills,https://github.com/K-Dense-AI/claude-scientific-skills,A set of ready to use Agent Skills for research, science, engineering, analysis, finance and writing.,一套可直接使用的 Agent Skills，涵盖研究、科学、工程、分析和写作领域。,学术写作,是,是
-chatgpt-prompts-for-academic-writing,https://github.com/ahmetbersoz/chatgpt-prompts-for-academic-writing,This list of writing prompts covers brainstorming research ideas, improving language and style, conducting literature reviews, and developing research plans.,学术写作提示词列表，涵盖研究构思、语言润色、文献综述和研究计划制定等任务。,学术写作,是,是
-MetaScreener,https://github.com/ChaokunHong/MetaScreener,AI-powered tool for efficient abstract and PDF screening in systematic reviews.,AI 驱动的系统性综述筛选工具，高效处理摘要和 PDF 文献筛选。,文献综述,是,是
-biopython,https://github.com/biopython/biopython,Official git repository for Biopython - tools for biological computation.,Biopython 官方仓库，提供生物计算和生物信息学分析工具集。,学科专业,是,是
-betterposter,https://github.com/GerkeLab/betterposter,Another R Markdown Better Scientific Poster template.,基于 R Markdown 的现代学术海报模板，遵循"Better Poster"设计理念。,学术会议,是,是

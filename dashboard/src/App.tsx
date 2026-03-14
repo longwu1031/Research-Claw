@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, Suspense, useState } from 'react';
-import { ConfigProvider, Spin, Result, Button } from 'antd';
+import { App as AntdApp, ConfigProvider, Spin, Result, Button, Input, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { getAntdThemeConfig } from './styles/theme';
 import { useConfigStore } from './stores/config';
@@ -16,17 +16,21 @@ import StatusBar from './components/StatusBar';
 import SetupWizard from './components/setup/SetupWizard';
 import type { ChatStreamEvent } from './gateway/types';
 
-const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ?? 'ws://127.0.0.1:28789';
+/** Derive WebSocket URL from page origin so Docker port mapping always works.
+ *  When served by the gateway (port 28789), origin already points to gateway.
+ *  When served by Vite dev server (different port), fall back to default gateway address. */
+const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ??
+  (window.location.port && window.location.port !== '28789'
+    ? 'ws://127.0.0.1:28789'
+    : `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`);
 
-/** Read gateway token from URL ?token=xxx or localStorage fallback */
-function getGatewayToken(): string | undefined {
+/** Default token for local Docker deployment */
+const DEFAULT_TOKEN = 'research-claw';
+
+/** Read gateway token: URL ?token=xxx overrides default */
+function getGatewayToken(): string {
   const params = new URLSearchParams(window.location.search);
-  const urlToken = params.get('token');
-  if (urlToken) {
-    localStorage.setItem('rc-gateway-token', urlToken);
-    return urlToken;
-  }
-  return localStorage.getItem('rc-gateway-token') ?? undefined;
+  return params.get('token') || DEFAULT_TOKEN;
 }
 
 const BP_MOBILE = 1024;
@@ -193,10 +197,12 @@ export default function App() {
   if (bootState === 'pending') {
     return (
       <ConfigProvider theme={antdTheme}>
-        <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', gap: 16 }}>
-          <Spin size="large" />
-          <span style={{ color: 'var(--text-secondary)', fontSize: 14 }}>{t('boot.connecting')}</span>
-        </div>
+        <AntdApp>
+          <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', gap: 16 }}>
+            <Spin size="large" />
+            <span style={{ color: 'var(--text-secondary)', fontSize: 14 }}>{t('boot.connecting')}</span>
+          </div>
+        </AntdApp>
       </ConfigProvider>
     );
   }
@@ -204,18 +210,59 @@ export default function App() {
   if (bootState === 'gateway_unreachable') {
     return (
       <ConfigProvider theme={antdTheme}>
-        <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
-          <Result
-            status="error"
-            title={t('boot.gatewayUnreachable')}
-            subTitle={t('boot.gatewayHint')}
-            extra={
-              <Button type="primary" onClick={() => { setBootState('pending'); connect(GATEWAY_URL, getGatewayToken()); }}>
-                {t('boot.retryConnect')}
-              </Button>
-            }
-          />
-        </div>
+        <AntdApp>
+          <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+            <Result
+              status="error"
+              title={t('boot.gatewayUnreachable')}
+              subTitle={t('boot.gatewayHint')}
+              extra={
+                <Button type="primary" onClick={() => { setBootState('pending'); connect(GATEWAY_URL, getGatewayToken()); }}>
+                  {t('boot.retryConnect')}
+                </Button>
+              }
+            />
+          </div>
+        </AntdApp>
+      </ConfigProvider>
+    );
+  }
+
+  if (bootState === 'needs_token') {
+    return (
+      <ConfigProvider theme={antdTheme}>
+        <AntdApp>
+          <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+            <Result
+              status="warning"
+              title={t('boot.needsToken')}
+              subTitle={t('boot.needsTokenHint')}
+              extra={
+                <Space.Compact style={{ width: 360 }}>
+                  <Input.Password
+                    id="rc-token-input"
+                    placeholder={t('boot.tokenPlaceholder')}
+                    onPressEnter={(e) => {
+                      const val = (e.target as HTMLInputElement).value.trim();
+                      if (val) {
+                        window.location.href = `${window.location.pathname}?token=${encodeURIComponent(val)}`;
+                      }
+                    }}
+                  />
+                  <Button type="primary" onClick={() => {
+                    const input = document.getElementById('rc-token-input') as HTMLInputElement;
+                    const val = input?.value?.trim();
+                    if (val) {
+                      window.location.href = `${window.location.pathname}?token=${encodeURIComponent(val)}`;
+                    }
+                  }}>
+                    {t('boot.connectWithToken')}
+                  </Button>
+                </Space.Compact>
+              }
+            />
+          </div>
+        </AntdApp>
       </ConfigProvider>
     );
   }
@@ -223,7 +270,9 @@ export default function App() {
   if (bootState === 'needs_setup') {
     return (
       <ConfigProvider theme={antdTheme}>
-        <SetupWizard />
+        <AntdApp>
+          <SetupWizard />
+        </AntdApp>
       </ConfigProvider>
     );
   }
@@ -236,6 +285,7 @@ export default function App() {
 
   return (
     <ConfigProvider theme={antdTheme}>
+      <AntdApp>
       <div
         style={{
           height: '100vh',
@@ -350,6 +400,7 @@ export default function App() {
           `}</style>
         </>
       )}
+      </AntdApp>
     </ConfigProvider>
   );
 }

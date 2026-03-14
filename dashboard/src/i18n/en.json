@@ -32,7 +32,8 @@
     "imageOnly": "Only image files are supported",
     "imageTooLarge": "Image exceeds 5MB limit",
     "dragDropHint": "Drop images here",
-    "thinkingLabel": "Thinking"
+    "thinkingLabel": "Thinking",
+    "imageNotSupported": "Current model does not support image input. Please enable a separate vision model in Settings, or switch to a model that supports images (e.g. Claude, GPT-4o)."
   },
   "library": {
     "title": "Literature Library",
@@ -319,7 +320,11 @@
     "connecting": "Connecting to gateway...",
     "gatewayUnreachable": "Gateway unreachable",
     "retryConnect": "Retry connection",
-    "gatewayHint": "Make sure the OpenClaw gateway is running: openclaw gateway --force"
+    "gatewayHint": "Make sure the OpenClaw gateway is running: openclaw gateway --force",
+    "needsToken": "Gateway Token Required",
+    "needsTokenHint": "Enter the gateway token to connect. Find it in Docker logs or your .env file.",
+    "tokenPlaceholder": "Gateway token",
+    "connectWithToken": "Connect"
   },
   "status": {
     "connected": "Connected",
@@ -332,7 +337,7 @@
     "tokensOut": "Out",
     "heartbeat": "Heartbeat",
     "version": "v{{version}}",
-    "versionFallback": "v0.3.0",
+    "versionFallback": "v0.3.1",
     "modelDefault": "(default)",
     "modelNA": "N/A"
   },
