@@ -324,6 +324,18 @@ else
           try { fs.accessSync('extensions/wentor-connect/dist'); }
           catch { delete c.plugins.entries['wentor-connect']; changed = true; }
         }
+        // Ensure gateway auth token matches Dashboard DEFAULT_TOKEN
+        // (previous openclaw setup may have written a different token)
+        if (c.gateway?.auth) {
+          if (c.gateway.auth.token && c.gateway.auth.token !== 'research-claw') {
+            c.gateway.auth.token = 'research-claw';
+            changed = true;
+          }
+          if (c.gateway.auth.mode && c.gateway.auth.mode !== 'none' && c.gateway.auth.mode !== 'token') {
+            c.gateway.auth.mode = 'token';
+            changed = true;
+          }
+        }
         if (changed) {
           fs.writeFileSync(f, JSON.stringify(c, null, 2) + '\n');
           anyChanged = true;
