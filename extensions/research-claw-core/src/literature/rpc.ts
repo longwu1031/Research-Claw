@@ -120,7 +120,14 @@ export function registerLiteratureRpc(registerMethod: RegisterMethod, service: L
       if (params.read_status !== undefined) filter.read_status = String(params.read_status);
       if (params.year !== undefined) filter.year = Number(params.year);
       if (params.source !== undefined) filter.source = String(params.source);
-      if (params.tag !== undefined) filter.tag = String(params.tag);
+      // Support both singular 'tag' and plural 'tags' parameters
+      if (params.tags !== undefined) {
+        const tagsParam = params.tags;
+        filter.tags = Array.isArray(tagsParam) ? tagsParam.map(String) : [String(tagsParam)];
+      } else if (params.tag !== undefined) {
+        // Backward compatibility: single tag → array
+        filter.tags = [String(params.tag)];
+      }
       if (params.collection_id !== undefined) filter.collection_id = String(params.collection_id);
       if (params.has_pdf !== undefined) filter.has_pdf = Boolean(params.has_pdf);
 

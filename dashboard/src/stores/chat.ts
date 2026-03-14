@@ -119,16 +119,55 @@ function extractCardNotifications(text: string): void {
   CARD_NOTIFICATION_RE.lastIndex = 0;
 }
 
+/**
+ * Regex matching `<think>`, `<thinking>`, `<thought>`, `<antthinking>` tags and their content.
+ * Source: openclaw/src/shared/text/reasoning-tags.ts:7 (THINKING_TAG_RE)
+ * Source: openclaw/ui/src/ui/chat/message-extract.ts:66
+ *
+ * We use a simpler approach than OpenClaw's full state-machine (which also handles
+ * code-region awareness) since chat messages rarely contain code fences with these tags.
+ */
+const THINK_TAG_RE = /<\s*(?:think(?:ing)?|thought|antthinking)\b[^<>]*>[\s\S]*?<\s*\/\s*(?:think(?:ing)?|thought|antthinking)\s*>/gi;
+
+/**
+ * Strip thinking/reasoning tags from text.
+ * Matches OpenClaw behavior: message-extract.ts:10-11
+ *   if (role === "assistant") return stripThinkingTags(text);
+ */
+function stripThinkingTags(text: string): string {
+  THINK_TAG_RE.lastIndex = 0;
+  return text.replace(THINK_TAG_RE, '').trimStart();
+}
+
+/**
+ * Extract raw text from a ChatMessage, then strip thinking tags for assistant messages.
+ * Source: openclaw/ui/src/ui/chat/message-extract.ts:18-26 (extractText)
+ * Source: openclaw/ui/src/ui/chat/message-extract.ts:85-109 (extractRawText — only joins type:'text' blocks)
+ */
 function extractText(msg: ChatMessage): string {
-  if (msg.text) return msg.text;
-  if (typeof msg.content === 'string') return msg.content;
-  if (Array.isArray(msg.content)) {
-    return msg.content
+  // Get raw text — only from type:'text' blocks (NOT type:'thinking')
+  // This matches OpenClaw's extractRawText (message-extract.ts:92-100)
+  let raw: string;
+  if (msg.text) {
+    raw = msg.text;
+  } else if (typeof msg.content === 'string') {
+    raw = msg.content;
+  } else if (Array.isArray(msg.content)) {
+    raw = msg.content
       .filter((c) => c.type === 'text' && c.text)
       .map((c) => c.text!)
       .join('');
+  } else {
+    raw = '';
   }
-  return '';
+
+  // For assistant messages, strip thinking tags from text
+  // Source: message-extract.ts:10-11
+  if (msg.role === 'assistant') {
+    return stripThinkingTags(raw);
+  }
+
+  return raw;
 }
 
 interface ChatState {
@@ -166,6 +205,16 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const client = useGatewayStore.getState().client;
     if (!client || !client.isConnected) {
       set({ lastError: 'Not connected to gateway' });
+      return;
+    }
+
+    // Empty message guard — matches OpenClaw sendChatMessage (chat.ts:160-164):
+    //   const msg = message.trim();
+    //   const hasAttachments = attachments && attachments.length > 0;
+    //   if (!msg && !hasAttachments) { return null; }
+    const trimmed = text.trim();
+    const hasAttachments = attachments !== undefined && attachments.length > 0;
+    if (!trimmed && !hasAttachments) {
       return;
     }
 
@@ -277,7 +326,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           if (m.role !== 'user') return m;
           const rawText = extractText(m);
           const stripped = stripInjectedContext(rawText);
-          return stripped ? { ...m, text: stripped, content: undefined } : null;
+          if (!stripped) return null;
+          // Preserve image content blocks from history (don't wipe content)
+          // Only set text override; keep original content for image rendering
+          return { ...m, text: stripped };
         })
         .filter(Boolean) as ChatMessage[];
       set({ messages: cleaned });
@@ -304,10 +356,15 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         // Skip non-visible roles (e.g. toolResult deltas)
         if (event.message && !isVisibleRole(event.message.role)) return;
         const deltaText = event.message ? extractText(event.message) : '';
-        set((s) => ({
-          streaming: true,
-          streamText: (s.streamText ?? '') + deltaText,
-        }));
+        // Gateway sends full accumulated text in each delta (not incremental).
+        // Match OpenClaw native UI: REPLACE stream text, taking the longer value.
+        set((s) => {
+          const current = s.streamText ?? '';
+          return {
+            streaming: true,
+            streamText: !current || deltaText.length >= current.length ? deltaText : current,
+          };
+        });
         break;
       }
 

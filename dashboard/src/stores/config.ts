@@ -35,6 +35,8 @@ export interface GatewayConfig {
   env?: Record<string, string>;
   raw?: string | null;
   baseHash?: string | null;
+  /** Project-level config (before global merge). Used by buildSaveConfig. */
+  projectConfig?: Record<string, unknown> | null;
 }
 
 export type BootState = 'pending' | 'ready' | 'needs_setup' | 'gateway_unreachable';
@@ -133,6 +135,7 @@ export const useConfigStore = create<ConfigState>()((set, get) => {
           env: configObj.env as GatewayConfig['env'],
           raw: snapshot.raw ?? null,
           baseHash: snapshot.hash ?? null,
+          projectConfig: (snapshot.config ?? null) as Record<string, unknown> | null,
         };
         set({ gatewayConfig: gc, gatewayConfigLoading: false });
         get().evaluateConfig();

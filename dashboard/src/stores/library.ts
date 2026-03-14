@@ -5,38 +5,53 @@ import { useGatewayStore } from './gateway';
 
 export type ReadStatus = 'unread' | 'reading' | 'read' | 'reviewed';
 
+/**
+ * Paper interface — aligned with Research-Claw Core plugin.
+ * Source: extensions/research-claw-core/src/literature/service.ts (lines 50-71)
+ *
+ * The gateway sends `null` for empty nullable fields (NOT undefined).
+ * Every `T | null` field below matches the plugin's Paper interface exactly.
+ */
 export interface Paper {
   id: string;
   title: string;
   authors: string[];
-  year: number;
-  abstract?: string;
-  doi?: string;
-  venue?: string;
-  url?: string;
-  arxiv_id?: string;
-  notes?: string;
-  pdf_path?: string;
-  is_own?: boolean;
-  source?: string;
-  tags: string[];
-  read_status: ReadStatus;
-  rating?: number;
+  abstract: string | null;
+  doi: string | null;
+  url: string | null;
+  arxiv_id: string | null;
+  pdf_path: string | null;
+  source: string | null;
+  source_id: string | null;
+  venue: string | null;
+  year: number | null;
   added_at: string;
   updated_at: string;
+  read_status: ReadStatus;
+  rating: number | null;
+  notes: string | null;
+  bibtex_key: string | null;
+  metadata: Record<string, unknown>;
+  tags?: string[];
+  /** Dashboard-only field — not present in plugin response */
+  is_own?: boolean;
 }
 
+/**
+ * Tag interface — aligned with Research-Claw Core plugin.
+ * Source: extensions/research-claw-core/src/literature/service.ts (lines 82-88)
+ */
 export interface Tag {
   id: string;
   name: string;
-  color?: string;
+  color: string | null;
   paper_count?: number;
   created_at: string;
 }
 
 export interface PaperFilter {
   read_status?: ReadStatus;
-  tag?: string;
+  tags?: string[];
   year?: number;
   sort?: 'added_at' | 'year' | 'title';
 }
@@ -90,7 +105,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
         const params: Record<string, unknown> = {};
         const effectiveFilter = filter ?? get().filters;
         if (effectiveFilter.read_status) params.read_status = effectiveFilter.read_status;
-        if (effectiveFilter.tag) params.tag = effectiveFilter.tag;
+        if (effectiveFilter.tags?.length) params.tags = effectiveFilter.tags;
         if (effectiveFilter.year) params.year = effectiveFilter.year;
         if (effectiveFilter.sort) {
           // Backend defaults to DESC; title should be ascending (A→Z)
@@ -177,6 +192,8 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
         papers: s.papers.filter((p) => p.id !== id),
         total: s.total - 1,
       }));
+      // Refresh tags so counts and visibility stay in sync
+      get().loadTags();
     } catch {
       // Reload to restore consistent state
       get().loadPapers();

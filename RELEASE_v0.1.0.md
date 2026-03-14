@@ -47,8 +47,8 @@ Windows: [Manual Install Guide](docs/WINDOWS_INSTALL.md) | Recommended: use WSL2
 - Notification system with bell icon
 
 ### Skills Ecosystem
-- 487 academic skills via `@wentorai/research-plugins`
-- 13 agent tools for 6 academic databases
+- 431 academic skills via `@wentorai/research-plugins`
+- 6 agent tools for 6 academic databases
 - 150 MCP configurations for external tool integration
 - 6 curated skill lists by research category
 

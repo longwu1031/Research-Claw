@@ -1,5 +1,10 @@
 /**
- * Build & parse OpenClaw config patches for the dashboard.
+ * Build & parse OpenClaw config for the dashboard.
+ *
+ * Uses config.apply (full replacement + restart) instead of config.patch
+ * (deep merge) so that stale providers are cleaned up, all model metadata
+ * (contextWindow, maxTokens, reasoning) comes from presets, and the
+ * gateway's restoreRedactedValues() handles API key round-trips.
  *
  * Uses OpenClaw's native provider keys (e.g. 'zai', 'openai', 'anthropic')
  * so that ProviderCapabilities and imageModel fallback logic work correctly.
@@ -16,7 +21,7 @@ export interface ConfigPatchInput {
   baseUrl: string;
   /** API protocol: 'openai-completions' | 'anthropic-messages' | etc. */
   api?: string;
-  /** Omit or empty to preserve existing key via config.patch deep merge */
+  /** Omit or empty → preserve existing key via sentinel round-trip */
   apiKey?: string;
   textModel: string;
   visionEnabled?: boolean;
@@ -56,25 +61,56 @@ function cleanUrl(url: string): string {
   return url.replace(/\/+$/, '').replace(/\/chat\/completions$/, '');
 }
 
-function makeModelDef(id: string, input: string[]) {
-  return { id, name: id, input, contextWindow: 128000, maxTokens: 65536 };
-}
-
 /**
- * Resolve a model's input capabilities from the provider preset.
- * Returns the preset's `input` array if found, otherwise defaults to
- * ['text', 'image'] (optimistic — assume unknown models are multimodal).
+ * Resolve full model definition from provider presets.
+ * Returns all metadata fields (input, contextWindow, maxTokens, reasoning).
  */
-function resolveModelInput(provider: string, modelId: string): string[] {
+function resolveModelDef(provider: string, modelId: string): Record<string, unknown> {
   const preset = getPreset(provider);
-  const modelDef = preset.models.find((m) => m.id === modelId);
-  return modelDef?.input ?? ['text', 'image'];
+  const known = preset.models.find((m) => m.id === modelId);
+  return {
+    id: modelId,
+    name: modelId,
+    reasoning: known?.reasoning ?? false,
+    input: known?.input ?? ['text', 'image'],
+    contextWindow: known?.contextWindow ?? 128_000,
+    maxTokens: known?.maxTokens ?? 16_384,
+  };
 }
 
 /**
- * Build a config.patch payload using native OpenClaw provider keys.
+ * Resolve the existing API key from project config for a given provider.
+ * Returns the key (may be REDACTED_SENTINEL) or undefined if not found.
  */
-export function buildConfigPatch(input: ConfigPatchInput): Record<string, unknown> {
+function resolveExistingApiKey(
+  projectConfig: Record<string, unknown> | null,
+  providerKey: string,
+): string | undefined {
+  if (!projectConfig) return undefined;
+  const providers = (projectConfig.models as Record<string, unknown> | undefined)
+    ?.providers as Record<string, Record<string, unknown>> | undefined;
+  const key = providers?.[providerKey]?.apiKey;
+  return typeof key === 'string' ? key : undefined;
+}
+
+/**
+ * Build the complete project-level config by merging user edits into
+ * the current project config.
+ *
+ * This produces a full config ready for config.apply (not a partial patch).
+ * Only providers referenced by the user appear in the output — stale
+ * providers (e.g. old 'rc') are naturally excluded.
+ *
+ * API keys: when the user doesn't supply a new key, the existing key
+ * (which may be __OPENCLAW_REDACTED__) is preserved. The gateway's
+ * restoreRedactedValues() restores sentinels to real values on write.
+ */
+export function buildSaveConfig(
+  currentConfig: Record<string, unknown> | null,
+  input: ConfigPatchInput,
+): Record<string, unknown> {
+  const base = currentConfig ? structuredClone(currentConfig) : {};
+
   const providerKey = input.provider;
   const baseUrl = cleanUrl(input.baseUrl);
   const apiType = input.api || 'openai-completions';
@@ -84,15 +120,11 @@ export function buildConfigPatch(input: ConfigPatchInput): Record<string, unknow
   const useSeparateProvider = hasVision && visionProviderKey !== providerKey;
 
   // --- Text provider entry ---
-  // Use preset's actual model capabilities for `input` array.
-  // OpenClaw checks model.input.includes("image") to decide whether to inject
-  // images into the conversation context — text-only models must NOT be marked
-  // as image-capable, otherwise the provider API rejects with 400.
-  const textModels = [makeModelDef(input.textModel, resolveModelInput(providerKey, input.textModel))];
+  const textModels = [resolveModelDef(providerKey, input.textModel)];
 
   // Same provider, different vision model → add to same provider entry
   if (hasVision && !useSeparateProvider && input.visionModel !== input.textModel) {
-    textModels.push(makeModelDef(input.visionModel!, resolveModelInput(providerKey, input.visionModel!)));
+    textModels.push(resolveModelDef(providerKey, input.visionModel!));
   }
 
   const textProvider: Record<string, unknown> = {
@@ -100,8 +132,13 @@ export function buildConfigPatch(input: ConfigPatchInput): Record<string, unknow
     api: apiType,
     models: textModels,
   };
+
+  // API key: use new value if provided, otherwise preserve existing (may be sentinel)
   if (input.apiKey) {
     textProvider.apiKey = input.apiKey;
+  } else {
+    const existing = resolveExistingApiKey(currentConfig, providerKey);
+    if (existing) textProvider.apiKey = existing;
   }
 
   const providers: Record<string, unknown> = {
@@ -113,11 +150,18 @@ export function buildConfigPatch(input: ConfigPatchInput): Record<string, unknow
     const visionEntry: Record<string, unknown> = {
       baseUrl: cleanUrl(input.visionBaseUrl || input.baseUrl),
       api: input.visionApi || apiType,
-      models: [makeModelDef(input.visionModel!, resolveModelInput(visionProviderKey, input.visionModel!))],
+      models: [resolveModelDef(visionProviderKey, input.visionModel!)],
     };
-    if (input.visionApiKey || input.apiKey) {
-      visionEntry.apiKey = input.visionApiKey || input.apiKey;
+
+    if (input.visionApiKey) {
+      visionEntry.apiKey = input.visionApiKey;
+    } else if (input.apiKey) {
+      visionEntry.apiKey = input.apiKey;
+    } else {
+      const existing = resolveExistingApiKey(currentConfig, visionProviderKey);
+      if (existing) visionEntry.apiKey = existing;
     }
+
     providers[visionProviderKey] = visionEntry;
   }
 
@@ -126,25 +170,31 @@ export function buildConfigPatch(input: ConfigPatchInput): Record<string, unknow
     ? `${visionProviderKey}/${input.visionModel}`
     : `${providerKey}/${input.textModel}`;
 
+  // Preserve existing agent defaults (heartbeat, models aliases, etc.)
+  const existingAgents = base.agents as Record<string, unknown> | undefined;
+  const existingDefaults = existingAgents?.defaults as Record<string, unknown> | undefined;
   const defaults: Record<string, unknown> = {
+    ...existingDefaults,
     model: { primary: `${providerKey}/${input.textModel}` },
     imageModel: { primary: visionRef },
   };
 
-  // --- Patch ---
-  const patch: Record<string, unknown> = {
-    agents: { defaults },
-    models: { providers },
-  };
+  // --- Build full config ---
+  const result: Record<string, unknown> = { ...base };
+  result.agents = { ...existingAgents, defaults };
+  result.models = { providers };
 
   if (input.proxyUrl !== undefined) {
-    patch.env = {
+    result.env = {
+      ...(base.env as Record<string, string> | undefined),
       HTTP_PROXY: input.proxyUrl,
       HTTPS_PROXY: input.proxyUrl,
     };
+  } else if (base.env !== undefined) {
+    result.env = base.env;
   }
 
-  return patch;
+  return result;
 }
 
 /**

@@ -17,6 +17,29 @@ Tracks: `Dashboard` (S1), `Modules` (S2), `Plugins` (S3), `Prompt` (S4), `Infra`
 
 ## Log
 
+### 2026-03-14 — Claude Memory System Restructuring
+
+- [2026-03-14] [Infra] [Claude] Restructured Claude Code memory system (MEMORY.md 251→124 lines, was truncating at 200)
+- [2026-03-14] [Infra] [Claude] Created `research-claw-dev-guide.md` — full RC architecture reference (plugin, dashboard, DB, RPC, build commands)
+- [2026-03-14] [Infra] [Claude] Created `research-plugins-dev-guide.md` — full RP architecture reference (taxonomy, tools, progressive disclosure)
+- [2026-03-14] [Infra] [Claude] Created `openclaw-gotchas.md` — 13 critical OC gotchas rescued from truncated zone (handler protocol, config sentinel, Node mismatch, tool execute signature, client ID whitelist, skills 1-level scan)
+- [2026-03-14] [Infra] [Claude] Created `web-api-completed.md` — archived web/api historical decisions and bug fixes
+- [2026-03-14] [Infra] [Claude] Rebalanced: Web/API 52%→5% of index, RC/RP 19%→50% of index, OC gotchas now always loaded
+- [2026-03-14] [Infra] [Sylvan] Added progressive disclosure architecture (v1.3.0), skill-router deletion note, gap analysis reference to memory files
+
+### 2026-03-14 — v0.2.0 Release
+
+- [2026-03-14] [Dashboard] [Claude] Fix: library tags now refresh after paper deletion (loadTags after deletePaper)
+- [2026-03-14] [Dashboard] [Claude] Fix: tag filter empty state shows "clear filter" button instead of full empty state
+- [2026-03-14] [Dashboard] [Claude] Fix: library empty state text no longer mentions PDF drag (use workspace instead)
+- [2026-03-14] [Dashboard] [Claude] Fix: workspace removed redundant header upload button; upload auto-refreshes tree
+- [2026-03-14] [Dashboard] [Claude] Fix: radar noFindings text now guides users to refresh button
+- [2026-03-14] [Dashboard] [Claude] Fix: settings save now shows confirmation dialog before gateway restart
+- [2026-03-14] [Dashboard] [Claude] Enhancement: version bumped to v0.2.0 with red glow styling + GitHub link
+- [2026-03-14] [Dashboard] [Claude] Verified: notification system (Channel A polling + Channel B card extraction) working correctly
+- [2026-03-14] [Dashboard] [Claude] Added 51 integration tests (3 test files) covering all 8 fixes
+- [2026-03-14] [Infra] [Claude] Version bump v0.1.0 → v0.2.0 across all packages, plugins, bootstrap, and documentation
+
 ### 2026-03-11 — Project Initialization
 
 - [2026-03-11] [Infra] [Claude] Created satellite workspace: 105 files, own git, initial commit
@@ -528,7 +551,7 @@ Comprehensive audit of tool registration, cron/heartbeat, plugin loading, bootst
 
 **Audit Findings (no code changes needed):**
 - [2026-03-12] [Infra] [Claude] **Tool registration**: All 27 tools (12 lit + 6 task + 6 ws + 3 radar) correctly registered via `api.registerTool()` + listed in `tools.alsoAllow` + documented in TOOLS.md. 3-layer checklist verified.
-- [2026-03-12] [Infra] [Claude] **research-plugins**: 13 external tools + 487 skills correctly configured via `plugins.load.paths` + `skills.load.extraDirs`. Plugin manifest `openclaw.plugin.json` valid.
+- [2026-03-12] [Infra] [Claude] **research-plugins**: 6 external tools + 431 skills correctly configured via `plugins.load.paths` + `skills.load.extraDirs`. Plugin manifest `openclaw.plugin.json` valid.
 - [2026-03-12] [Infra] [Claude] **Bootstrap assembly**: 8 files in `workspace/` correctly loaded by OpenClaw `bootstrap-files.ts` → `buildAgentSystemPrompt()`. AGENTS.md (17KB) within 20KB single-file limit.
 
 **Files changed:** `config/openclaw.json`, `extensions/research-claw-core/index.ts`, `extensions/research-claw-core/src/tasks/service.ts`

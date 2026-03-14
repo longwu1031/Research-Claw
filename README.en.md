@@ -8,11 +8,11 @@
 
 You define the question. Research-Claw runs the lab. 24/7 on your machine. Every output, yours alone.
 
-[![Version](https://img.shields.io/badge/version-v0.2.0-EF4444?style=flat-square&logo=github)](https://github.com/wentorai/Research-Claw/releases)
+[![Version](https://img.shields.io/badge/version-v0.3.0-EF4444?style=flat-square&logo=github)](https://github.com/wentorai/Research-Claw/releases)
 [![License](https://img.shields.io/badge/license-BSL_1.1-3B82F6?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/Node.js-%3E%3D22-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![Platform](https://img.shields.io/badge/platform-macOS_%7C_Linux_%7C_Windows-lightgrey?style=flat-square)](#)
-[![Skills](https://img.shields.io/badge/skills-487-EF4444?style=flat-square)](https://www.npmjs.com/package/@wentorai/research-plugins)
+[![Skills](https://img.shields.io/badge/skills-431-EF4444?style=flat-square)](https://www.npmjs.com/package/@wentorai/research-plugins)
 
 [🌐 wentor.ai](https://wentor.ai) · [🇨🇳 中文](README.md) · [📖 Docs](docs/00-reference-map.md) · [🪲 Issues](https://github.com/wentorai/Research-Claw/issues)
 
@@ -133,7 +133,7 @@ Tech: React 18 + Vite 6 + Ant Design 5 + Zustand 5 · Bilingual EN/ZH-CN (245 i1
 openclaw plugins install @wentorai/research-plugins
 ```
 
-One command to install **487 academic skills** covering the full research workflow:
+One command to install **431 academic skills** covering the full research workflow:
 
 | Category | Count | Capabilities |
 |:--|:--|:--|
@@ -145,7 +145,7 @@ One command to install **487 academic skills** covering the full research workfl
 | Tools | 51 | Terminal · Jupyter · Document processing |
 | Integrations | 35 | Zotero · GitHub · Slack · arXiv |
 
-**13 Agent tools** connecting directly to academic databases: Semantic Scholar · arXiv · OpenAlex · CrossRef · PubMed · Unpaywall
+**6 Agent tools** connecting directly to academic databases: Semantic Scholar · arXiv · OpenAlex · CrossRef · PubMed · Unpaywall
 
 **150 MCP configurations** plug-and-play:
 - **Reference managers**: Zotero · EndNote · Mendeley
@@ -180,7 +180,7 @@ One command to install **487 academic skills** covering the full research workfl
 │                              │                                      │
 │   L3  patches/               ▼                                      │
 │       ~20 lines · 7 files    @wentorai/research-plugins             │
-│                              487 skills · 13 tools · 150 MCP        │
+│                              431 skills · 13 tools · 150 MCP        │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -191,7 +191,7 @@ One command to install **487 academic skills** covering the full research workfl
 | **Satellite, not fork** | OpenClaw as npm dependency — upstream upgrades are absorbed cleanly; coupling surface is ~20 lines of pnpm patch |
 | **4-tier coupling** | L0 filesystem → L1 plugin SDK → L2 WS RPC → L3 patch; each tier is independently replaceable |
 | **Local-first** | SQLite + WAL mode, no database server; all data stays local, only external dependency is the LLM API |
-| **Skills over raw prompts** | 487 SKILL.md files encode domain knowledge structurally; installable/removable per research field |
+| **Skills over raw prompts** | 431 SKILL.md files encode domain knowledge structurally; installable/removable per research field |
 | **Port offset from upstream** | 28789 (Research-Claw) vs 18789 (OpenClaw default) — both can run simultaneously |
 | **Browser-configured** | No config file editing; all settings via Setup Wizard at first launch |
 

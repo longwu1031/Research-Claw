@@ -71,7 +71,7 @@ export class WentorApiClient {
       baseUrl: config.baseUrl ?? 'https://wentor.ai',
       accessToken: config.accessToken,
       timeoutMs: config.timeoutMs ?? 30_000,
-      userAgent: config.userAgent ?? 'Research-Claw/0.1.0',
+      userAgent: config.userAgent ?? 'Research-Claw/0.3.0',
     };
   }
 

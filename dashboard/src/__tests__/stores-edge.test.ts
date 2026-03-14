@@ -39,32 +39,33 @@ describe('Library store filter combinations', () => {
     });
   });
 
-  it('combines status + tag + year + sort in one request', async () => {
+  it('combines status + tags + year + sort in one request', async () => {
     const { useLibraryStore } = await import('../stores/library');
     mockGatewayClient.request.mockResolvedValueOnce({ items: [], total: 0 });
 
     await useLibraryStore.getState().loadPapers({
       read_status: 'read',
-      tag: 'ml',
+      tags: ['ml'],
       year: 2024,
       sort: 'year',
     });
 
     expect(mockGatewayClient.request).toHaveBeenCalledWith('rc.lit.list', {
       read_status: 'read',
-      tag: 'ml',
+      tags: ['ml'],
       year: 2024,
       sort: 'year',
     });
   });
 
-  it('undefined tag is NOT sent to gateway', async () => {
+  it('undefined tags is NOT sent to gateway', async () => {
     const { useLibraryStore } = await import('../stores/library');
     mockGatewayClient.request.mockResolvedValueOnce({ items: [], total: 0 });
 
     await useLibraryStore.getState().loadPapers({});
 
     const callArgs = mockGatewayClient.request.mock.calls[0][1];
+    expect(callArgs).not.toHaveProperty('tags');
     expect(callArgs).not.toHaveProperty('tag');
   });
 
@@ -122,6 +123,9 @@ describe('Library store filter combinations', () => {
       papers: [{
         id: 'p1', title: 'T', authors: [], year: 2025, tags: [],
         read_status: 'unread', rating: 3, added_at: '', updated_at: '',
+        abstract: null, doi: null, url: null, arxiv_id: null, pdf_path: null,
+        source: null, source_id: null, venue: null, notes: null,
+        bibtex_key: null, metadata: {},
       }],
       total: 1,
     });
@@ -133,6 +137,9 @@ describe('Library store filter combinations', () => {
       items: [{
         id: 'p1', title: 'T', authors: [], year: 2025, tags: [],
         read_status: 'unread', rating: 3, added_at: '', updated_at: '',
+        abstract: null, doi: null, url: null, arxiv_id: null, pdf_path: null,
+        source: null, source_id: null, venue: null, notes: null,
+        bibtex_key: null, metadata: {},
       }],
       total: 1,
     });
@@ -150,8 +157,8 @@ describe('Library store filter combinations', () => {
     const { useLibraryStore } = await import('../stores/library');
     useLibraryStore.setState({
       papers: [
-        { id: 'p1', title: 'A', authors: [], year: 2025, tags: [], read_status: 'unread', added_at: '', updated_at: '' },
-        { id: 'p2', title: 'B', authors: [], year: 2025, tags: [], read_status: 'unread', added_at: '', updated_at: '' },
+        { id: 'p1', title: 'A', authors: [], year: 2025, tags: [], read_status: 'unread', added_at: '', updated_at: '', abstract: null, doi: null, url: null, arxiv_id: null, pdf_path: null, source: null, source_id: null, venue: null, rating: null, notes: null, bibtex_key: null, metadata: {} },
+        { id: 'p2', title: 'B', authors: [], year: 2025, tags: [], read_status: 'unread', added_at: '', updated_at: '', abstract: null, doi: null, url: null, arxiv_id: null, pdf_path: null, source: null, source_id: null, venue: null, rating: null, notes: null, bibtex_key: null, metadata: {} },
       ],
       total: 2,
     });

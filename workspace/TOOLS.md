@@ -1,12 +1,12 @@
 ---
 file: TOOLS.md
-version: 3.0
-updated: 2026-03-13
+version: 3.1
+updated: 2026-03-14
 ---
 
 # Tool Reference
 
-## §1 Local Tools (27)
+## §1 Local Tools (28)
 
 ### Library (12 tools)
 
@@ -25,7 +25,7 @@ updated: 2026-03-13
 | `library_import_bibtex` | Import papers from BibTeX content |
 | `library_citation_graph` | Query citation relationships between papers |
 
-### Tasks (6 tools)
+### Tasks (7 tools, incl. send_notification in §3)
 
 | Tool | Purpose |
 |:-----|:--------|
@@ -40,12 +40,12 @@ updated: 2026-03-13
 
 | Tool | Purpose |
 |:-----|:--------|
-| `workspace_save` | Save content to a workspace file (returns file_card) |
-| `workspace_read` | Read a workspace file |
-| `workspace_list` | List files in workspace directory |
-| `workspace_diff` | Show changes since last commit |
-| `workspace_history` | Show file edit history |
-| `workspace_restore` | Restore a previous version of a file |
+| `workspace_save` | Save content to a workspace file. Auto-commits to git. Returns file_card. |
+| `workspace_read` | Read a workspace file (UTF-8 text or base64 binary with metadata). |
+| `workspace_list` | List files in workspace directory. Supports recursive listing and glob patterns. |
+| `workspace_diff` | Show git diff: uncommitted changes, single-file diff, or commit range comparison. Use when user asks "what changed" or wants to compare versions. |
+| `workspace_history` | Show git commit log for the workspace or a specific file. Shows commit hashes, messages, timestamps. Use to find commit hashes for restore. |
+| `workspace_restore` | Restore a file to a previous version by commit hash. Creates a new commit with the restored content. Use when user wants to undo changes or rollback. |
 
 ### Radar (3 tools)
 
@@ -95,12 +95,14 @@ API tools by database:
 - **gateway.restart:** MUST present `approval_card` (risk_level: high) first.
 - Never restart the gateway without explicit user request and confirmation.
 
-## §4 Skill Router
+## §4 Research Skills
 
-Methodology, workflows, and domain-specific guidance are provided by 488
-research-plugins skills. Access them through the **skill-router** skill using its
-3-step protocol (match → read catalog → read skill). Tools always take priority
-over skill guidance.
+Methodology, workflows, and domain-specific guidance are provided by 431
+research-plugins skills organized in 6 categories (literature, research, analysis,
+writing, domains, tools) with 40 subcategory indexes. Skills are loaded
+automatically by OpenClaw's plugin system — browse subcategory indexes to discover
+relevant skills, then read individual SKILL.md files for detailed guidance.
+Tools always take priority over skill guidance.
 
 ## §5 Citation & Export
 
@@ -111,5 +113,5 @@ over skill guidance.
 
 ## §6 Tool Count
 
-27 local + 13 API = **40 registered tools**, all in `openclaw.json` `tools.alsoAllow`.
-488 skills accessible on-demand via skill-router.
+28 local + 13 API = **41 registered tools**, all in `openclaw.json` `tools.alsoAllow`.
+431 skills accessible on-demand via research-plugins (40 subcategory indexes).

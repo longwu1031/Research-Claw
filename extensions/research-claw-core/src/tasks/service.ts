@@ -308,15 +308,22 @@ export class TaskService {
       // Column already exists — ignore
     }
 
-    // Ensure all preset definitions have a row (insert only if missing)
-    const insertStmt = this.db.prepare(
-      `INSERT OR IGNORE INTO rc_cron_state (preset_id, enabled, config, last_run_at, next_run_at)
-       VALUES (?, ?, '{}', NULL, NULL)`,
-    );
-    for (const preset of PRESET_DEFINITIONS) {
-      // deadline_reminders_daily is enabled by default
-      const defaultEnabled = preset.id === 'deadline_reminders_daily' ? 1 : 0;
-      insertStmt.run(preset.id, defaultEnabled);
+    // Only seed preset definitions when table is empty (first initialization).
+    // This ensures deleted presets don't reappear on restart.
+    const count = this.db.prepare(
+      'SELECT COUNT(*) as cnt FROM rc_cron_state',
+    ).get() as { cnt: number };
+
+    if (count.cnt === 0) {
+      const insertStmt = this.db.prepare(
+        `INSERT INTO rc_cron_state (preset_id, enabled, config, last_run_at, next_run_at)
+         VALUES (?, ?, '{}', NULL, NULL)`,
+      );
+      for (const preset of PRESET_DEFINITIONS) {
+        // deadline_reminders_daily is enabled by default
+        const defaultEnabled = preset.id === 'deadline_reminders_daily' ? 1 : 0;
+        insertStmt.run(preset.id, defaultEnabled);
+      }
     }
   }
 
@@ -907,26 +914,31 @@ export class TaskService {
 
   /** List all available cron presets with their current activation state. */
   cronPresetsList(): CronPreset[] {
-    return PRESET_DEFINITIONS.map((def) => {
-      const row = this.db.prepare(
-        'SELECT enabled, config, last_run_at, next_run_at, gateway_job_id FROM rc_cron_state WHERE preset_id = ?',
-      ).get(def.id) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null; gateway_job_id: string | null } | undefined;
+    return PRESET_DEFINITIONS
+      .map((def) => {
+        const row = this.db.prepare(
+          'SELECT enabled, config, last_run_at, next_run_at, gateway_job_id FROM rc_cron_state WHERE preset_id = ?',
+        ).get(def.id) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null; gateway_job_id: string | null } | undefined;
 
-      let config: Record<string, unknown> = {};
-      try { config = JSON.parse(row?.config ?? '{}') as Record<string, unknown>; } catch { /* */ }
+        // Deleted preset: no row in rc_cron_state, omit from list
+        if (!row) return null;
 
-      return {
-        id: def.id,
-        name: def.name,
-        description: def.description,
-        schedule: def.schedule,
-        enabled: row?.enabled === 1,
-        config,
-        last_run_at: row?.last_run_at ?? null,
-        next_run_at: row?.next_run_at ?? null,
-        gateway_job_id: row?.gateway_job_id ?? null,
-      };
-    });
+        let config: Record<string, unknown> = {};
+        try { config = JSON.parse(row.config ?? '{}') as Record<string, unknown>; } catch { /* */ }
+
+        return {
+          id: def.id,
+          name: def.name,
+          description: def.description,
+          schedule: def.schedule,
+          enabled: row.enabled === 1,
+          config,
+          last_run_at: row.last_run_at ?? null,
+          next_run_at: row.next_run_at ?? null,
+          gateway_job_id: row.gateway_job_id ?? null,
+        };
+      })
+      .filter((p): p is CronPreset => p !== null);
   }
 
   /** Activate a cron preset with optional configuration. */
@@ -1001,6 +1013,57 @@ export class TaskService {
     };
 
     return { ok: true, preset };
+  }
+
+  /** Delete a cron preset from the database. */
+  cronPresetsDelete(presetId: string): { ok: true; deleted: string; gateway_job_id: string | null } {
+    const row = this.db.prepare(
+      'SELECT preset_id, gateway_job_id FROM rc_cron_state WHERE preset_id = ?',
+    ).get(presetId) as { preset_id: string; gateway_job_id: string | null } | undefined;
+
+    if (!row) {
+      throw new RpcError(-32001, `Cron preset not found: ${presetId}`);
+    }
+
+    this.db.prepare('DELETE FROM rc_cron_state WHERE preset_id = ?').run(presetId);
+    return { ok: true, deleted: presetId, gateway_job_id: row.gateway_job_id };
+  }
+
+  /** Restore a known preset from PRESET_DEFINITIONS. */
+  cronPresetsRestore(presetId: string): { ok: true; preset: CronPreset } {
+    const def = PRESET_DEFINITIONS.find((p) => p.id === presetId);
+    if (!def) {
+      throw new RpcError(-32001, `Unknown preset: ${presetId}`);
+    }
+
+    // Re-insert with defaults (enabled=0). INSERT OR IGNORE = no-op if already exists.
+    this.db.prepare(
+      `INSERT OR IGNORE INTO rc_cron_state (preset_id, enabled, config, last_run_at, next_run_at)
+       VALUES (?, 0, '{}', NULL, NULL)`,
+    ).run(presetId);
+
+    // Read back the row
+    const row = this.db.prepare(
+      'SELECT enabled, config, last_run_at, next_run_at, gateway_job_id FROM rc_cron_state WHERE preset_id = ?',
+    ).get(presetId) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null; gateway_job_id: string | null };
+
+    let storedConfig: Record<string, unknown> = {};
+    try { storedConfig = JSON.parse(row.config) as Record<string, unknown>; } catch { /* */ }
+
+    return {
+      ok: true,
+      preset: {
+        id: def.id,
+        name: def.name,
+        description: def.description,
+        schedule: def.schedule,
+        enabled: row.enabled === 1,
+        config: storedConfig,
+        last_run_at: row.last_run_at,
+        next_run_at: row.next_run_at,
+        gateway_job_id: row.gateway_job_id,
+      },
+    };
   }
 
   /** Store the gateway cron job ID after activation. */

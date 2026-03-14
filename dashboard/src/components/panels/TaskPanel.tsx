@@ -1,12 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Checkbox, Collapse, Segmented, Switch, Typography } from 'antd';
-import { CheckSquareOutlined } from '@ant-design/icons';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button, Checkbox, Collapse, Input, Segmented, Switch, Tooltip, Typography } from 'antd';
+import { CheckSquareOutlined, RobotOutlined, SearchOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { useTasksStore, type Task, type TaskPriority } from '../../stores/tasks';
+import { useTasksStore, type Task, type TaskPriority, type TaskType, type TaskWithDetails } from '../../stores/tasks';
 import { useGatewayStore } from '../../stores/gateway';
 import { useChatStore } from '../../stores/chat';
 import { getThemeTokens } from '../../styles/theme';
 import { useConfigStore } from '../../stores/config';
+import TaskDetailExpand from './TaskDetailExpand';
 
 const { Text } = Typography;
 
@@ -15,6 +16,12 @@ const PRIORITY_COLORS: Record<TaskPriority, string> = {
   high: '#F59E0B',
   medium: '#3B82F6',
   low: '#6B7280',
+};
+
+const TASK_TYPE_ICONS: Record<TaskType, typeof UserOutlined> = {
+  human: UserOutlined,
+  agent: RobotOutlined,
+  mixed: TeamOutlined,
 };
 
 function isOverdue(deadline: string | null): boolean {
@@ -39,13 +46,15 @@ function formatDeadline(deadline: string | null, t: (key: string, opts?: Record<
 interface TaskRowProps {
   task: Task;
   tokens: ReturnType<typeof getThemeTokens>;
+  perspective: 'all' | 'human' | 'agent';
+  isExpanded: boolean;
+  onToggleExpand: (id: string) => void;
 }
 
-function TaskRow({ task, tokens }: TaskRowProps) {
+function TaskRow({ task, tokens, perspective, isExpanded, onToggleExpand }: TaskRowProps) {
   const { t } = useTranslation();
   const completeTask = useTasksStore((s) => s.completeTask);
   const reopenTask = useTasksStore((s) => s.reopenTask);
-  const send = useChatStore((s) => s.send);
   const priorityColor = PRIORITY_COLORS[task.priority];
   const overdue = isOverdue(task.deadline);
   const soonDue = isWithinDays(task.deadline, 3);
@@ -61,16 +70,19 @@ function TaskRow({ task, tokens }: TaskRowProps) {
   };
 
   const handleClick = () => {
-    send(`Show me details for task: ${task.title}`);
+    onToggleExpand(task.id);
   };
 
   let deadlineColor = tokens.text.muted;
   if (overdue) deadlineColor = '#EF4444';
   else if (soonDue) deadlineColor = '#F59E0B';
 
+  const TypeIcon = TASK_TYPE_ICONS[task.task_type];
+
   return (
     <div
       onClick={handleClick}
+      data-testid={`task-row-${task.id}`}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -81,12 +93,15 @@ function TaskRow({ task, tokens }: TaskRowProps) {
         marginLeft: 16,
         paddingLeft: 12,
         transition: 'background 0.15s ease',
+        background: isExpanded ? tokens.bg.surfaceHover : 'transparent',
       }}
       onMouseEnter={(e) => {
         (e.currentTarget as HTMLElement).style.background = tokens.bg.surfaceHover;
       }}
       onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.background = 'transparent';
+        if (!isExpanded) {
+          (e.currentTarget as HTMLElement).style.background = 'transparent';
+        }
       }}
     >
       <Checkbox
@@ -95,6 +110,15 @@ function TaskRow({ task, tokens }: TaskRowProps) {
         onClick={(e) => e.stopPropagation()}
         style={{ flexShrink: 0 }}
       />
+      {/* GAP-7: Task type badge in All perspective */}
+      {perspective === 'all' && (
+        <Tooltip title={t(`tasks.taskType.${task.task_type}`)}>
+          <TypeIcon
+            data-testid={`task-type-icon-${task.task_type}`}
+            style={{ fontSize: 12, color: tokens.text.muted, flexShrink: 0 }}
+          />
+        </Tooltip>
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <Text
           style={{
@@ -140,12 +164,82 @@ export default function TaskPanel() {
   const showCompleted = useTasksStore((s) => s.showCompleted);
   const toggleCompleted = useTasksStore((s) => s.toggleCompleted);
   const loadTasks = useTasksStore((s) => s.loadTasks);
+  const loadTaskDetail = useTasksStore((s) => s.loadTaskDetail);
   const connState = useGatewayStore((s) => s.state);
+  const send = useChatStore((s) => s.send);
+
+  // GAP-9: Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const handleSearchChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      setSearchQuery(value);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        setDebouncedQuery(value);
+      }, 300);
+    },
+    [],
+  );
+
+  // GAP-8: Expansion state
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [taskDetail, setTaskDetail] = useState<TaskWithDetails | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const handleToggleExpand = useCallback(
+    async (taskId: string) => {
+      if (expandedTaskId === taskId) {
+        setExpandedTaskId(null);
+        setTaskDetail(null);
+        return;
+      }
+      setExpandedTaskId(taskId);
+      setTaskDetail(null);
+      setDetailLoading(true);
+      try {
+        const detail = await loadTaskDetail(taskId);
+        setTaskDetail(detail);
+      } catch {
+        // fallback: show task without detail
+      }
+      setDetailLoading(false);
+    },
+    [expandedTaskId, loadTaskDetail],
+  );
+
+  // GAP-10: Ask Agent handler
+  const handleAskAgent = useCallback(
+    (detail: TaskWithDetails) => {
+      const title = detail.title;
+      let prompt: string;
+
+      switch (detail.task_type) {
+        case 'agent':
+          prompt = t('tasks.askAgent.agentPrompt', { title });
+          break;
+        case 'human':
+          prompt = t('tasks.askAgent.humanPrompt', { title });
+          break;
+        case 'mixed':
+          prompt = t('tasks.askAgent.mixedPrompt', { title });
+          break;
+      }
+
+      send(prompt);
+      setExpandedTaskId(null);
+      setTaskDetail(null);
+    },
+    [send, t],
+  );
 
   // Load tasks when gateway connection is established (or re-established)
   useEffect(() => {
     if (connState === 'connected') {
-      console.log('[TaskPanel] connected → loading tasks');
+      console.log('[TaskPanel] connected -> loading tasks');
       loadTasks();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -156,6 +250,17 @@ export default function TaskPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [perspective, showCompleted]);
 
+  // GAP-9: Filter tasks by search query
+  const filteredTasks = useMemo(() => {
+    if (!debouncedQuery) return tasks;
+    const q = debouncedQuery.toLowerCase();
+    return tasks.filter(
+      (task) =>
+        task.title.toLowerCase().includes(q) ||
+        (task.description && task.description.toLowerCase().includes(q)),
+    );
+  }, [tasks, debouncedQuery]);
+
   // Sort tasks into sections
   const sections = useMemo(() => {
     const now = new Date();
@@ -164,7 +269,7 @@ export default function TaskPanel() {
     const noDeadline: Task[] = [];
     const completed: Task[] = [];
 
-    for (const task of tasks) {
+    for (const task of filteredTasks) {
       if (task.status === 'done' || task.status === 'cancelled') {
         completed.push(task);
       } else if (task.deadline && new Date(task.deadline) < now) {
@@ -191,9 +296,34 @@ export default function TaskPanel() {
     });
 
     return { overdue, upcoming, noDeadline, completed };
-  }, [tasks]);
+  }, [filteredTasks]);
 
   const activeCount = sections.overdue.length + sections.upcoming.length + sections.noDeadline.length;
+
+  // Render a task row with its optional expanded detail
+  const renderTaskWithDetail = (task: Task) => (
+    <React.Fragment key={task.id}>
+      <TaskRow
+        task={task}
+        tokens={tokens}
+        perspective={perspective}
+        isExpanded={expandedTaskId === task.id}
+        onToggleExpand={handleToggleExpand}
+      />
+      {expandedTaskId === task.id && (
+        <TaskDetailExpand
+          detail={taskDetail}
+          loading={detailLoading}
+          tokens={tokens}
+          onClose={() => {
+            setExpandedTaskId(null);
+            setTaskDetail(null);
+          }}
+          onAskAgent={handleAskAgent}
+        />
+      )}
+    </React.Fragment>
+  );
 
   // Empty state
   if (!loading && tasks.length === 0) {
@@ -226,6 +356,19 @@ export default function TaskPanel() {
         />
       </div>
 
+      {/* GAP-9: Search input */}
+      <div style={{ padding: '0 16px 8px' }}>
+        <Input
+          prefix={<SearchOutlined style={{ color: tokens.text.muted }} />}
+          placeholder={t('tasks.search')}
+          value={searchQuery}
+          onChange={handleSearchChange}
+          allowClear
+          size="small"
+          data-testid="task-search-input"
+        />
+      </div>
+
       {/* Show completed toggle */}
       <div style={{ padding: '0 16px 8px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
         <Text style={{ fontSize: 12, color: tokens.text.muted }}>{t('tasks.showCompleted')}</Text>
@@ -238,9 +381,7 @@ export default function TaskPanel() {
         {sections.overdue.length > 0 && (
           <div>
             <SectionHeader title={t('tasks.overdue')} count={sections.overdue.length} color="#EF4444" />
-            {sections.overdue.map((task) => (
-              <TaskRow key={task.id} task={task} tokens={tokens} />
-            ))}
+            {sections.overdue.map(renderTaskWithDetail)}
           </div>
         )}
 
@@ -248,9 +389,7 @@ export default function TaskPanel() {
         {sections.upcoming.length > 0 && (
           <div style={{ marginTop: sections.overdue.length > 0 ? 8 : 0 }}>
             <SectionHeader title={t('tasks.upcoming')} count={sections.upcoming.length} />
-            {sections.upcoming.map((task) => (
-              <TaskRow key={task.id} task={task} tokens={tokens} />
-            ))}
+            {sections.upcoming.map(renderTaskWithDetail)}
           </div>
         )}
 
@@ -258,9 +397,7 @@ export default function TaskPanel() {
         {sections.noDeadline.length > 0 && (
           <div style={{ marginTop: 8 }}>
             <SectionHeader title={t('tasks.noDeadline')} count={sections.noDeadline.length} />
-            {sections.noDeadline.map((task) => (
-              <TaskRow key={task.id} task={task} tokens={tokens} />
-            ))}
+            {sections.noDeadline.map(renderTaskWithDetail)}
           </div>
         )}
 
@@ -277,17 +414,24 @@ export default function TaskPanel() {
                       {t('tasks.completedCount', { count: sections.completed.length })}
                     </Text>
                   ),
-                  children: sections.completed.map((task) => (
-                    <TaskRow key={task.id} task={task} tokens={tokens} />
-                  )),
+                  children: sections.completed.map(renderTaskWithDetail),
                 },
               ]}
             />
           </div>
         )}
 
+        {/* No search results */}
+        {debouncedQuery && filteredTasks.length === 0 && (
+          <div style={{ padding: '24px 16px', textAlign: 'center' }}>
+            <Text type="secondary" style={{ fontSize: 13 }}>
+              {t('tasks.noResults')}
+            </Text>
+          </div>
+        )}
+
         {/* No active tasks info */}
-        {activeCount === 0 && sections.completed.length > 0 && (
+        {activeCount === 0 && sections.completed.length > 0 && !debouncedQuery && (
           <div style={{ padding: '24px 16px', textAlign: 'center' }}>
             <Text type="secondary" style={{ fontSize: 13 }}>
               {t('tasks.allDone')}

@@ -111,9 +111,10 @@ describe('Chat store', () => {
         expect(useChatStore.getState().streamText).toBe('Hello');
       });
 
-      it('concatenates multiple deltas', () => {
+      it('replaces stream text with longer accumulated delta (matches gateway protocol)', () => {
         useChatStore.setState({ runId: 'run-1', streaming: true, streamText: '' });
 
+        // Gateway sends full accumulated text in each delta, not incremental
         useChatStore.getState().handleChatEvent({
           runId: 'run-1',
           sessionKey: 'main',
@@ -125,7 +126,20 @@ describe('Chat store', () => {
           runId: 'run-1',
           sessionKey: 'main',
           state: 'delta',
-          message: { role: 'assistant', text: ' world' },
+          message: { role: 'assistant', text: 'Hello world' },
+        });
+
+        expect(useChatStore.getState().streamText).toBe('Hello world');
+      });
+
+      it('keeps longer stream text when delta is shorter (e.g. throttled/reordered)', () => {
+        useChatStore.setState({ runId: 'run-1', streaming: true, streamText: 'Hello world' });
+
+        useChatStore.getState().handleChatEvent({
+          runId: 'run-1',
+          sessionKey: 'main',
+          state: 'delta',
+          message: { role: 'assistant', text: 'Hello' },
         });
 
         expect(useChatStore.getState().streamText).toBe('Hello world');

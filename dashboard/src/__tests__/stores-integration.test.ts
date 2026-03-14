@@ -75,15 +75,15 @@ describe('Library store integration', () => {
     );
   });
 
-  it('loadPapers with tag filter sends tag param', async () => {
+  it('loadPapers with tags filter sends tags param', async () => {
     const { useLibraryStore } = await import('../stores/library');
     mockGatewayClient.request.mockResolvedValueOnce({ items: [], total: 0 });
 
-    await useLibraryStore.getState().loadPapers({ tag: 'ml' });
+    await useLibraryStore.getState().loadPapers({ tags: ['ml'] });
 
     expect(mockGatewayClient.request).toHaveBeenCalledWith(
       'rc.lit.list',
-      expect.objectContaining({ tag: 'ml' }),
+      expect.objectContaining({ tags: ['ml'] }),
     );
   });
 
@@ -143,6 +143,9 @@ describe('Library store integration', () => {
           read_status: 'unread',
           added_at: '2025-01-01T00:00:00Z',
           updated_at: '2025-01-01T00:00:00Z',
+          abstract: null, doi: null, url: null, arxiv_id: null, pdf_path: null,
+          source: null, source_id: null, venue: null, rating: null, notes: null,
+          bibtex_key: null, metadata: {},
         },
       ],
       total: 1,
@@ -162,6 +165,9 @@ describe('Library store integration', () => {
           read_status: 'unread',
           added_at: '2025-01-01T00:00:00Z',
           updated_at: '2025-01-01T00:00:00Z',
+          abstract: null, doi: null, url: null, arxiv_id: null, pdf_path: null,
+          source: null, source_id: null, venue: null, rating: null, notes: null,
+          bibtex_key: null, metadata: {},
         },
       ],
       total: 1,

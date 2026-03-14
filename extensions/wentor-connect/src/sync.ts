@@ -51,7 +51,7 @@ export class SyncManager {
   constructor(
     api: WentorApiClient,
     auth: AuthManager,
-    clientVersion: string = '0.1.0',
+    clientVersion: string = '0.3.0',
   ) {
     this.api = api;
     this.auth = auth;

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Dropdown, message, Modal, Typography, Upload } from 'antd';
+import { Button, Dropdown, message, Modal, Spin, Typography, Upload } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   FileOutlined,
@@ -18,6 +18,7 @@ import {
   FolderViewOutlined,
   CopyOutlined,
   DeleteOutlined,
+  LoadingOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGatewayStore } from '../../stores/gateway';
@@ -273,6 +274,7 @@ export default function WorkspacePanel() {
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [commits, setCommits] = useState<CommitEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [workspaceRoot, setWorkspaceRoot] = useState('');
   const uploadingRef = useRef(false);
@@ -289,6 +291,7 @@ export default function WorkspacePanel() {
       setTree(treeResult.tree);
       setWorkspaceRoot(treeResult.workspace_root ?? '');
       setCommits(historyResult.commits);
+      setHasLoaded(true);
     } catch (err) {
       console.warn('[WorkspacePanel] loadData failed:', err);
     } finally {
@@ -336,7 +339,10 @@ export default function WorkspacePanel() {
           const body = await res.json().catch(() => ({}));
           throw new Error(body?.error?.message ?? `Upload failed (${res.status})`);
         }
+        message.success(t('workspace.uploadSuccess'));
+        // Refresh tree immediately + delayed retry (gateway may need time to index)
         await loadData();
+        setTimeout(() => loadData(), 1000);
       } catch (err) {
         console.error('[WorkspacePanel] upload failed:', err);
         message.error(t('workspace.uploadFailed', { defaultValue: 'Upload failed' }));
@@ -347,6 +353,15 @@ export default function WorkspacePanel() {
     },
     [loadData, t],
   );
+
+  // Loading state — show spinner during initial data fetch
+  if (!hasLoaded && connState === 'connected' && tree.length === 0) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', minHeight: 200 }}>
+        <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
+      </div>
+    );
+  }
 
   // Empty state
   if (!loading && tree.length === 0 && commits.length === 0) {
@@ -375,19 +390,6 @@ export default function WorkspacePanel() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Header with upload */}
-      <div style={{ padding: '8px 16px', display: 'flex', justifyContent: 'flex-end' }}>
-        <Upload
-          accept="*"
-          showUploadList={false}
-          beforeUpload={handleUpload}
-        >
-          <Button icon={<UploadOutlined />} size="small" type="text">
-            {t('workspace.upload')}
-          </Button>
-        </Upload>
-      </div>
-
       {/* Recent changes */}
       <RecentChanges commits={commits} tokens={tokens} />
 

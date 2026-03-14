@@ -87,7 +87,7 @@ Cross-references: [`05` Plugin SDK details](./modules/05-plugin-sdk.md) | [`03e`
 
                     ┌────────────────────────────────────────────────────────────────┐
                     │              @wentorai/research-plugins (npm)                  │
-                    │              487 Skills · 13 Tools · 150 MCP · 6 Lists         │
+                    │              431 Skills · 6 Tools · 150 MCP · 6 Lists         │
                     └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -128,7 +128,7 @@ The filesystem tier requires **no code changes** to OpenClaw. All customization 
 | **Config** | `config/openclaw.json` | Gateway port, plugin entries, tool allowlist, skill dirs, heartbeat, cron |
 | **Bootstrap** | `AGENTS.md`, `SOUL.md`, `HEARTBEAT.md` | Agent persona, research SOP, heartbeat templates |
 | **Skills** | `skills/_always/research-sop/SKILL.md` | Always-loaded research methodology skill |
-| **Skill Packs** | `node_modules/@wentorai/research-plugins/skills/*` | 487 research skills loaded via `extraDirs` |
+| **Skill Packs** | `node_modules/@wentorai/research-plugins/skills/*` | 431 research skills loaded via `extraDirs` |
 | **Environment** | `.env` | API keys, proxy settings |
 | **Data** | `.research-claw/library.db` | SQLite database (created by plugin at runtime) |
 

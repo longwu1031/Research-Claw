@@ -24,6 +24,12 @@ function extractVisibleText(msg: ChatMessage): string {
   return '';
 }
 
+/** Check if a message has image content blocks */
+function hasImageContent(msg: ChatMessage): boolean {
+  if (!Array.isArray(msg.content)) return false;
+  return msg.content.some((c) => c.type === 'image' || c.type === 'image_url');
+}
+
 export default function ChatView() {
   const { t } = useTranslation();
   const rawMessages = useChatStore((s) => s.messages);
@@ -33,7 +39,7 @@ export default function ChatView() {
   const messages = rawMessages.filter((m) => {
     if (m.role === 'user') return true;
     if (m.role !== 'assistant') return false;
-    return extractVisibleText(m).trim().length > 0;
+    return extractVisibleText(m).trim().length > 0 || hasImageContent(m);
   });
   const streaming = useChatStore((s) => s.streaming);
   const streamText = useChatStore((s) => s.streamText);

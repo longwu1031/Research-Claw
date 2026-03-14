@@ -102,7 +102,7 @@ const plugin: PluginDefinition = {
   id: 'research-claw-core',
   name: 'Research-Claw Core',
   description: 'Literature library, task management, and workspace tracking for academic research',
-  version: '0.1.0',
+  version: '0.3.0',
 
   register(api) {
     const cfg = (api.pluginConfig ?? {}) as PluginConfig;
@@ -163,7 +163,7 @@ const plugin: PluginDefinition = {
       },
     });
 
-    // ── 4. Register tools (27 total) ─────────────────────────────────
+    // ── 4. Register tools (28 total) ─────────────────────────────────
     for (const tool of createLiteratureTools(litService)) {
       api.registerTool(tool);
     }

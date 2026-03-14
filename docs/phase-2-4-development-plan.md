@@ -1287,7 +1287,7 @@ pnpm install @wentorai/research-plugins
 ```
 
 **验证**:
-- `ls node_modules/@wentorai/research-plugins/skills/` — 应有 487 个 SKILL.md 文件 (分目录)
+- `ls node_modules/@wentorai/research-plugins/skills/` — 应有 431 个 SKILL.md 文件 (分目录)
 - `ls node_modules/@wentorai/research-plugins/package.json` — version 应为 1.0.0+
 
 #### Step 2: 验证 skill 加载配置
@@ -1394,7 +1394,7 @@ pnpm start
 1. Chat: "Help me write a literature review"
    - **Expected**: agent has access to writing-related skills from research-plugins
 2. Chat: "What skills do you have?"
-   - **Expected**: agent lists some of the 487 skills
+   - **Expected**: agent lists some of the 431 skills
 
 ### C. Spec 验证协议
 

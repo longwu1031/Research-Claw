@@ -31,7 +31,8 @@
     "attachImage": "添加图片",
     "imageOnly": "仅支持图片文件",
     "imageTooLarge": "图片超过 5MB 限制",
-    "dragDropHint": "拖放图片到此处"
+    "dragDropHint": "拖放图片到此处",
+    "thinkingLabel": "思考过程"
   },
   "library": {
     "title": "文献库",
@@ -45,7 +46,10 @@
       "read": "已读",
       "reviewed": "已审阅"
     },
-    "empty": "暂无论文。\n让助手为你查找论文，或拖放 PDF 文件添加。",
+    "empty": "请驱动你的科研龙虾去探索一个方向，并为你寻找论文吧。",
+    "emptyFiltered": "基于当前的过滤条件，没有找到可用文献。",
+    "clearFilter": "清除筛选",
+    "clearTags": "清除",
     "paperActions": {
       "openPdf": "打开 PDF",
       "cite": "引用",
@@ -97,19 +101,65 @@
       "blocked": "阻塞",
       "done": "完成",
       "cancelled": "已取消"
+    },
+    "taskType": {
+      "human": "我的任务",
+      "agent": "助手任务",
+      "mixed": "协作"
+    },
+    "search": "搜索任务...",
+    "noResults": "未找到匹配的任务。",
+    "detail": {
+      "description": "描述",
+      "tags": "标签",
+      "noTags": "无标签",
+      "relatedPaper": "关联论文",
+      "noPaper": "无关联论文",
+      "subtasks": "子任务",
+      "noSubtasks": "无子任务",
+      "notes": "备注",
+      "noNotes": "暂无备注",
+      "activityLog": "动态",
+      "noActivity": "暂无动态",
+      "loading": "加载详情...",
+      "deadline": "截止日期",
+      "askAgent": "询问助手",
+      "collapse": "收起",
+      "daysRemaining": "还剩 {{days}} 天",
+      "daysOverdue": "已逾期 {{days}} 天"
+    },
+    "activity": {
+      "created": "已创建",
+      "status_changed": "状态变更",
+      "title_changed": "标题更新",
+      "priority_changed": "优先级变更",
+      "deadline_changed": "截止日期变更",
+      "description_changed": "描述更新",
+      "paper_linked": "关联论文",
+      "paper_unlinked": "取消关联论文",
+      "note_added": "添加备注",
+      "completed": "已完成",
+      "tags_changed": "标签更新",
+      "parent_changed": "父任务变更"
+    },
+    "askAgent": {
+      "agentPrompt": "请汇报任务「{{title}}」的当前进展与完成度。包括：已完成的工作、遇到的障碍、预估剩余工作量，以及下一步建议。",
+      "humanPrompt": "基于当前进展和已有信息，请给出任务「{{title}}」的完成建议。包括：推荐的下一步操作、可能需要的资源、以及如何高效完成此任务的指导。",
+      "mixedPrompt": "请汇报任务「{{title}}」的当前状态。我负责的部分进展如何？你负责的部分完成度如何？下一步我们各自需要做什么？"
     }
   },
   "workspace": {
     "title": "工作区",
     "sources": "源文件",
     "outputs": "输出文件",
-    "upload": "上传文件",
+    "upload": "添加文件",
+    "uploadSuccess": "文件已添加到工作区",
     "history": "版本历史",
     "recentChanges": "最近变更",
     "fileTree": "文件树",
     "empty": "工作区为空。\n文件将在你和助手创建时出现在此处。",
     "filesChanged": "{{count}} 个文件已修改",
-    "dragDrop": "拖放文件到此上传",
+    "dragDrop": "拖放文件到此处添加到工作区",
     "contextMenu": {
       "openExternal": "打开文件",
       "openFolder": "打开文件夹",
@@ -160,12 +210,45 @@
     "sources": "来源",
     "noTracking": "暂未追踪任何关键词、作者或期刊。",
     "addTracking": "通过聊天添加追踪",
-    "noFindings": "暂无发现。请让助手扫描最新论文。",
+    "noFindings": "暂无扫描结果。点击上方刷新按钮扫描，或让助手帮你扫描。",
+    "noDiscoveries": "暂无发现。请让助手扫描最新论文。",
     "scanning": "扫描中...",
     "scanResults": "扫描结果",
     "newPapers": "新发现",
     "skipped": "已跳过",
-    "automations": "自动化任务"
+    "automations": "自动化任务",
+    "section": {
+      "trackingProfile": "追踪画像",
+      "automatedTasks": "自动化任务",
+      "recentDiscoveries": "最近发现"
+    },
+    "cron": {
+      "neverRun": "从未运行",
+      "lastRun": "上次运行",
+      "nextRun": "下次运行",
+      "schedule": "运行频率",
+      "relatedConfig": "关联配置",
+      "reminderWindow": "提醒窗口",
+      "askAgent": "要求助手汇报",
+      "askAgentPrompt": "请汇报自动化任务「{{name}}」的当前状况。包括：上次运行结果、是否需要调整配置、是否需要更改时间或删除此任务。",
+      "delete": "删除此任务",
+      "deleteConfirmTitle": "删除自动化任务",
+      "deleteConfirmContent": "确定删除「{{name}}」？删除后将停止运行。如需恢复，请通过聊天告知助手。",
+      "desc": {
+        "arxiv_daily_scan": "扫描 arXiv 寻找与追踪配置匹配的新论文",
+        "citation_tracking_weekly": "检查已追踪论文的新引用情况",
+        "deadline_reminders_daily": "检查即将到期的任务，提前预警",
+        "group_meeting_prep": "检查组会安排，提前准备汇报材料",
+        "weekly_report": "生成本周研究进展报告"
+      },
+      "related": {
+        "arxiv_daily_scan": "追踪画像中的关键词与来源",
+        "citation_tracking_weekly": "文献库中的论文",
+        "deadline_reminders_daily": "任务面板中的截止日期",
+        "group_meeting_prep": "USER.md 中的组会时间",
+        "weekly_report": "文献库+任务+工作区"
+      }
+    }
   },
   "settings": {
     "title": "设置",
@@ -198,7 +281,11 @@
     "saved": "已保存",
     "saveFailed": "保存失败",
     "copyFailed": "复制失败",
-    "save": "保存"
+    "save": "保存",
+    "cancel": "取消",
+    "restartConfirmTitle": "重启网关？",
+    "restartConfirmContent": "保存后将关闭网关并重启。若重启失败，请手动重启。",
+    "aboutGithub": "在 GitHub 上查看"
   },
   "setup": {
     "title": "欢迎使用科研龙虾",
@@ -245,7 +332,7 @@
     "tokensOut": "输出",
     "heartbeat": "心跳",
     "version": "v{{version}}",
-    "versionFallback": "v0.1.0",
+    "versionFallback": "v0.3.0",
     "modelDefault": "（默认）",
     "modelNA": "N/A"
   },
@@ -323,7 +410,7 @@
       "open": "打开",
       "download": "下载",
       "openFile": "打开文件",
-      "openDir": "在工作区中打开",
+      "openDir": "在文件夹中打开",
       "path": "路径",
       "size": "大小",
       "type": "类型",

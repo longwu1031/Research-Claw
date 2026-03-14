@@ -8,11 +8,11 @@
 
 你做导师，科研龙虾做团队。24/7 本地运行，一切产出专属于你。
 
-[![Version](https://img.shields.io/badge/version-v0.2.0-EF4444?style=flat-square&logo=github)](https://github.com/wentorai/Research-Claw/releases)
+[![Version](https://img.shields.io/badge/version-v0.3.0-EF4444?style=flat-square&logo=github)](https://github.com/wentorai/Research-Claw/releases)
 [![License](https://img.shields.io/badge/license-BSL_1.1-3B82F6?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/Node.js-%3E%3D22-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![Platform](https://img.shields.io/badge/platform-macOS_%7C_Linux_%7C_Windows-lightgrey?style=flat-square)](#)
-[![Skills](https://img.shields.io/badge/skills-487-EF4444?style=flat-square)](https://www.npmjs.com/package/@wentorai/research-plugins)
+[![Skills](https://img.shields.io/badge/skills-431-EF4444?style=flat-square)](https://www.npmjs.com/package/@wentorai/research-plugins)
 
 [🌐 wentor.ai](https://wentor.ai) · [🇬🇧 English](README.en.md) · [📖 文档](docs/00-reference-map.md) · [🪲 问题反馈](https://github.com/wentorai/Research-Claw/issues)
 
@@ -138,7 +138,7 @@ curl -fsSL https://wentor.ai/install.sh | bash
 openclaw plugins install @wentorai/research-plugins
 ```
 
-一行命令，接入 **487 个学术技能**，覆盖科研全流程：
+一行命令，接入 **431 个学术技能**，覆盖科研全流程：
 
 | 类别 | 技能数 | 典型能力 |
 |:--|:--|:--|
@@ -150,7 +150,7 @@ openclaw plugins install @wentorai/research-plugins
 | 效率工具 | 51 | Terminal · Jupyter · 文档处理 |
 | 外部集成 | 35 | Zotero · GitHub · Slack · arXiv |
 
-**13 个 Agent 工具**直连学术数据库：Semantic Scholar · arXiv · OpenAlex · CrossRef · PubMed · Unpaywall
+**6 个 Agent 工具**直连学术数据库：Semantic Scholar · arXiv · OpenAlex · CrossRef · PubMed · Unpaywall
 
 **150 个 MCP 配置**即插即用：
 - **文献管理**：Zotero · EndNote · Mendeley
@@ -185,7 +185,7 @@ openclaw plugins install @wentorai/research-plugins
 │                              │                                      │
 │   L3  patches/               ▼                                      │
 │       ~20 lines · 7 files    @wentorai/research-plugins             │
-│                              487 skills · 13 tools · 150 MCP        │
+│                              431 skills · 13 tools · 150 MCP        │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -196,7 +196,7 @@ openclaw plugins install @wentorai/research-plugins
 | **Satellite 而非 Fork** | OpenClaw 作为 npm 依赖引入，上游可随时升级，耦合面控制在 ~20 行 pnpm patch |
 | **4 层耦合，从外到内** | L0 文件系统 → L1 插件 SDK → L2 WS RPC → L3 patch，每层独立，可单独替换 |
 | **本地优先** | SQLite + WAL 模式，无需数据库服务；数据全在本地，唯一外部依赖是 LLM API |
-| **技能 > 裸提示词** | 487 个 SKILL.md 结构化封装学术场景，可按研究方向安装/卸载 |
+| **技能 > 裸提示词** | 431 个 SKILL.md 结构化封装学术场景，可按研究方向安装/卸载 |
 | **端口与上游错开** | 28789（科研龙虾）vs 18789（OpenClaw 默认），两者可并存 |
 | **浏览器配置一切** | 无需编辑配置文件，所有设置通过 Setup Wizard 在浏览器完成 |
 

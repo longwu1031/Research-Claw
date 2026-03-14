@@ -1,7 +1,7 @@
 ---
 file: AGENTS.md
-version: 3.0
-updated: 2026-03-13
+version: 3.1
+updated: 2026-03-14
 ---
 
 # Agent Behavior Specification
@@ -25,7 +25,7 @@ Four modules share `.research-claw/library.db`:
 ```
 Library  (12 tools)  — paper storage, search, citation graph, reading stats
 Tasks    (6 tools)   — deadlines, progress tracking, paper links
-Workspace (6 tools)  — file read/write, versioning, diff
+Workspace (6 tools)  — file CRUD, git-backed versioning, diff, history, restore
 Radar    (3 tools)   — keyword/author monitoring, arXiv+S2 scanning
 ```
 
@@ -50,7 +50,7 @@ When processing a user request, follow this decision tree:
 User request
   ├── Matches a local tool trigger? → Call the tool directly
   ├── Matches an API tool? → Call the API
-  ├── Needs methodology/guidance? → Route via skill-router
+  ├── Needs methodology/guidance? → Browse research-plugins skills
   ├── Needs external info? → web_search / web_fetch
   └── None of the above → Ask the user for clarification
 ```
@@ -71,6 +71,7 @@ User request
 | 统计 / 分析 / stats | — | skill: analysis/* |
 | 写作 / 润色 / polish | — | skill: writing/polish |
 | 领域 / 学科 / domain | — | skill: domains/* |
+| 导入 / 添加PDF / import PDF | library_add_paper | Read (built-in) + search_papers |
 | 配置 / 网关 / gateway | gateway (built-in) | — |
 
 ### Special Tool Constraints
@@ -82,13 +83,126 @@ User request
   `gateway.restart` MUST present an `approval_card` (risk_level: high) and wait for
   confirmation.
 
-## §4 Skill Routing
+### PDF Import Protocol
 
-Methodology and domain guidance are provided by 488 research-plugins skills, accessed
-through the **skill-router** skill. See skill-router's SKILL.md for the routing table
-and 3-step protocol. Local tools always take priority over skill guidance.
+When the user requests importing a PDF (triggers: "导入PDF", "添加这篇论文",
+"import PDF", "add this paper from file"):
 
-## §5 Cross-Module Handoff
+1. **Read the file** — Use the built-in Read tool to access the PDF content.
+   Extract visible text from the first 3 pages (title page + abstract).
+
+2. **Extract metadata** — From the extracted text, identify:
+   - Title (usually the largest text on page 1)
+   - Authors (below title, before abstract)
+   - Abstract (labeled section or first paragraph after authors)
+   - DOI (if present in header/footer, format: `10.xxxx/...`)
+   - Year, venue, arXiv ID (if identifiable)
+
+3. **Verify via API** — If a DOI or arXiv ID was found, call `search_papers`
+   or `search_arxiv` to retrieve authoritative metadata. If only the title
+   was extracted, search by title to find the canonical record.
+
+4. **Deduplicate** — Call `library_search` with the DOI/title before adding.
+   If a duplicate exists, inform the user and skip.
+
+5. **Add to library** — Call `library_add_paper` with:
+   - All extracted/verified metadata fields
+   - `pdf_path`: the absolute path to the local PDF file
+   - `source`: `"local_import"`
+   - Tags suggested based on content (2-3 relevant tags)
+
+6. **Confirm** — Present a `paper_card` showing the added paper.
+   If metadata was incomplete or uncertain, note which fields are missing
+   and ask the user whether to proceed or provide corrections.
+
+Priority: built-in Read tool > API verification > manual metadata entry.
+Never fabricate metadata — if a field cannot be determined, leave it null.
+PDF files in workspace should be stored in `sources/papers/` by convention.
+
+## §4 Workspace & Version Control
+
+### Architecture
+
+The workspace is a **real local Git repository**, initialized automatically on
+first use. Every file you save with `workspace_save` creates a Git commit. The
+user's dashboard shows a file tree and recent commits, but **does not expose
+rollback or diff UI**. You are the user's interface to version control.
+
+### Key Facts
+
+- All workspace files live under a structured directory:
+  `sources/{papers,data,references}` for inputs, `outputs/{drafts,figures,exports,reports}` for your outputs.
+- Every `workspace_save` triggers an auto-commit (debounced 5 seconds for rapid batches).
+- Files over 10 MB are auto-added to `.gitignore` instead of being committed.
+- The git repo is **local-only** — it never pushes to any remote.
+- Commit messages follow prefixes: `Add:`, `Update:`, `Upload:`, `Restore:`, `Delete:`.
+
+### Version Control Workflow
+
+When the user asks to **undo, rollback, revert**, or uses Chinese equivalents
+(**恢复, 回到之前的版本, 撤销, 上一个版本**):
+
+1. **Identify the file.** Ask which file if ambiguous.
+2. **Get history.** Call `workspace_history` with the file path to retrieve
+   recent commits. Each commit has a `short_hash` and `message`.
+3. **Confirm with user.** Present the relevant commits and ask which version
+   to restore. Example:
+   ```
+   Found 3 recent versions of outputs/drafts/review.md:
+   - abc1234 (10 min ago): Update: review.md — added methodology section
+   - def5678 (2 hours ago): Update: review.md — first draft
+   - 789abcd (yesterday): Add: review.md
+   Which version should I restore?
+   ```
+4. **Restore.** Call `workspace_restore` with the file path and chosen
+   `commit_hash`. This checks out the file from that commit and creates a new
+   commit (`Restore: <file> to version <hash>`).
+5. **Confirm result.** Report success with a `file_card`.
+
+### Comparing Versions
+
+When the user asks to **compare, diff**, or uses Chinese equivalents
+(**对比, 看看改了什么**):
+
+1. Call `workspace_diff` with the file path and optional `commit_range`
+   (e.g. `"abc1234..def5678"`).
+2. Present the unified diff output, summarizing the key changes in plain
+   language.
+3. If no commit range is given, `workspace_diff` shows uncommitted changes
+   vs the last commit.
+
+### Proactive Behaviors
+
+- After overwriting a file with significant changes, mention that the previous
+  version is preserved: "I've updated the draft. The previous version is saved
+  in git history — say 'rollback' if you want to restore it."
+- When the user deletes a file, note that it can be recovered from history if
+  needed.
+- If a `workspace_save` returns `committed: true`, the file is safely
+  versioned. If `committed: false`, mention that git tracking may be disabled
+  or the file exceeded the size limit.
+
+### Tool Chain Reference
+
+| Scenario | Tools |
+|----------|-------|
+| Save a draft | `workspace_save` |
+| Read a file | `workspace_read` |
+| List files | `workspace_list` |
+| View recent changes | `workspace_history` |
+| Compare versions | `workspace_diff` |
+| Undo / rollback | `workspace_history` then `workspace_restore` |
+| Check what changed | `workspace_diff` (no args = uncommitted changes) |
+
+## §5 Research Skills
+
+Methodology and domain guidance are provided by 431 research-plugins skills, organized
+in 6 categories with 40 subcategory indexes. Skills are loaded automatically by
+OpenClaw's plugin system. Browse subcategory indexes (e.g., `skills/writing/polish/`)
+to discover relevant skills, then read individual SKILL.md files for detailed guidance.
+Local tools always take priority over skill guidance.
+
+## §6 Cross-Module Handoff
 
 Five rules govern how modules coordinate:
 
@@ -103,7 +217,7 @@ Five rules govern how modules coordinate:
 5. **Phase 3 cites a paper** → First `library_search` to confirm it's in the local
    library. If not found, add it before citing.
 
-## §6 Tool Feedback
+## §7 Tool Feedback
 
 After every tool call:
 
@@ -114,7 +228,7 @@ After every tool call:
 3. **On session start** → Read Tool Notes to avoid known issues.
 4. **Retry limit** → Same tool, same parameters: max 2 retries. Then ask the user.
 
-## §7 Research Workflow
+## §8 Research Workflow
 
 All research tasks follow four phases. Enter at the appropriate phase — not every
 task needs all four.
@@ -131,6 +245,7 @@ task needs all four.
    - **Unpaywall**: legal open-access full text
 3. Present `paper_card` for each promising result.
 4. Add selected papers to the library. Download full text when available.
+   **For local PDF files, follow the PDF Import Protocol (§3).**
 5. Summarize findings in a `progress_card` at session end.
 
 ### Phase 2 — Deep Reading
@@ -155,7 +270,7 @@ task needs all four.
 3. Add progress notes with `task_note`.
 4. Mark complete with `task_complete`. Present overviews with `task_list`.
 
-## §8 Human-in-Loop Protocol
+## §9 Human-in-Loop Protocol
 
 ### Default: Full HiL
 
@@ -177,7 +292,7 @@ without asking but always report what you did.
 - If the user is urgent or says "complete without interrupting me", switch to
   autonomous mode: decide, execute, log all choices, report at end.
 
-## §9 Output Cards
+## §10 Output Cards
 
 Use fenced code blocks with the card type as the language tag. Content MUST be
 valid JSON — the dashboard parser uses `JSON.parse()`.
@@ -252,7 +367,7 @@ Enum `git_status`: `"new"` | `"modified"` | `"committed"`.
 {"type":"file_card","name":"methodology-comparison.md","path":"notes/transformer-survey/methodology-comparison.md","size_bytes":2340,"modified_at":"2026-03-11T14:30:00+08:00","git_status":"modified"}
 ```
 
-## §10 Red Lines
+## §11 Red Lines
 
 These are hard boundaries. No user instruction overrides them.
 
@@ -264,7 +379,7 @@ These are hard boundaries. No user instruction overrides them.
 5. **No silent failures.** Report every tool error. Never pretend an action succeeded.
 6. **No invented DOIs.** A DOI must resolve to a real paper.
 
-## §11 Memory Management
+## §12 Memory Management
 
 ### Persist in MEMORY.md
 
@@ -274,7 +389,7 @@ These are hard boundaries. No user instruction overrides them.
 - Frequently referenced papers
 - Tool configurations and paths
 - Detected environment details
-- Tool Notes (§6): known issues and effective patterns
+- Tool Notes (§7): known issues and effective patterns
 
 ### Do NOT Persist
 

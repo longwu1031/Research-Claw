@@ -1,12 +1,52 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Typography } from 'antd';
+import { Typography, Image } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { ChatMessage } from '../../gateway/types';
 import CodeBlock from './CodeBlock';
 
 const { Text } = Typography;
+
+interface ImageBlock {
+  url: string;
+  alt?: string;
+}
+
+/**
+ * Extract image blocks from message content array.
+ * Matches OpenClaw native UI's extractImages() in grouped-render.ts.
+ * Handles both source-object format (from sendChatMessage) and image_url format (OpenAI).
+ */
+function extractImages(message: ChatMessage): ImageBlock[] {
+  const content = message.content;
+  const images: ImageBlock[] = [];
+
+  if (!Array.isArray(content)) return images;
+
+  for (const block of content) {
+    if (typeof block !== 'object' || block === null) continue;
+
+    if (block.type === 'image') {
+      const source = block.source as Record<string, unknown> | undefined;
+      if (source?.type === 'base64' && typeof source.data === 'string') {
+        const data = source.data;
+        const mediaType = (source.media_type as string) || 'image/png';
+        const url = data.startsWith('data:') ? data : `data:${mediaType};base64,${data}`;
+        images.push({ url });
+      } else if (typeof block.url === 'string') {
+        images.push({ url: block.url });
+      }
+    } else if (block.type === 'image_url') {
+      const imageUrl = block.image_url as Record<string, unknown> | undefined;
+      if (typeof imageUrl?.url === 'string') {
+        images.push({ url: imageUrl.url });
+      }
+    }
+  }
+
+  return images;
+}
 
 /**
  * Strip context metadata injected by Research-Claw's before_prompt_build hook.
@@ -34,6 +74,90 @@ function stripUserMetaPrefix(raw: string): string {
   return cleaned.join('\n').trim();
 }
 
+/**
+ * Regex matching `<think>`, `<thinking>`, `<thought>`, `<antthinking>` tags and their content.
+ * Source: openclaw/src/shared/text/reasoning-tags.ts:7 (THINKING_TAG_RE)
+ * Source: openclaw/ui/src/ui/chat/message-extract.ts:66
+ */
+const THINK_TAG_RE = /<\s*(?:think(?:ing)?|thought|antthinking)\b[^<>]*>[\s\S]*?<\s*\/\s*(?:think(?:ing)?|thought|antthinking)\s*>/gi;
+
+/**
+ * Regex for extracting thinking content from `<think>` tags (captures inner content).
+ * Source: openclaw/ui/src/ui/chat/message-extract.ts:65-68
+ *   rawText.matchAll(/<\s*think(?:ing)?\s*>([\s\S]*?)<\s*\/\s*think(?:ing)?\s*>/gi)
+ */
+const THINK_EXTRACT_RE = /<\s*think(?:ing)?\s*>([\s\S]*?)<\s*\/\s*think(?:ing)?\s*>/gi;
+
+/**
+ * Strip thinking/reasoning tags from text, returning clean text for display.
+ * Source: openclaw/ui/src/ui/chat/message-extract.ts:10-11
+ *   if (role === "assistant") return stripThinkingTags(text);
+ */
+function stripThinkingTags(text: string): string {
+  THINK_TAG_RE.lastIndex = 0;
+  return text.replace(THINK_TAG_RE, '').trimStart();
+}
+
+/**
+ * Extract thinking content from a message.
+ * Matches OpenClaw behavior in message-extract.ts:41-69 (extractThinking).
+ *
+ * Two sources:
+ * 1. Content blocks with type: 'thinking' — Anthropic format (lines 46-54)
+ * 2. <think>/<thinking> tags in text — provider format (lines 65-68)
+ *
+ * Only extracts from assistant messages (grouped-render.ts:246).
+ */
+function extractThinking(message: ChatMessage): string | null {
+  if (message.role !== 'assistant') return null;
+
+  const content = message.content;
+  const parts: string[] = [];
+
+  // Source 1: Content blocks with type: 'thinking' (message-extract.ts:46-54)
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (typeof block !== 'object' || block === null) continue;
+      if (
+        block.type === 'thinking' &&
+        typeof (block as Record<string, unknown>).thinking === 'string'
+      ) {
+        const cleaned = ((block as Record<string, unknown>).thinking as string).trim();
+        if (cleaned) {
+          parts.push(cleaned);
+        }
+      }
+    }
+  }
+
+  if (parts.length > 0) {
+    // message-extract.ts:56-58: return parts.join("\n")
+    return parts.join('\n');
+  }
+
+  // Source 2: <think>/<thinking> tags in text (message-extract.ts:60-69)
+  const rawText =
+    message.text ??
+    (typeof content === 'string'
+      ? content
+      : Array.isArray(content)
+        ? content
+            .filter((c) => c.type === 'text' && c.text)
+            .map((c) => c.text!)
+            .join('')
+        : null);
+
+  if (!rawText) return null;
+
+  THINK_EXTRACT_RE.lastIndex = 0;
+  const matches = [...rawText.matchAll(THINK_EXTRACT_RE)];
+  const extracted = matches
+    .map((m) => (m[1] ?? '').trim())
+    .filter(Boolean);
+
+  return extracted.length > 0 ? extracted.join('\n') : null;
+}
+
 interface MessageBubbleProps {
   message: ChatMessage;
   isStreaming?: boolean;
@@ -42,7 +166,10 @@ interface MessageBubbleProps {
 export default function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
   const { t } = useTranslation();
   const isUser = message.role === 'user';
+  const [thinkingExpanded, setThinkingExpanded] = useState(false);
 
+  // Extract raw text — only from type:'text' blocks (NOT type:'thinking')
+  // Source: openclaw/ui/src/ui/chat/message-extract.ts:85-109 (extractRawText)
   const rawText =
     message.text ??
     (typeof message.content === 'string'
@@ -54,7 +181,17 @@ export default function MessageBubble({ message, isStreaming }: MessageBubblePro
             .join('')
         : '');
 
-  const text = isUser ? stripUserMetaPrefix(rawText) : rawText;
+  // For user messages: strip meta prefix
+  // For assistant messages: strip thinking tags from displayed text
+  // Source: message-extract.ts:10-11 — if (role === "assistant") return stripThinkingTags(text);
+  const text = isUser ? stripUserMetaPrefix(rawText) : stripThinkingTags(rawText);
+
+  // Extract thinking content for separate rendering (assistant only)
+  // Source: message-extract.ts:41-69 (extractThinking)
+  // Source: grouped-render.ts:245-246 — only for assistant role
+  const thinkingContent = extractThinking(message);
+
+  const images = extractImages(message);
 
   return (
     <div
@@ -89,8 +226,93 @@ export default function MessageBubble({ message, isStreaming }: MessageBubblePro
           overflow: 'hidden',
         }}
       >
+        {/* Attached images */}
+        {images.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: text ? 8 : 0 }}>
+            <Image.PreviewGroup>
+              {images.map((img, idx) => (
+                <Image
+                  key={idx}
+                  src={img.url}
+                  alt={img.alt ?? 'Attached image'}
+                  style={{
+                    maxWidth: 240,
+                    maxHeight: 240,
+                    borderRadius: 8,
+                    objectFit: 'contain',
+                    cursor: 'pointer',
+                  }}
+                  fallback="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgZmlsbD0iIzY2NiI+PHRleHQgeD0iMTYiIHk9IjM2IiBmb250LXNpemU9IjEyIj5JbWFnZTwvdGV4dD48L3N2Zz4="
+                />
+              ))}
+            </Image.PreviewGroup>
+          </div>
+        )}
+
+        {/*
+         * Thinking/reasoning section — rendered BEFORE the main text.
+         * Source: openclaw/ui/src/ui/chat/grouped-render.ts:273-278
+         *   html`<div class="chat-thinking">...</div>`
+         * Source: openclaw/ui/src/styles/chat/text.css:5-14
+         *   .chat-thinking { muted, dashed border, small font }
+         *
+         * OpenClaw renders thinking as always-visible with muted styling.
+         * We add a toggle for collapsed-by-default (improved UX for long thinking).
+         */}
+        {thinkingContent && (
+          <div
+            data-testid="thinking-section"
+            style={{
+              marginBottom: 10,
+              padding: '8px 12px',
+              borderRadius: 10,
+              border: '1px dashed rgba(255, 255, 255, 0.18)',
+              background: 'rgba(255, 255, 255, 0.04)',
+              fontSize: 12,
+              lineHeight: 1.4,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                cursor: 'pointer',
+                userSelect: 'none',
+                color: 'var(--muted, #888)',
+                fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
+                fontSize: 11,
+                marginBottom: thinkingExpanded ? 6 : 0,
+              }}
+              onClick={() => setThinkingExpanded(!thinkingExpanded)}
+            >
+              <span
+                style={{
+                  display: 'inline-block',
+                  transform: thinkingExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.15s ease',
+                  marginRight: 6,
+                  fontSize: 10,
+                }}
+              >
+                {'▶'}
+              </span>
+              {t('chat.thinkingLabel')}
+            </div>
+            <div
+              style={{
+                display: thinkingExpanded ? 'block' : 'none',
+                color: 'var(--muted, #888)',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {thinkingContent}
+            </div>
+          </div>
+        )}
+
         {isUser ? (
-          <Text style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 14, lineHeight: 1.6 }}>{text}</Text>
+          text ? <Text style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 14, lineHeight: 1.6 }}>{text}</Text> : null
         ) : (
           <div
             style={{ fontSize: 14, lineHeight: 1.6, overflow: 'hidden', wordBreak: 'break-word' }}

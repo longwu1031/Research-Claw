@@ -31,7 +31,8 @@
     "attachImage": "Attach image",
     "imageOnly": "Only image files are supported",
     "imageTooLarge": "Image exceeds 5MB limit",
-    "dragDropHint": "Drop images here"
+    "dragDropHint": "Drop images here",
+    "thinkingLabel": "Thinking"
   },
   "library": {
     "title": "Literature Library",
@@ -45,7 +46,10 @@
       "read": "Read",
       "reviewed": "Reviewed"
     },
-    "empty": "No papers yet.\nAsk the agent to find papers for you, or drop a PDF here to add it.",
+    "empty": "Let your Research-Claw explore a new direction and find papers for you.",
+    "emptyFiltered": "No papers match the current filters.",
+    "clearFilter": "Clear filter",
+    "clearTags": "Clear",
     "paperActions": {
       "openPdf": "Open PDF",
       "cite": "Cite",
@@ -97,19 +101,65 @@
       "blocked": "Blocked",
       "done": "Done",
       "cancelled": "Cancelled"
+    },
+    "taskType": {
+      "human": "My Task",
+      "agent": "Agent Task",
+      "mixed": "Mixed"
+    },
+    "search": "Search tasks...",
+    "noResults": "No tasks match your search.",
+    "detail": {
+      "description": "Description",
+      "tags": "Tags",
+      "noTags": "No tags",
+      "relatedPaper": "Related Paper",
+      "noPaper": "No linked paper",
+      "subtasks": "Subtasks",
+      "noSubtasks": "No subtasks",
+      "notes": "Notes",
+      "noNotes": "No notes yet",
+      "activityLog": "Activity",
+      "noActivity": "No activity yet",
+      "loading": "Loading details...",
+      "deadline": "Deadline",
+      "askAgent": "Ask Agent",
+      "collapse": "Collapse",
+      "daysRemaining": "{{days}} days remaining",
+      "daysOverdue": "{{days}} days overdue"
+    },
+    "activity": {
+      "created": "Created",
+      "status_changed": "Status changed",
+      "title_changed": "Title updated",
+      "priority_changed": "Priority changed",
+      "deadline_changed": "Deadline changed",
+      "description_changed": "Description updated",
+      "paper_linked": "Paper linked",
+      "paper_unlinked": "Paper unlinked",
+      "note_added": "Note added",
+      "completed": "Completed",
+      "tags_changed": "Tags updated",
+      "parent_changed": "Parent changed"
+    },
+    "askAgent": {
+      "agentPrompt": "Report on the current progress and completion status of task \"{{title}}\". Include: completed work, obstacles encountered, estimated remaining effort, and next-step recommendations.",
+      "humanPrompt": "Based on the current progress and available information, please provide completion suggestions for task \"{{title}}\". Include: recommended next steps, resources that may be needed, and guidance on how to complete this task efficiently.",
+      "mixedPrompt": "Report on the current status of task \"{{title}}\". How is the part I am responsible for progressing? What is the completion status of the part you are handling? What should each of us do next?"
     }
   },
   "workspace": {
     "title": "Workspace",
     "sources": "Sources",
     "outputs": "Outputs",
-    "upload": "Upload File",
+    "upload": "Add File",
+    "uploadSuccess": "File added to workspace",
     "history": "Version History",
     "recentChanges": "Recent Changes",
     "fileTree": "File Tree",
     "empty": "Workspace is empty.\nFiles will appear here as you and the agent create them.",
     "filesChanged": "{{count}} files changed",
-    "dragDrop": "Drop files here to upload",
+    "dragDrop": "Drop files here to add to workspace",
     "contextMenu": {
       "openExternal": "Open File",
       "openFolder": "Open Folder",
@@ -160,12 +210,45 @@
     "sources": "Sources",
     "noTracking": "No keywords, authors, or journals tracked yet.",
     "addTracking": "Add tracking via chat",
-    "noFindings": "No findings yet. Ask the agent to scan for papers.",
+    "noFindings": "No scan results yet. Click Refresh above to scan, or ask the assistant.",
+    "noDiscoveries": "No discoveries yet. Ask your assistant to scan for papers.",
     "scanning": "Scanning...",
     "scanResults": "Scan Results",
     "newPapers": "new",
     "skipped": "skipped",
-    "automations": "Automations"
+    "automations": "Automations",
+    "section": {
+      "trackingProfile": "Tracking Profile",
+      "automatedTasks": "Automated Tasks",
+      "recentDiscoveries": "Recent Discoveries"
+    },
+    "cron": {
+      "neverRun": "Never run",
+      "lastRun": "Last run",
+      "nextRun": "Next run",
+      "schedule": "Schedule",
+      "relatedConfig": "Related",
+      "reminderWindow": "Reminder window",
+      "askAgent": "Ask Agent",
+      "askAgentPrompt": "Please report on the automated task '{{name}}'. Include: last run results, whether configuration needs adjusting, and whether the schedule or task itself should be changed or removed.",
+      "delete": "Delete",
+      "deleteConfirmTitle": "Delete Automated Task",
+      "deleteConfirmContent": "Delete \"{{name}}\"? It will stop running. To restore, ask the assistant in chat.",
+      "desc": {
+        "arxiv_daily_scan": "Scan arXiv for new papers matching your tracking config keywords and sources.",
+        "citation_tracking_weekly": "Check for new citations of your tracked papers in the library.",
+        "deadline_reminders_daily": "Check for tasks with approaching deadlines and send early warnings.",
+        "group_meeting_prep": "Check USER.md for upcoming group meetings and prepare review materials.",
+        "weekly_report": "Generate a weekly research progress report: papers read, tasks completed, key findings."
+      },
+      "related": {
+        "arxiv_daily_scan": "Tracking profile keywords & sources",
+        "citation_tracking_weekly": "Papers in your library",
+        "deadline_reminders_daily": "Task panel deadlines",
+        "group_meeting_prep": "Group meeting times in USER.md",
+        "weekly_report": "Library + Tasks + Workspace"
+      }
+    }
   },
   "settings": {
     "title": "Settings",
@@ -198,7 +281,11 @@
     "saved": "Saved",
     "saveFailed": "Failed to save",
     "copyFailed": "Failed to copy",
-    "save": "Save"
+    "save": "Save",
+    "cancel": "Cancel",
+    "restartConfirmTitle": "Restart Gateway?",
+    "restartConfirmContent": "Saving will close the gateway and restart it. If the restart fails, please restart manually.",
+    "aboutGithub": "View on GitHub"
   },
   "setup": {
     "title": "Welcome to Research-Claw",
@@ -245,7 +332,7 @@
     "tokensOut": "Out",
     "heartbeat": "Heartbeat",
     "version": "v{{version}}",
-    "versionFallback": "v0.1.0",
+    "versionFallback": "v0.3.0",
     "modelDefault": "(default)",
     "modelNA": "N/A"
   },
@@ -323,7 +410,7 @@
       "open": "Open",
       "download": "Download",
       "openFile": "Open File",
-      "openDir": "Open in Workspace",
+      "openDir": "Open in Folder",
       "path": "Path",
       "size": "Size",
       "type": "Type",

@@ -75,6 +75,7 @@ export interface PaperFilter {
   year?: number;
   source?: string;
   tag?: string;
+  tags?: string[];
   collection_id?: string;
   has_pdf?: boolean;
 }
@@ -534,6 +535,23 @@ export class LiteratureService {
       }
     }
 
+    // Duplicate check on normalized title — prevent title-only duplicates
+    {
+      const normalizedInput = normalizeTitleForComparison(input.title);
+      const candidates = this.db
+        .prepare(
+          `SELECT * FROM rc_papers WHERE LOWER(TRIM(title)) LIKE ? AND ${NOT_DELETED}`,
+        )
+        .all(`%${normalizedInput.split(' ')[0] ?? ''}%`) as PaperRow[];
+
+      for (const row of candidates) {
+        if (normalizeTitleForComparison(row.title) === normalizedInput) {
+          const tags = getTagsForPaper(this.db, row.id);
+          return { ...rowToPaper(row, tags), duplicate: true };
+        }
+      }
+    }
+
     const id = crypto.randomUUID();
     const timestamp = now();
     const authors = input.authors ?? [];
@@ -641,12 +659,26 @@ export class LiteratureService {
       } else if (filter.has_pdf === false) {
         conditions.push('p.pdf_path IS NULL');
       }
-      if (filter.tag) {
-        const normalized = filter.tag.trim().toLowerCase();
-        fromClause += `
-          JOIN rc_paper_tags pt ON pt.paper_id = p.id
-          JOIN rc_tags t ON t.id = pt.tag_id AND t.name = ?`;
-        bindValues.push(normalized);
+      // Multi-tag AND filter: paper must have ALL specified tags
+      const effectiveTags: string[] = filter.tags?.length
+        ? filter.tags
+        : filter.tag
+          ? [filter.tag]
+          : [];
+      if (effectiveTags.length > 0) {
+        const placeholders = effectiveTags.map(() => '?').join(', ');
+        conditions.push(`p.id IN (
+          SELECT pt_inner.paper_id
+          FROM rc_paper_tags pt_inner
+          JOIN rc_tags t_inner ON t_inner.id = pt_inner.tag_id
+          WHERE LOWER(t_inner.name) IN (${placeholders})
+          GROUP BY pt_inner.paper_id
+          HAVING COUNT(DISTINCT t_inner.id) = ?
+        )`);
+        for (const t of effectiveTags) {
+          bindValues.push(t.trim().toLowerCase());
+        }
+        bindValues.push(effectiveTags.length);
       }
       if (filter.collection_id) {
         fromClause += `
@@ -744,6 +776,25 @@ export class LiteratureService {
         `UPDATE rc_papers SET metadata = json_set(COALESCE(metadata, '{}'), '$.deleted_at', ?) WHERE id = ?`,
       )
       .run(now(), id);
+
+    // Clean up orphaned tags after soft-deleting a paper
+    this.cleanupOrphanedTags();
+  }
+
+  /**
+   * Remove tags that have no associated non-deleted papers.
+   * Called after paper deletion and untag to prevent tag list pollution.
+   */
+  cleanupOrphanedTags(): void {
+    this.db
+      .prepare(
+        `DELETE FROM rc_tags WHERE id NOT IN (
+          SELECT DISTINCT pt.tag_id
+          FROM rc_paper_tags pt
+          JOIN rc_papers p ON p.id = pt.paper_id AND ${NOT_DELETED}
+        )`,
+      )
+      .run();
   }
 
   // ── 6. search ───────────────────────────────────────────────────────
@@ -1037,6 +1088,9 @@ export class LiteratureService {
       this.db
         .prepare('DELETE FROM rc_paper_tags WHERE paper_id = ? AND tag_id = ?')
         .run(paperId, tagRow.id);
+
+      // Clean up orphaned tags after removing a tag from a paper
+      this.cleanupOrphanedTags();
     }
 
     return getTagsForPaper(this.db, paperId);

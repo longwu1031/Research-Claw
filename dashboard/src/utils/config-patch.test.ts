@@ -1,22 +1,22 @@
 import { describe, it, expect } from 'vitest';
 import {
-  buildConfigPatch,
+  buildSaveConfig,
   extractConfigFields,
   isConfigValid,
   hasModelConfigured,
   REDACTED_SENTINEL,
 } from './config-patch';
 
-describe('buildConfigPatch', () => {
-  it('builds single-provider patch with preset model capabilities', () => {
-    const patch = buildConfigPatch({
+describe('buildSaveConfig', () => {
+  it('builds single-provider config with preset model capabilities', () => {
+    const config = buildSaveConfig(null, {
       provider: 'openai',
       baseUrl: 'https://api.openai.com/v1',
       apiKey: 'sk-test',
       textModel: 'gpt-4o',
     });
 
-    const providers = (patch.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
     expect(providers.openai).toBeDefined();
     expect(providers.openai.baseUrl).toBe('https://api.openai.com/v1');
     expect(providers.openai.apiKey).toBe('sk-test');
@@ -25,20 +25,20 @@ describe('buildConfigPatch', () => {
     const models = providers.openai.models as Array<{ id: string; input: string[] }>;
     expect(models[0].input).toEqual(['text', 'image']);
 
-    const defaults = (patch.agents as Record<string, unknown>).defaults as Record<string, unknown>;
+    const defaults = (config.agents as Record<string, unknown>).defaults as Record<string, unknown>;
     expect((defaults.model as Record<string, string>).primary).toBe('openai/gpt-4o');
     expect((defaults.imageModel as Record<string, string>).primary).toBe('openai/gpt-4o');
   });
 
   it('marks text-only models correctly from preset (ZAI glm-5)', () => {
-    const patch = buildConfigPatch({
+    const config = buildSaveConfig(null, {
       provider: 'zai',
       baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
       apiKey: 'sk-test',
       textModel: 'glm-5',
     });
 
-    const providers = (patch.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
     const models = providers.zai.models as Array<{ id: string; input: string[] }>;
     // glm-5 is text-only in the preset → must NOT include 'image'
     expect(models[0].id).toBe('glm-5');
@@ -46,7 +46,7 @@ describe('buildConfigPatch', () => {
   });
 
   it('marks vision models correctly in same-provider ZAI config', () => {
-    const patch = buildConfigPatch({
+    const config = buildSaveConfig(null, {
       provider: 'zai',
       baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
       apiKey: 'sk-test',
@@ -56,7 +56,7 @@ describe('buildConfigPatch', () => {
       visionModel: 'glm-4.6v',
     });
 
-    const providers = (patch.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
     const models = providers.zai.models as Array<{ id: string; input: string[] }>;
     expect(models).toHaveLength(2);
     expect(models[0].id).toBe('glm-5');
@@ -66,21 +66,21 @@ describe('buildConfigPatch', () => {
   });
 
   it('defaults to multimodal for unknown models not in preset', () => {
-    const patch = buildConfigPatch({
+    const config = buildSaveConfig(null, {
       provider: 'openrouter',
       baseUrl: 'https://openrouter.ai/api/v1',
       apiKey: 'sk-test',
       textModel: 'google/gemini-3.1-pro-preview',
     });
 
-    const providers = (patch.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
     const models = providers.openrouter.models as Array<{ id: string; input: string[] }>;
     // Not in preset → defaults to multimodal
     expect(models[0].input).toEqual(['text', 'image']);
   });
 
-  it('builds same-provider vision patch (different model)', () => {
-    const patch = buildConfigPatch({
+  it('builds same-provider vision config (different model)', () => {
+    const config = buildSaveConfig(null, {
       provider: 'openai',
       baseUrl: 'https://api.openai.com/v1',
       apiKey: 'sk-test',
@@ -90,7 +90,7 @@ describe('buildConfigPatch', () => {
       visionModel: 'gpt-4o-vision',
     });
 
-    const providers = (patch.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
     expect(providers.openai).toBeDefined();
     // No separate vision provider entry when same provider
     expect(Object.keys(providers)).toEqual(['openai']);
@@ -100,13 +100,13 @@ describe('buildConfigPatch', () => {
     expect(models[0].id).toBe('gpt-4o');
     expect(models[1].id).toBe('gpt-4o-vision');
 
-    const defaults = (patch.agents as Record<string, unknown>).defaults as Record<string, unknown>;
+    const defaults = (config.agents as Record<string, unknown>).defaults as Record<string, unknown>;
     expect((defaults.model as Record<string, string>).primary).toBe('openai/gpt-4o');
     expect((defaults.imageModel as Record<string, string>).primary).toBe('openai/gpt-4o-vision');
   });
 
-  it('builds dual-provider patch with native keys', () => {
-    const patch = buildConfigPatch({
+  it('builds dual-provider config with native keys', () => {
+    const config = buildSaveConfig(null, {
       provider: 'openai',
       baseUrl: 'https://api.openai.com/v1',
       apiKey: 'sk-text',
@@ -118,19 +118,19 @@ describe('buildConfigPatch', () => {
       visionApiKey: 'sk-vision',
     });
 
-    const providers = (patch.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
     expect(providers.openai).toBeDefined();
     expect(providers.zai).toBeDefined();
     expect(providers.zai.baseUrl).toBe('https://open.bigmodel.cn/api/paas/v4');
     expect(providers.zai.apiKey).toBe('sk-vision');
 
-    const defaults = (patch.agents as Record<string, unknown>).defaults as Record<string, unknown>;
+    const defaults = (config.agents as Record<string, unknown>).defaults as Record<string, unknown>;
     expect((defaults.model as Record<string, string>).primary).toBe('openai/gpt-4o');
     expect((defaults.imageModel as Record<string, string>).primary).toBe('zai/glm-4.6v');
   });
 
   it('uses visionApi for vision provider when specified', () => {
-    const patch = buildConfigPatch({
+    const config = buildSaveConfig(null, {
       provider: 'minimax',
       baseUrl: 'https://api.minimax.io/anthropic',
       api: 'anthropic-messages',
@@ -144,13 +144,13 @@ describe('buildConfigPatch', () => {
       visionApi: 'openai-completions',
     });
 
-    const providers = (patch.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
     expect(providers.minimax.api).toBe('anthropic-messages');
     expect(providers.zai.api).toBe('openai-completions');
   });
 
   it('includes proxy env when proxyUrl is set', () => {
-    const patch = buildConfigPatch({
+    const config = buildSaveConfig(null, {
       provider: 'openai',
       baseUrl: 'https://api.openai.com/v1',
       apiKey: 'sk-test',
@@ -158,13 +158,13 @@ describe('buildConfigPatch', () => {
       proxyUrl: 'http://127.0.0.1:7890',
     });
 
-    const env = patch.env as Record<string, string>;
+    const env = config.env as Record<string, string>;
     expect(env.HTTP_PROXY).toBe('http://127.0.0.1:7890');
     expect(env.HTTPS_PROXY).toBe('http://127.0.0.1:7890');
   });
 
   it('clears proxy when proxyUrl is empty string', () => {
-    const patch = buildConfigPatch({
+    const config = buildSaveConfig(null, {
       provider: 'openai',
       baseUrl: 'https://api.openai.com/v1',
       apiKey: 'sk-test',
@@ -172,76 +172,67 @@ describe('buildConfigPatch', () => {
       proxyUrl: '',
     });
 
-    const env = patch.env as Record<string, string>;
+    const env = config.env as Record<string, string>;
     expect(env.HTTP_PROXY).toBe('');
     expect(env.HTTPS_PROXY).toBe('');
   });
 
-  it('omits env when proxyUrl is undefined', () => {
-    const patch = buildConfigPatch({
+  it('omits env when proxyUrl is undefined and no existing env', () => {
+    const config = buildSaveConfig(null, {
       provider: 'openai',
       baseUrl: 'https://api.openai.com/v1',
       apiKey: 'sk-test',
       textModel: 'gpt-4o',
     });
 
-    expect(patch.env).toBeUndefined();
+    expect(config.env).toBeUndefined();
   });
 
   it('strips trailing slashes from baseUrl', () => {
-    const patch = buildConfigPatch({
+    const config = buildSaveConfig(null, {
       provider: 'openai',
       baseUrl: 'https://api.openai.com/v1///',
       apiKey: 'sk-test',
       textModel: 'gpt-4o',
     });
 
-    const providers = (patch.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
     expect(providers.openai.baseUrl).toBe('https://api.openai.com/v1');
   });
 
   it('strips /chat/completions from baseUrl', () => {
-    const patch = buildConfigPatch({
+    const config = buildSaveConfig(null, {
       provider: 'openrouter',
       baseUrl: 'https://openrouter.ai/api/v1/chat/completions',
       apiKey: 'sk-test',
       textModel: 'google/gemini-3.1-pro-preview',
     });
 
-    const providers = (patch.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
     expect(providers.openrouter.baseUrl).toBe('https://openrouter.ai/api/v1');
   });
 
-  it('omits apiKey from provider when undefined (preserve existing via deep merge)', () => {
-    const patch = buildConfigPatch({
+  it('preserves existing API key when no new key provided', () => {
+    const existing = {
+      models: {
+        providers: {
+          openai: { baseUrl: 'https://api.openai.com/v1', apiKey: 'sk-old-key' },
+        },
+      },
+    };
+
+    const config = buildSaveConfig(existing, {
       provider: 'openai',
       baseUrl: 'https://api.openai.com/v1',
       textModel: 'gpt-4o',
     });
 
-    const providers = (patch.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
-    expect(providers.openai.apiKey).toBeUndefined();
-    expect(providers.openai.baseUrl).toBe('https://api.openai.com/v1');
-  });
-
-  it('omits apiKey from vision provider when both apiKey and visionApiKey undefined', () => {
-    const patch = buildConfigPatch({
-      provider: 'openai',
-      baseUrl: 'https://api.openai.com/v1',
-      textModel: 'gpt-4o',
-      visionEnabled: true,
-      visionProvider: 'zai',
-      visionModel: 'glm-4.6v',
-      visionBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    });
-
-    const providers = (patch.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
-    expect(providers.openai.apiKey).toBeUndefined();
-    expect(providers.zai.apiKey).toBeUndefined();
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    expect(providers.openai.apiKey).toBe('sk-old-key');
   });
 
   it('does not create separate provider when vision is disabled', () => {
-    const patch = buildConfigPatch({
+    const config = buildSaveConfig(null, {
       provider: 'openai',
       baseUrl: 'https://api.openai.com/v1',
       apiKey: 'sk-test',
@@ -251,16 +242,16 @@ describe('buildConfigPatch', () => {
       visionModel: 'glm-4.6v',
     });
 
-    const providers = (patch.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
     expect(Object.keys(providers)).toEqual(['openai']);
 
-    const defaults = (patch.agents as Record<string, unknown>).defaults as Record<string, unknown>;
+    const defaults = (config.agents as Record<string, unknown>).defaults as Record<string, unknown>;
     // When vision disabled, imageModel = text model
     expect((defaults.imageModel as Record<string, string>).primary).toBe('openai/gpt-4o');
   });
 
-  it('falls back to text provider apiKey when visionApiKey is not set', () => {
-    const patch = buildConfigPatch({
+  it('falls back to text provider apiKey for vision when visionApiKey is not set', () => {
+    const config = buildSaveConfig(null, {
       provider: 'openai',
       baseUrl: 'https://api.openai.com/v1',
       apiKey: 'sk-shared',
@@ -271,8 +262,187 @@ describe('buildConfigPatch', () => {
       visionBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     });
 
-    const providers = (patch.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
     expect(providers.zai.apiKey).toBe('sk-shared');
+  });
+
+  // --- New tests: stale provider cleanup ---
+
+  it('removes stale providers not referenced by user input', () => {
+    const existing = {
+      models: {
+        providers: {
+          rc: { baseUrl: 'http://old.example.com', apiKey: 'old-key' },
+          openai: { baseUrl: 'https://api.openai.com/v1', apiKey: 'sk-old' },
+        },
+      },
+      agents: { defaults: { model: { primary: 'rc/old-model' } } },
+    };
+
+    const config = buildSaveConfig(existing, {
+      provider: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: 'sk-new',
+      textModel: 'gpt-4o',
+    });
+
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    expect(providers.rc).toBeUndefined();
+    expect(providers.openai).toBeDefined();
+    expect(Object.keys(providers)).toEqual(['openai']);
+  });
+
+  // --- New tests: config preservation ---
+
+  it('preserves heartbeat and other agent settings from existing config', () => {
+    const existing = {
+      agents: {
+        defaults: {
+          model: { primary: 'openai/gpt-4o' },
+          heartbeat: { every: '5m' },
+        },
+      },
+      models: {
+        providers: {
+          openai: { baseUrl: 'https://api.openai.com/v1', apiKey: 'sk-old' },
+        },
+      },
+    };
+
+    const config = buildSaveConfig(existing, {
+      provider: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: 'sk-new',
+      textModel: 'gpt-4o',
+    });
+
+    const defaults = (config.agents as Record<string, unknown>).defaults as Record<string, unknown>;
+    expect((defaults.heartbeat as Record<string, string>).every).toBe('5m');
+    expect((defaults.model as Record<string, string>).primary).toBe('openai/gpt-4o');
+  });
+
+  // --- New tests: sentinel round-trip ---
+
+  it('preserves redacted sentinel when no new key is provided', () => {
+    const existing = {
+      models: {
+        providers: {
+          openai: { baseUrl: 'https://api.openai.com/v1', apiKey: REDACTED_SENTINEL },
+        },
+      },
+    };
+
+    const config = buildSaveConfig(existing, {
+      provider: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      textModel: 'gpt-4o',
+    });
+
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    expect(providers.openai.apiKey).toBe(REDACTED_SENTINEL);
+  });
+
+  // --- New tests: contextWindow / maxTokens from presets ---
+
+  it('uses preset contextWindow and maxTokens for known models', () => {
+    const config = buildSaveConfig(null, {
+      provider: 'zai',
+      baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+      apiKey: 'sk-test',
+      textModel: 'glm-5',
+    });
+
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    const models = providers.zai.models as Array<{ id: string; contextWindow: number; maxTokens: number }>;
+    expect(models[0].contextWindow).toBe(204_800);
+    expect(models[0].maxTokens).toBe(131_072);
+  });
+
+  it('uses default contextWindow/maxTokens for unknown models', () => {
+    const config = buildSaveConfig(null, {
+      provider: 'openrouter',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiKey: 'sk-test',
+      textModel: 'some/unknown-model',
+    });
+
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    const models = providers.openrouter.models as Array<{ id: string; contextWindow: number; maxTokens: number }>;
+    expect(models[0].contextWindow).toBe(128_000);
+    expect(models[0].maxTokens).toBe(16_384);
+  });
+
+  // --- New tests: reasoning flag ---
+
+  it('passes through reasoning flag for known models', () => {
+    const config = buildSaveConfig(null, {
+      provider: 'zai',
+      baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+      apiKey: 'sk-test',
+      textModel: 'glm-5',
+    });
+
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    const models = providers.zai.models as Array<{ id: string; reasoning: boolean }>;
+    expect(models[0].reasoning).toBe(true);
+  });
+
+  it('defaults reasoning to false for unknown models', () => {
+    const config = buildSaveConfig(null, {
+      provider: 'openrouter',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiKey: 'sk-test',
+      textModel: 'some/unknown-model',
+    });
+
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    const models = providers.openrouter.models as Array<{ id: string; reasoning: boolean }>;
+    expect(models[0].reasoning).toBe(false);
+  });
+
+  // --- Preserves existing env when proxyUrl undefined ---
+
+  it('preserves existing env when proxyUrl is undefined', () => {
+    const existing = {
+      env: { CUSTOM_VAR: 'hello' },
+    };
+
+    const config = buildSaveConfig(existing, {
+      provider: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: 'sk-test',
+      textModel: 'gpt-4o',
+    });
+
+    const env = config.env as Record<string, string>;
+    expect(env.CUSTOM_VAR).toBe('hello');
+  });
+
+  // --- Vision provider preserves existing API key ---
+
+  it('preserves existing vision provider API key when no new keys provided', () => {
+    const existing = {
+      models: {
+        providers: {
+          openai: { baseUrl: 'https://api.openai.com/v1', apiKey: 'sk-text-old' },
+          zai: { baseUrl: 'https://open.bigmodel.cn/api/paas/v4', apiKey: 'sk-vision-old' },
+        },
+      },
+    };
+
+    const config = buildSaveConfig(existing, {
+      provider: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      textModel: 'gpt-4o',
+      visionEnabled: true,
+      visionProvider: 'zai',
+      visionModel: 'glm-4.6v',
+      visionBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    });
+
+    const providers = (config.models as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
+    expect(providers.openai.apiKey).toBe('sk-text-old');
+    expect(providers.zai.apiKey).toBe('sk-vision-old');
   });
 });
 

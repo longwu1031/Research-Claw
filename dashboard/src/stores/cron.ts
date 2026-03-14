@@ -30,6 +30,7 @@ interface CronState {
   loadPresets: () => Promise<void>;
   activatePreset: (presetId: string, config?: Record<string, unknown>) => Promise<void>;
   deactivatePreset: (presetId: string) => Promise<void>;
+  deletePreset: (presetId: string) => Promise<void>;
 }
 
 // Mutex: tracks which presets have an activate/deactivate operation in-flight
@@ -120,6 +121,32 @@ export const useCronStore = create<CronState>()((set, get) => ({
       await get().loadPresets();
     } finally {
       _inflightPresets.delete(presetId);
+    }
+  },
+
+  deletePreset: async (presetId: string) => {
+    const client = useGatewayStore.getState().client;
+    if (!client?.isConnected) return;
+
+    try {
+      // 1. If enabled, remove gateway cron job first
+      const preset = get().presets.find((p) => p.id === presetId);
+      if (preset?.gateway_job_id) {
+        try {
+          await client.request('cron.remove', { id: preset.gateway_job_id });
+        } catch (err) {
+          console.warn('[CronStore] cron.remove failed during delete:', err);
+        }
+      }
+
+      // 2. Delete from plugin DB
+      await client.request('rc.cron.presets.delete', { preset_id: presetId });
+
+      // 3. Reload presets
+      await get().loadPresets();
+    } catch (err) {
+      console.error('[CronStore] deletePreset failed:', err);
+      await get().loadPresets();
     }
   },
 }));

@@ -188,7 +188,7 @@ if [ -d "$PLUGIN_DIR" ]; then
   if $OPENCLAW plugins install @wentorai/research-plugins 2>&1; then
     NEW_VER=$(node -e "console.log(require('$PLUGIN_DIR/package.json').version)" 2>/dev/null || echo "unknown")
     if [ "$CURRENT_VER" = "$NEW_VER" ]; then
-      ok "Research-plugins v${NEW_VER} (488 skills, 13 tools)"
+      ok "Research-plugins v${NEW_VER} (431 skills, 13 tools)"
     else
       ok "Research-plugins updated: v${CURRENT_VER} → v${NEW_VER}"
     fi
@@ -200,7 +200,7 @@ else
   # Fresh install
   if $OPENCLAW plugins install @wentorai/research-plugins 2>&1; then
     NEW_VER=$(node -e "console.log(require('$PLUGIN_DIR/package.json').version)" 2>/dev/null || echo "unknown")
-    ok "Research-plugins v${NEW_VER} (488 skills, 13 tools)"
+    ok "Research-plugins v${NEW_VER} (431 skills, 13 tools)"
   else
     printf "  ${R}  ⚠${N} research-plugins install failed (offline?). You can retry later:\n"
     printf "    openclaw plugins install @wentorai/research-plugins\n"

@@ -1,8 +1,7 @@
 ---
 name: Research SOP
 description: Standard operating procedure for academic research tasks. Defines methodology, quality gates, and output standards for all research activities.
-always: true
-version: 1.0
+metadata: { "openclaw": { "always": true } }
 ---
 
 # Research Standard Operating Procedure
@@ -63,6 +62,31 @@ When drafting or editing academic text:
    multi-author papers. Adjust per user preference.
 5. **Transitions:** Each paragraph should logically flow from the previous one.
    Use signpost phrases ("However," "In contrast," "Building on this,").
+
+## Tool vs. Skill Priority
+
+When a user request could be handled by either a local tool or a research skill:
+
+1. **Local tools first.** If a local tool (library_*, task_*, workspace_*, radar_*)
+   can fulfill the request, use it directly. Tools execute actions; skills provide
+   methodology guidance.
+2. **Skills for methodology.** Route to skills when the user needs a workflow, best
+   practice, or domain-specific guidance that no tool provides.
+3. **Combine when needed.** A single request may need both a tool (for execution)
+   and a skill (for methodology). Use both.
+
+## Cross-Category Research Patterns
+
+Common requests span multiple skill categories. Use these combinations:
+
+| User intent | Skill combination |
+|:-----------|:-----------------|
+| Literature review | literature/search + writing/composition |
+| Data analysis report | analysis/statistics + analysis/dataviz |
+| Submission preparation | writing/templates + writing/latex + writing/citation |
+| Systematic review | research/deep-research + research/methodology |
+| Entering a new field | domains/{field} |
+| Grant writing | research/funding + writing/composition |
 
 ## Error Handling
 

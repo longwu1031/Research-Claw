@@ -44,7 +44,7 @@ COPY . .
 
 RUN pnpm build
 
-# ── research-plugins（487 skills + 13 agent tools）──────────────────────
+# ── research-plugins（431 skills + 40 indexes + 13 agent tools）────────
 # 通过 OpenClaw 插件机制安装到 ~/.openclaw/extensions/（不走 node_modules）
 RUN OPENCLAW_CONFIG_PATH=./config/openclaw.example.json \
     node ./node_modules/openclaw/dist/entry.js \

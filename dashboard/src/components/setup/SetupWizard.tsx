@@ -9,7 +9,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useGatewayStore } from '../../stores/gateway';
 import { useConfigStore } from '../../stores/config';
-import { buildConfigPatch, extractConfigFields } from '../../utils/config-patch';
+import { buildSaveConfig, extractConfigFields } from '../../utils/config-patch';
 import { PROVIDER_PRESETS, detectPresetFromProvider, getPreset } from '../../utils/provider-presets';
 
 const { Title, Text } = Typography;
@@ -135,25 +135,31 @@ export default function SetupWizard() {
     setError('');
 
     try {
-      const patch = buildConfigPatch({
-        provider,
-        baseUrl: baseUrl.trim(),
-        api,
-        apiKey: apiKey.trim() || undefined,
-        textModel: textModel.trim(),
-        visionEnabled,
-        visionProvider: visionEnabled ? visionProvider : undefined,
-        visionModel: visionEnabled ? visionModel.trim() || undefined : undefined,
-        visionBaseUrl: visionEnabled && visionProvider !== provider ? visionBaseUrl.trim() || undefined : undefined,
-        visionApiKey: visionEnabled && visionProvider !== provider ? (visionApiKey.trim() || undefined) : undefined,
-        visionApi: visionEnabled && visionProvider !== provider ? visionApi : undefined,
-        proxyUrl: proxyEnabled ? proxyUrl.trim() : '',
-      });
+      const configSnapshot = await client.request<{
+        config?: Record<string, unknown>;
+        hash?: string;
+      }>('config.get', {});
 
-      const configSnapshot = await client.request<{ hash: string }>('config.get', {});
+      const fullConfig = buildSaveConfig(
+        (configSnapshot.config ?? null) as Record<string, unknown> | null,
+        {
+          provider,
+          baseUrl: baseUrl.trim(),
+          api,
+          apiKey: apiKey.trim() || undefined,
+          textModel: textModel.trim(),
+          visionEnabled,
+          visionProvider: visionEnabled ? visionProvider : undefined,
+          visionModel: visionEnabled ? visionModel.trim() || undefined : undefined,
+          visionBaseUrl: visionEnabled && visionProvider !== provider ? visionBaseUrl.trim() || undefined : undefined,
+          visionApiKey: visionEnabled && visionProvider !== provider ? (visionApiKey.trim() || undefined) : undefined,
+          visionApi: visionEnabled && visionProvider !== provider ? visionApi : undefined,
+          proxyUrl: proxyEnabled ? proxyUrl.trim() : '',
+        },
+      );
 
-      await client.request('config.patch', {
-        raw: JSON.stringify(patch),
+      await client.request('config.apply', {
+        raw: JSON.stringify(fullConfig),
         baseHash: configSnapshot.hash,
       });
 

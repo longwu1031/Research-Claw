@@ -1,8 +1,7 @@
 ---
 name: Wentor API
 description: Access Wentor platform academic services — paper Q&A search, structured paper search, and AI figure generation. Requires a Wentor API token.
-always: true
-version: 1.0
+metadata: { "openclaw": { "always": true } }
 ---
 
 # Wentor Academic API
@@ -45,7 +44,7 @@ Authorization: Bearer <token>
 ```
 
 | Field      | Type       | Required | Default     | Description                                |
-|------------|------------|----------|-------------|--------------------------------------------|
+|------------|------------|----------|-------------|-------------------------------------------|
 | `query`    | string     | yes      | —           | Natural language question (2–500 chars)     |
 | `size`     | int        | no       | 10          | Results per page (1–50)                     |
 | `offset`   | int        | no       | 0           | Pagination offset                          |
@@ -119,7 +118,9 @@ At least one of `title`, `keyword`, `author`, `org`, or `venue` is required.
       "doi": "10.5555/3295222.3295349"
     }
   ],
-  "total": 42
+  "total": 42,
+  "page": 0,
+  "size": 10
 }
 ```
 
@@ -170,8 +171,8 @@ Authorization: Bearer <token>
 }
 ```
 
-- `image`: base64-encoded PNG (data URI)
-- `text`: optional textual explanation from the model
+- `image`: base64-encoded PNG (data URI), or `null` if generation failed
+- `text`: optional textual explanation from the model, or `null`
 - `prompt`: echo of the original prompt
 
 ### cURL Example
@@ -187,15 +188,18 @@ curl -X POST https://wentor.ai/api/v1/academic/plot \
 
 ## Error Codes
 
-| HTTP | Code                    | Meaning                                       |
-|------|-------------------------|-----------------------------------------------|
-| 401  | `UNAUTHORIZED`          | Missing or invalid API token                  |
-| 400  | `MISSING_SEARCH_CRITERIA` | No search field provided (wentor_search only) |
-| 403  | `SERVICE_NOT_ENABLED`   | Enable the service in your dashboard first    |
-| 403  | `DAILY_QUOTA_EXCEEDED`  | Daily quota exhausted, resets at midnight UTC  |
-| 422  | validation error        | Invalid field value (e.g., query too short)    |
-| 429  | `RATE_LIMITED`          | Too many requests, slow down                  |
-| 502  | `UPSTREAM_ERROR`        | Upstream service temporarily unavailable       |
+| HTTP | Code                      | Meaning                                        |
+|------|---------------------------|------------------------------------------------|
+| 401  | `UNAUTHORIZED`            | Missing or invalid API token                   |
+| 400  | `MISSING_SEARCH_CRITERIA` | No search field provided (wentor_search only)  |
+| 400  | `INVALID_PARAMS`          | Invalid search parameters (upstream)           |
+| 403  | `SERVICE_NOT_ENABLED`     | Enable the service in your dashboard first     |
+| 422  | validation error          | Invalid field value (e.g., query too short)    |
+| 429  | `QUOTA_EXCEEDED`          | Daily quota exhausted, resets at midnight UTC  |
+| 429  | `RATE_LIMITED`            | Too many requests per minute, slow down        |
+| 429  | `UPSTREAM_RATE_LIMITED`   | Upstream service rate limited, retry later     |
+| 502  | `UPSTREAM_ERROR`          | Upstream service error                         |
+| 503  | `UPSTREAM_UNAVAILABLE`    | Upstream service temporarily unavailable       |
 
 ## Usage Tips
 

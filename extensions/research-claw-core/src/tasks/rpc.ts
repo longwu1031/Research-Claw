@@ -1,7 +1,7 @@
 /**
  * Research-Claw Core — Task RPC Handlers
  *
- * 15 gateway RPC method handlers for the task management module:
+ * 17 gateway RPC method handlers for the task management module:
  *
  * Task methods (rc.task.*):
  *   1.  rc.task.list           — List/filter tasks with pagination
@@ -20,9 +20,11 @@
  *   12. rc.cron.presets.activate   — Activate a cron preset
  *   13. rc.cron.presets.deactivate — Deactivate a cron preset
  *   14. rc.cron.presets.setJobId   — Store gateway cron job ID
+ *   15. rc.cron.presets.delete     — Delete a cron preset from DB
+ *   16. rc.cron.presets.restore    — Restore a deleted preset from PRESET_DEFINITIONS
  *
  * Notification methods (rc.notifications.*):
- *   15. rc.notifications.pending   — Query pending deadline/overdue notifications
+ *   17. rc.notifications.pending   — Query pending deadline/overdue notifications
  *
  * Error codes: rc.task.* and rc.cron.* use string-based error codes
  * (INVALID_PARAMS, SERVICE_ERROR) via RpcValidationError, not numeric JSON-RPC codes.
@@ -414,7 +416,29 @@ export function registerTaskRpc(registerMethod: RegisterMethod, service: TaskSer
     }
   });
 
-  // ── 15. rc.notifications.pending ────────────────────────────────
+  // ── 15. rc.cron.presets.delete ──────────────────────────────────
+
+  registerMethod('rc.cron.presets.delete', async (params: Record<string, unknown>) => {
+    try {
+      const presetId = requireString(params.preset_id, 'preset_id');
+      return service.cronPresetsDelete(presetId);
+    } catch (err) {
+      throw err instanceof RpcValidationError ? new Error(err.message) : err;
+    }
+  });
+
+  // ── 16. rc.cron.presets.restore ─────────────────────────────────
+
+  registerMethod('rc.cron.presets.restore', async (params: Record<string, unknown>) => {
+    try {
+      const presetId = requireString(params.preset_id, 'preset_id');
+      return service.cronPresetsRestore(presetId);
+    } catch (err) {
+      throw err instanceof RpcValidationError ? new Error(err.message) : err;
+    }
+  });
+
+  // ── 17. rc.notifications.pending ────────────────────────────────
   //
   // Returns overdue + upcoming tasks for the dashboard notification bell.
   // Dashboard polls this on connect, after chat turns, and on a 60s timer.
@@ -453,7 +477,7 @@ export function registerTaskRpc(registerMethod: RegisterMethod, service: TaskSer
     }
   });
 
-  // ── 16. rc.notifications.markRead ───────────────────────────────
+  // ── 18. rc.notifications.markRead ───────────────────────────────
 
   registerMethod('rc.notifications.markRead', async (params: Record<string, unknown>) => {
     try {

@@ -25,6 +25,21 @@ export interface Task {
   notes: string | null;
 }
 
+export interface ActivityLogEntry {
+  id: string;
+  task_id: string;
+  event_type: string;
+  old_value: string | null;
+  new_value: string | null;
+  actor: 'human' | 'agent';
+  created_at: string;
+}
+
+export interface TaskWithDetails extends Task {
+  activity_log: ActivityLogEntry[];
+  subtasks: Task[];
+}
+
 export interface TaskInput {
   title: string;
   description?: string;
@@ -60,6 +75,7 @@ interface TasksState {
   sortBy: 'deadline' | 'priority' | 'created_at';
 
   loadTasks: () => Promise<void>;
+  loadTaskDetail: (id: string) => Promise<TaskWithDetails | null>;
   setPerspective: (p: 'all' | 'human' | 'agent') => void;
   toggleCompleted: () => void;
   completeTask: (id: string) => Promise<void>;
@@ -97,6 +113,17 @@ export const useTasksStore = create<TasksState>()((set, get) => ({
       set({ tasks: result.items, total: result.total, loading: false });
     } catch {
       set({ loading: false });
+    }
+  },
+
+  loadTaskDetail: async (id: string) => {
+    const client = useGatewayStore.getState().client;
+    if (!client?.isConnected) return null;
+    try {
+      const result = await client.request<TaskWithDetails>('rc.task.get', { id });
+      return result;
+    } catch {
+      return null;
     }
   },
 

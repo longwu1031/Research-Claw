@@ -4,6 +4,7 @@ import {
   Button,
   Divider,
   Input,
+  Modal,
   Segmented,
   Select,
   Spin,
@@ -15,7 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { useConfigStore } from '../../stores/config';
 import { useGatewayStore } from '../../stores/gateway';
 import { getThemeTokens } from '../../styles/theme';
-import { buildConfigPatch, extractConfigFields } from '../../utils/config-patch';
+import { buildSaveConfig, extractConfigFields } from '../../utils/config-patch';
 import { PROVIDER_PRESETS, detectPresetFromProvider, getPreset } from '../../utils/provider-presets';
 
 const { Text } = Typography;
@@ -67,7 +68,7 @@ function AboutSection() {
 
   const handleCopyDiagnostics = async () => {
     const diagnostics = [
-      `Research-Claw v0.1.0`,
+      `Research-Claw v0.3.0`,
       `Powered by OpenClaw ${serverVersion ?? 'unknown'}`,
       `Gateway: ws://127.0.0.1:28789`,
       `Platform: ${navigator.platform}`,
@@ -85,7 +86,6 @@ function AboutSection() {
   };
 
   const infoRows = [
-    { label: t('settings.aboutVersion', { version: '0.1.0' }), value: '' },
     { label: t('settings.aboutOpenClaw', { version: serverVersion ?? 'N/A' }), value: '' },
     { label: t('settings.aboutGateway'), value: 'ws://127.0.0.1:28789' },
     { label: t('settings.aboutPlugins'), value: 'research-claw-core' },
@@ -95,6 +95,29 @@ function AboutSection() {
 
   return (
     <>
+      {/* Version header with glow */}
+      <div style={{ textAlign: 'center', padding: '8px 0 12px' }}>
+        <a
+          href="https://github.com/wentorai/Research-Claw"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ textDecoration: 'none' }}
+        >
+          <span
+            style={{
+              fontSize: 16,
+              fontWeight: 700,
+              fontFamily: "'Fira Code', monospace",
+              color: '#EF4444',
+              textShadow: '0 0 8px rgba(239, 68, 68, 0.6), 0 0 16px rgba(239, 68, 68, 0.3)',
+              letterSpacing: 1,
+            }}
+          >
+            Research-Claw v0.3.0
+          </span>
+        </a>
+      </div>
+
       {infoRows.map((row) => (
         <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 13 }}>
           <Text>{row.label}</Text>
@@ -127,6 +150,17 @@ function AboutSection() {
       >
         {t('settings.aboutDiagnostics')}
       </Button>
+
+      <div style={{ marginTop: 8, textAlign: 'center' }}>
+        <a
+          href="https://github.com/wentorai/Research-Claw"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: tokens.accent.blue, fontSize: 12 }}
+        >
+          {t('settings.aboutGithub')}
+        </a>
+      </div>
     </>
   );
 }
@@ -257,7 +291,7 @@ export default function SettingsPanel() {
     loadGatewayConfig();
   }, [loadGatewayConfig]);
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(() => {
     const client = useGatewayStore.getState().client;
     if (!client?.isConnected) return;
 
@@ -266,37 +300,78 @@ export default function SettingsPanel() {
       return;
     }
 
-    setSaving(true);
-    try {
-      const patch = buildConfigPatch({
-        provider,
-        baseUrl: baseUrl.trim(),
-        api,
-        apiKey: apiKey.trim() || undefined,
-        textModel: textModel.trim(),
-        visionEnabled,
-        visionProvider: visionEnabled ? visionProvider : undefined,
-        visionModel: visionEnabled ? visionModel.trim() || undefined : undefined,
-        visionBaseUrl: visionEnabled && visionSeparateProvider ? visionBaseUrl.trim() || undefined : undefined,
-        visionApiKey: visionEnabled && visionSeparateProvider ? (visionApiKey.trim() || undefined) : undefined,
-        visionApi: visionEnabled && visionSeparateProvider ? visionApi : undefined,
-        proxyUrl: proxyEnabled ? proxyUrl.trim() : '',
-      });
+    const modalTokens = getThemeTokens(useConfigStore.getState().theme);
+    Modal.confirm({
+      title: t('settings.restartConfirmTitle'),
+      content: t('settings.restartConfirmContent'),
+      okText: t('settings.save'),
+      cancelText: t('settings.cancel'),
+      centered: true,
+      styles: {
+        mask: { backdropFilter: 'blur(4px)' },
+        content: {
+          background: modalTokens.bg.surface,
+          borderRadius: 12,
+          border: `1px solid ${modalTokens.border.default}`,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+          padding: '20px 24px',
+        },
+        header: {
+          background: 'transparent',
+          borderBottom: 'none',
+          padding: 0,
+          marginBottom: 8,
+        },
+        body: {
+          padding: 0,
+          color: modalTokens.text.secondary,
+        },
+        footer: {
+          borderTop: 'none',
+          marginTop: 16,
+          padding: 0,
+        },
+      },
+      onOk: async () => {
+        setSaving(true);
+        try {
+          const configSnapshot = await client.request<{
+            config?: Record<string, unknown>;
+            hash?: string;
+          }>('config.get', {});
 
-      const configSnapshot = await client.request<{ hash: string }>('config.get', {});
+          const fullConfig = buildSaveConfig(
+            (configSnapshot.config ?? null) as Record<string, unknown> | null,
+            {
+              provider,
+              baseUrl: baseUrl.trim(),
+              api,
+              apiKey: apiKey.trim() || undefined,
+              textModel: textModel.trim(),
+              visionEnabled,
+              visionProvider: visionEnabled ? visionProvider : undefined,
+              visionModel: visionEnabled ? visionModel.trim() || undefined : undefined,
+              visionBaseUrl: visionEnabled && visionSeparateProvider ? visionBaseUrl.trim() || undefined : undefined,
+              visionApiKey: visionEnabled && visionSeparateProvider ? (visionApiKey.trim() || undefined) : undefined,
+              visionApi: visionEnabled && visionSeparateProvider ? visionApi : undefined,
+              proxyUrl: proxyEnabled ? proxyUrl.trim() : '',
+            },
+          );
 
-      await client.request('config.patch', {
-        raw: JSON.stringify(patch),
-        baseHash: configSnapshot.hash,
-      });
+          await client.request('config.apply', {
+            raw: JSON.stringify(fullConfig),
+            baseHash: configSnapshot.hash,
+          });
 
-      message.success(t('settings.saved'));
-      setRestarting(true);
-    } catch {
-      message.error(t('settings.saveFailed'));
-    } finally {
-      setSaving(false);
-    }
+          message.success(t('settings.saved'));
+          setRestarting(true);
+        } catch {
+          message.error(t('settings.saveFailed'));
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
   }, [baseUrl, api, apiKey, provider, textModel, visionEnabled, visionProvider, visionModel, visionBaseUrl, visionApi, visionApiKey, visionSeparateProvider, proxyEnabled, proxyUrl, t]);
 
   const handleSavePrompt = useCallback(() => {

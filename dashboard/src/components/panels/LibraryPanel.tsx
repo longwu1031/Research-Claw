@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Input, Segmented, Select, Tag, Tooltip, Typography, Dropdown, message } from 'antd';
 import {
   BookOutlined,
+  CloseCircleOutlined,
   EllipsisOutlined,
   FilePdfOutlined,
   SearchOutlined,
@@ -259,6 +260,7 @@ export default function LibraryPanel() {
   const listContainerRef = useRef<HTMLDivElement>(null);
   const [listHeight, setListHeight] = useState(400);
   const [editTagsPaper, setEditTagsPaper] = useState<Paper | null>(null);
+  const [showAllTags, setShowAllTags] = useState(false);
 
   // Load data when gateway connection is established (or re-established)
   useEffect(() => {
@@ -272,9 +274,9 @@ export default function LibraryPanel() {
 
   useEffect(() => {
     if (selectedTags.length > 0) {
-      setFilters({ tag: selectedTags[0] });
+      setFilters({ tags: selectedTags });
     } else {
-      setFilters({ tag: undefined });
+      setFilters({ tags: undefined });
     }
     loadPapers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -342,8 +344,34 @@ export default function LibraryPanel() {
 
   const useVirtualScroll = filteredPapers.length > 50;
 
-  // Empty state
-  if (!loading && papers.length === 0 && !searchQuery) {
+  // Compute tags that exist on currently visible papers (before tag filtering)
+  const visibleTagNames = useMemo(() => {
+    // Use the tab-filtered papers (before tag filter is applied) to determine
+    // which tags should be shown. This way the tag bar only shows tags
+    // that belong to papers on the current tab.
+    const tabPapers =
+      activeTab === 'pending'
+        ? papers.filter((p) => p.read_status === 'unread' || p.read_status === 'reading')
+        : papers.filter((p) => p.rating && p.rating > 0);
+    const tagSet = new Set<string>();
+    for (const paper of tabPapers) {
+      for (const tag of paper.tags ?? []) {
+        tagSet.add(tag);
+      }
+    }
+    return tagSet;
+  }, [papers, activeTab]);
+
+  // Filter the global tags list to only show tags on current tab's papers
+  const displayTags = useMemo(
+    () => tags.filter((tag) => visibleTagNames.has(tag.name)),
+    [tags, visibleTagNames],
+  );
+
+  const hasActiveFilter = selectedTags.length > 0 || !!filters.read_status || !!filters.year;
+
+  // True empty state: no papers, no active filters
+  if (!loading && papers.length === 0 && !searchQuery && !hasActiveFilter) {
     return (
       <div style={{ padding: 24, textAlign: 'center', paddingTop: 60 }}>
         <BookOutlined style={{ fontSize: 48, color: tokens.text.muted, opacity: 0.4 }} />
@@ -400,10 +428,25 @@ export default function LibraryPanel() {
         />
       </div>
 
-      {/* Tag filter */}
-      {tags.length > 0 && (
-        <div style={{ padding: '0 16px 8px', display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {tags.slice(0, 10).map((tag) => (
+      {/* Tag filter — only show tags that belong to papers on the current tab */}
+      {displayTags.length > 0 && (
+        <div style={{ padding: '0 16px 8px', display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+          {selectedTags.length > 0 && (
+            <Tag
+              onClick={() => setSelectedTags([])}
+              style={{
+                cursor: 'pointer',
+                fontSize: 11,
+                color: tokens.accent.red,
+                borderColor: tokens.accent.red,
+                background: 'transparent',
+              }}
+            >
+              <CloseCircleOutlined style={{ marginRight: 2 }} />
+              {t('library.clearTags')}
+            </Tag>
+          )}
+          {displayTags.slice(0, showAllTags ? displayTags.length : 10).map((tag) => (
             <Tag
               key={tag.name}
               color={selectedTags.includes(tag.name) ? tokens.accent.blue : undefined}
@@ -413,12 +456,44 @@ export default function LibraryPanel() {
               {tag.name}
             </Tag>
           ))}
+          {displayTags.length > 10 && !showAllTags && (
+            <Tag
+              onClick={() => setShowAllTags(true)}
+              style={{ cursor: 'pointer', fontSize: 11, borderStyle: 'dashed' }}
+            >
+              +{displayTags.length - 10}
+            </Tag>
+          )}
         </div>
       )}
 
       {/* Paper list */}
       <div ref={listContainerRef} style={{ flex: 1, overflow: useVirtualScroll ? 'hidden' : 'auto' }}>
-        {useVirtualScroll ? (
+        {filteredPapers.length === 0 && !loading ? (
+          <div style={{ padding: 24, textAlign: 'center', paddingTop: 40 }}>
+            <BookOutlined style={{ fontSize: 36, color: tokens.text.muted, opacity: 0.3 }} />
+            <div style={{ marginTop: 12 }}>
+              <Text type="secondary" style={{ fontSize: 13 }}>
+                {t('library.emptyFiltered')}
+              </Text>
+            </div>
+            {(selectedTags.length > 0 || searchQuery) && (
+              <Button
+                size="small"
+                type="link"
+                onClick={() => {
+                  setSelectedTags([]);
+                  setSearchQuery('');
+                  setFilters({});
+                  loadPapers();
+                }}
+                style={{ marginTop: 8 }}
+              >
+                {t('library.clearFilter')}
+              </Button>
+            )}
+          </div>
+        ) : useVirtualScroll ? (
           <VirtualList
             rowComponent={VirtualRow}
             rowCount={filteredPapers.length}
