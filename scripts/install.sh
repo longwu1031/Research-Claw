@@ -224,6 +224,10 @@ ok "pnpm $(pnpm -v)"
 if [ -d "$INSTALL_DIR/.git" ]; then
   info "Updating existing installation..."
   cd "$INSTALL_DIR"
+  # Recover from interrupted rebase/merge (e.g. user Ctrl+C during update)
+  git rebase --abort 2>/dev/null || true
+  git merge --abort 2>/dev/null || true
+  git checkout -- . 2>/dev/null || true
   git pull --rebase --autostash 2>/dev/null || git pull
   ok "Updated"
 else
