@@ -536,11 +536,24 @@ cd "$INSTALL_DIR"
 # GW_NODE and GW_NODE_DIR already resolved at [6/8] (conda openclaw → system fallback).
 
 # --- Final ABI safety net ---
-# Catches edge cases missed by [7/8]: Node upgraded since last pnpm install,
-# pnpm skipped recompilation ("Already up to date"), stale .node binary.
-SQLITE_PKG="$(resolve_sqlite_pkg)"
-if [ -n "$SQLITE_PKG" ] && ! "$GW_NODE" -e "require('$SQLITE_PKG')" 2>/dev/null; then
-  rebuild_native "$SQLITE_PKG"
+# Nuclear: test the EXACT path the gateway will load. If it fails, delete ALL
+# compiled .node files and force pnpm to recompile from scratch. This handles
+# pnpm stores with multiple copies, stale builds, and version mismatches.
+SQLITE_RUNTIME_NODE="node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/build/Release/better_sqlite3.node"
+# shellcheck disable=SC2086
+if ! "$GW_NODE" -e "require('better-sqlite3')" 2>/dev/null; then
+  info "ABI mismatch detected at gateway startup — force rebuilding..."
+  # Delete ALL compiled artifacts so pnpm rebuild can't skip
+  for f in $SQLITE_RUNTIME_NODE; do
+    [ -f "$f" ] && rm -f "$f"
+  done
+  pnpm rebuild better-sqlite3 2>&1 | tail -3 || true
+  # Verify
+  if "$GW_NODE" -e "require('better-sqlite3')" 2>/dev/null; then
+    ok "Native modules force-rebuilt for $("$GW_NODE" -v)"
+  else
+    warn "Force rebuild failed. Try: rm -rf node_modules && pnpm install"
+  fi
 fi
 
 # Always use project config — contains RC plugin paths, tool whitelist, dashboard root.
