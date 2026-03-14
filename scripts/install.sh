@@ -358,90 +358,63 @@ if [ ! -d "dashboard/dist" ] || [ ! -f "dashboard/dist/index.html" ]; then
   fi
 fi
 
-# --- [7/8] Rebuild native modules if ABI mismatch ---
-# better-sqlite3 is a C++ addon compiled against a specific Node ABI.
-# pnpm install compiles with system Node, but OpenClaw may re-exec under conda Node.
-# We use Node's own require.resolve (not filesystem globs) to find the package,
-# then test ABI compatibility with the gateway Node.
+# --- [7/8] Ensure native modules work with gateway Node ---
+# better-sqlite3 is a C++ addon. pnpm compiles it for whatever `node` is in PATH,
+# but the gateway may run under a different Node (conda). Incremental repairs
+# (rebuild, targeted rebuild) are unreliable when pnpm state is corrupted.
+# Strategy: test require() → if fails, nuke node_modules and reinstall from scratch.
 
-resolve_sqlite_pkg() {
-  # Let Node find better-sqlite3 regardless of pnpm store layout.
-  # Try require.resolve first, fall back to glob if Corepack/packageManager interferes.
-  local result
-  result="$("$GW_NODE" -e "
-    try {
-      const p = require.resolve('better-sqlite3/package.json');
-      console.log(p.replace(/\/package\.json\$/, ''));
-    } catch {}
-  " 2>/dev/null)"
-  if [ -z "$result" ]; then
-    # Fallback: glob search in pnpm store
-    local SQLITE_GLOB="node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3"
-    # shellcheck disable=SC2086
-    for d in $SQLITE_GLOB; do
-      if [ -d "$d" ]; then result="$(cd "$d" && pwd)"; break; fi
-    done
+ensure_native_modules() {
+  # Test: can the gateway Node actually load better-sqlite3?
+  if "$GW_NODE" -e "require('better-sqlite3')" 2>/dev/null; then
+    ok "Native modules OK"
+    return 0
   fi
-  echo "$result"
-}
 
-rebuild_native() {
-  info "Rebuilding native modules for $("$GW_NODE" -v) (gateway Node)..."
-  local SQLITE_PKG="$1"
-  local GW_NPM_ROOT GW_NODEGYP REBUILD_OK=false
-  GW_NPM_ROOT="$("$GW_NODE" -e "console.log(require('child_process').execSync('npm root -g', {env:{...process.env,PATH:process.env.PATH}}).toString().trim())" 2>/dev/null || echo "")"
-  GW_NODEGYP=""
-  if [ -n "$GW_NPM_ROOT" ] && [ -f "$GW_NPM_ROOT/npm/node_modules/node-gyp/bin/node-gyp.js" ]; then
-    GW_NODEGYP="$GW_NPM_ROOT/npm/node_modules/node-gyp/bin/node-gyp.js"
-  fi
-  if [ -n "$GW_NODEGYP" ]; then
-    (cd "$SQLITE_PKG" && PATH="$GW_NODE_DIR:$PATH" "$GW_NODE" "$GW_NODEGYP" rebuild &>/dev/null) && REBUILD_OK=true
-  else
-    (cd "$SQLITE_PKG" && PATH="$GW_NODE_DIR:$PATH" npx --yes node-gyp rebuild &>/dev/null) && REBUILD_OK=true
-  fi
-  if $REBUILD_OK; then
-    ok "Native modules rebuilt for $("$GW_NODE" -v)"
-  else
-    warn "Native module rebuild failed. The gateway may still work if openclaw uses its own Node."
-  fi
-}
-
-SQLITE_PKG="$(resolve_sqlite_pkg)"
-if [ -n "$SQLITE_PKG" ]; then
-  # If gateway Node major differs from system Node (conda v22 vs Homebrew v23/v24),
-  # pnpm compiled for system Node → MUST rebuild for gateway Node.
-  if [ "$SYSTEM_NODE_V" != "$GW_NODE_V" ]; then
-    rebuild_native "$SQLITE_PKG"
-  elif ! "$GW_NODE" -e "require('$SQLITE_PKG')" 2>/dev/null; then
-    rebuild_native "$SQLITE_PKG"
-  else
-    ok "Native modules ABI compatible"
-  fi
-else
-  # better-sqlite3 not found — previous pnpm install likely incomplete or corrupted.
-  # Step 1: targeted rebuild
-  info "better-sqlite3 not found. Rebuilding..."
+  # Attempt 1: targeted rebuild (fast, works for simple ABI mismatch)
+  info "Native module ABI mismatch — rebuilding better-sqlite3..."
   pnpm rebuild better-sqlite3 2>&1 | tail -3 || true
-  SQLITE_PKG="$(resolve_sqlite_pkg)"
-  # Step 2: if still missing, force reinstall all deps (nuclear option)
-  if [ -z "$SQLITE_PKG" ]; then
-    info "Force reinstalling dependencies..."
-    pnpm install --force 2>&1 | tail -5 || true
-    SQLITE_PKG="$(resolve_sqlite_pkg)"
+  if "$GW_NODE" -e "require('better-sqlite3')" 2>/dev/null; then
+    ok "Native modules rebuilt for $("$GW_NODE" -v)"
+    return 0
   fi
-  if [ -n "$SQLITE_PKG" ]; then
-    ok "Native modules compiled"
-    if ! "$GW_NODE" -e "require('$SQLITE_PKG')" 2>/dev/null; then
-      rebuild_native "$SQLITE_PKG"
-    fi
-  else
-    warn "better-sqlite3 compilation failed. The gateway may not start."
-    if [ "$RC_OS" = mac ]; then
-      warn "Ensure Xcode CLT is installed: xcode-select --install"
-      warn "Ensure python3 is available: python3 --version"
-    fi
+
+  # Attempt 2: clean reinstall (fixes corrupted pnpm store, interrupted installs)
+  info "Rebuild failed — clean reinstalling dependencies..."
+  rm -rf node_modules
+  if ! (pnpm install --frozen-lockfile 2>/dev/null || pnpm install); then
+    die "Dependency installation failed. Try: cd $INSTALL_DIR && pnpm install"
   fi
-fi
+  # Rebuild dashboard after clean install
+  pnpm build 2>&1 | tail -3 || true
+
+  if "$GW_NODE" -e "require('better-sqlite3')" 2>/dev/null; then
+    ok "Native modules OK (clean install)"
+    return 0
+  fi
+
+  # Attempt 3: conda/version mismatch — manually rebuild with gateway Node
+  info "Compiling better-sqlite3 for $("$GW_NODE" -v)..."
+  local SQLITE_PKG
+  SQLITE_PKG="$("$GW_NODE" -e "try{console.log(require.resolve('better-sqlite3/package.json').replace(/\/package\.json$/,''))}catch{}" 2>/dev/null)"
+  if [ -n "$SQLITE_PKG" ] && [ -f "$SQLITE_PKG/binding.gyp" ]; then
+    (cd "$SQLITE_PKG" && PATH="$GW_NODE_DIR:$PATH" npx --yes node-gyp rebuild &>/dev/null) || true
+  fi
+
+  if "$GW_NODE" -e "require('better-sqlite3')" 2>/dev/null; then
+    ok "Native modules compiled for $("$GW_NODE" -v)"
+    return 0
+  fi
+
+  warn "Native module compilation failed. The gateway may not start."
+  if [ "$RC_OS" = mac ]; then
+    warn "Ensure Xcode CLT is installed: xcode-select --install"
+    warn "Ensure python3 is available: python3 --version"
+  fi
+  return 1
+}
+
+ensure_native_modules || true
 
 # --- [8/8] Register research-plugins (skills + agent tools) ---
 # Installed via OpenClaw's plugin system (npm pack → ~/.openclaw/extensions/).
@@ -535,25 +508,9 @@ cd "$INSTALL_DIR"
 
 # GW_NODE and GW_NODE_DIR already resolved at [6/8] (conda openclaw → system fallback).
 
-# --- Final ABI safety net ---
-# Nuclear: test the EXACT path the gateway will load. If it fails, delete ALL
-# compiled .node files and force pnpm to recompile from scratch. This handles
-# pnpm stores with multiple copies, stale builds, and version mismatches.
-SQLITE_RUNTIME_NODE="node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/build/Release/better_sqlite3.node"
-# shellcheck disable=SC2086
+# Final ABI re-check (gateway may run under different Node than install phase)
 if ! "$GW_NODE" -e "require('better-sqlite3')" 2>/dev/null; then
-  info "ABI mismatch detected at gateway startup — force rebuilding..."
-  # Delete ALL compiled artifacts so pnpm rebuild can't skip
-  for f in $SQLITE_RUNTIME_NODE; do
-    [ -f "$f" ] && rm -f "$f"
-  done
-  pnpm rebuild better-sqlite3 2>&1 | tail -3 || true
-  # Verify
-  if "$GW_NODE" -e "require('better-sqlite3')" 2>/dev/null; then
-    ok "Native modules force-rebuilt for $("$GW_NODE" -v)"
-  else
-    warn "Force rebuild failed. Try: rm -rf node_modules && pnpm install"
-  fi
+  ensure_native_modules || true
 fi
 
 # Always use project config — contains RC plugin paths, tool whitelist, dashboard root.
