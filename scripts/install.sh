@@ -289,8 +289,10 @@ if [ "$GW_NODE" != "$(command -v node)" ]; then
 fi
 
 # --- [6/8] Install + build ---
+# Put $GW_NODE first in PATH so pnpm compiles native modules (better-sqlite3)
+# for the gateway's Node, not the system Node. This avoids ABI mismatch entirely.
 info "Installing dependencies..."
-if ! (pnpm install --frozen-lockfile 2>/dev/null || pnpm install); then
+if ! (PATH="$GW_NODE_DIR:$PATH" pnpm install --frozen-lockfile 2>/dev/null || PATH="$GW_NODE_DIR:$PATH" pnpm install); then
   die "Dependency installation failed. Try: cd $INSTALL_DIR && pnpm install"
 fi
 ok "Dependencies installed"
@@ -378,9 +380,10 @@ ensure_native_modules() {
   fi
 
   # Attempt 2: clean reinstall (fixes corrupted pnpm store, interrupted installs)
+  # Use $GW_NODE_DIR in PATH so native modules compile for the correct Node
   info "Rebuild failed — clean reinstalling dependencies..."
   rm -rf node_modules
-  if ! (pnpm install --frozen-lockfile 2>/dev/null || pnpm install); then
+  if ! (PATH="$GW_NODE_DIR:$PATH" pnpm install --frozen-lockfile 2>/dev/null || PATH="$GW_NODE_DIR:$PATH" pnpm install); then
     die "Dependency installation failed. Try: cd $INSTALL_DIR && pnpm install"
   fi
   # Rebuild dashboard after clean install
