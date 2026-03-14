@@ -218,7 +218,14 @@ fi
 if ! command -v pnpm &>/dev/null; then
   die "pnpm installation failed. Install manually: npm install -g pnpm@$PNPM_VERSION"
 fi
-ok "pnpm $(pnpm -v)"
+ok "pnpm $(pnpm -v 2>/dev/null)"
+
+# --- Disable Corepack strict mode ---
+# Node 22+ enables Corepack by default. If a parent directory (e.g. ~/) has a
+# package.json with "packageManager": "yarn@...", Corepack blocks pnpm with
+# "This project is configured to use yarn" and causes "Invalid package.json".
+export COREPACK_ENABLE_STRICT=0
+export COREPACK_ENABLE_AUTO_PIN=0
 
 # --- [5/8] Clone or update ---
 if [ -d "$INSTALL_DIR/.git" ]; then
@@ -239,13 +246,6 @@ else
   cd "$INSTALL_DIR"
   ok "Cloned"
 fi
-
-# --- Disable Corepack strict mode ---
-# Node 22+ enables Corepack by default. If a parent directory (e.g. ~/) has a
-# package.json with "packageManager": "yarn@...", Corepack blocks pnpm with
-# "This project is configured to use yarn" and causes "Invalid package.json".
-export COREPACK_ENABLE_STRICT=0
-export COREPACK_ENABLE_AUTO_PIN=0
 
 # --- Force git HTTPS (prevent SSH clone failures for git+ dependencies) ---
 # @whiskeysockets/baileys references libsignal-node via git+https URL;
@@ -284,8 +284,6 @@ if [ "$GW_NODE" = "node" ]; then
   GW_NODE="$(command -v node)"
 fi
 GW_NODE_DIR="$(dirname "$GW_NODE")"
-SYSTEM_NODE_V="$(node -v 2>/dev/null | sed 's/^v//' | cut -d. -f1)"
-GW_NODE_V="$("$GW_NODE" -v 2>/dev/null | sed 's/^v//' | cut -d. -f1)"
 if [ "$GW_NODE" != "$(command -v node)" ]; then
   info "Gateway Node: $("$GW_NODE" -v) (conda openclaw)"
 fi
@@ -507,11 +505,6 @@ set +e
 cd "$INSTALL_DIR"
 
 # GW_NODE and GW_NODE_DIR already resolved at [6/8] (conda openclaw → system fallback).
-
-# Final ABI re-check (gateway may run under different Node than install phase)
-if ! "$GW_NODE" -e "require('better-sqlite3')" 2>/dev/null; then
-  ensure_native_modules || true
-fi
 
 # Always use project config — contains RC plugin paths, tool whitelist, dashboard root.
 # install.sh already created config/openclaw.json from template at step [6/8].
