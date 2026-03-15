@@ -31,6 +31,7 @@ interface CronState {
   activatePreset: (presetId: string, config?: Record<string, unknown>) => Promise<void>;
   deactivatePreset: (presetId: string) => Promise<void>;
   deletePreset: (presetId: string) => Promise<void>;
+  updatePresetSchedule: (presetId: string, schedule: string) => Promise<void>;
 }
 
 // Mutex: tracks which presets have an activate/deactivate operation in-flight
@@ -187,6 +188,56 @@ export const useCronStore = create<CronState>()((set, get) => ({
       await get().loadPresets();
     } catch (err) {
       console.error('[CronStore] deactivatePreset failed:', err);
+      await get().loadPresets();
+    } finally {
+      _inflightPresets.delete(presetId);
+    }
+  },
+
+  updatePresetSchedule: async (presetId: string, schedule: string) => {
+    if (_inflightPresets.has(presetId)) return;
+    const client = useGatewayStore.getState().client;
+    if (!client?.isConnected) return;
+
+    _inflightPresets.add(presetId);
+    try {
+      // 1. Persist new schedule in plugin DB
+      const result = await client.request<{ ok: true; preset: CronPreset }>(
+        'rc.cron.presets.updateSchedule',
+        { preset_id: presetId, schedule },
+      );
+      const preset = result.preset;
+
+      // 2. If preset is active, re-register gateway cron job with new schedule
+      if (preset.enabled && preset.gateway_job_id) {
+        // Remove old gateway job
+        try {
+          await client.request('cron.remove', { id: preset.gateway_job_id });
+        } catch {
+          // Old job may not exist
+        }
+
+        // Create new gateway job with updated schedule
+        const message = PRESET_AGENT_TURNS[presetId] ?? `Run cron preset: ${presetId}`;
+        const cronResult = await client.request<{ id: string }>('cron.add', {
+          name: preset.name,
+          schedule: { kind: 'cron' as const, expr: schedule },
+          message,
+        });
+
+        // Store new gateway job ID
+        if (cronResult?.id) {
+          await client.request('rc.cron.presets.setJobId', {
+            preset_id: presetId,
+            job_id: cronResult.id,
+          });
+        }
+      }
+
+      // 3. Reload presets to reflect all changes
+      await get().loadPresets();
+    } catch (err) {
+      console.error('[CronStore] updatePresetSchedule failed:', err);
       await get().loadPresets();
     } finally {
       _inflightPresets.delete(presetId);

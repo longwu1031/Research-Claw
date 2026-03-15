@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Modal, Spin, Switch, Tag, Typography } from 'antd';
+import { App, Button, Modal, Select, Spin, Switch, Tag, Typography } from 'antd';
 import {
   RadarChartOutlined,
   ReloadOutlined,
@@ -7,6 +7,9 @@ import {
   ClockCircleOutlined,
   DeleteOutlined,
   RobotOutlined,
+  EditOutlined,
+  CheckOutlined,
+  CloseOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../stores/chat';
@@ -88,6 +91,108 @@ function TrackingSection({
   );
 }
 
+// ── ScheduleEditor sub-component ─────────────────────────────────────────────
+
+type ScheduleFreq = 'daily' | 'weekdays' | 'weekly';
+
+/** Parse cron "min hour * * dow" into structured fields. */
+function parseCron(cron: string): { freq: ScheduleFreq; day: number; hour: number; minute: number } {
+  const parts = cron.trim().split(/\s+/);
+  const minute = parseInt(parts[0]) || 0;
+  const hour = parseInt(parts[1]) || 0;
+  const dow = parts[4] || '*';
+  if (dow === '*') return { freq: 'daily', day: 1, hour, minute };
+  if (dow === '1-5') return { freq: 'weekdays', day: 1, hour, minute };
+  return { freq: 'weekly', day: parseInt(dow) || 1, hour, minute };
+}
+
+function ScheduleEditor({
+  schedule,
+  onSave,
+  onCancel,
+  saving,
+  locale,
+}: {
+  schedule: string;
+  onSave: (cron: string) => void;
+  onCancel: () => void;
+  saving: boolean;
+  locale: string;
+}) {
+  const init = parseCron(schedule);
+  const [freq, setFreq] = useState<ScheduleFreq>(init.freq);
+  const [day, setDay] = useState(init.day);
+  const [hour, setHour] = useState(init.hour);
+  const [minute, setMinute] = useState(init.minute);
+
+  const buildCron = useCallback(() => {
+    const dow = freq === 'daily' ? '*' : freq === 'weekdays' ? '1-5' : String(day);
+    return `${minute} ${hour} * * ${dow}`;
+  }, [freq, day, hour, minute]);
+
+  const isZh = locale.startsWith('zh');
+
+  const freqOptions = [
+    { value: 'daily' as const, label: isZh ? '每天' : 'Daily' },
+    { value: 'weekdays' as const, label: isZh ? '工作日' : 'Weekdays' },
+    { value: 'weekly' as const, label: isZh ? '每周' : 'Weekly' },
+  ];
+
+  const dayOptions = [
+    { value: 1, label: isZh ? '周一' : 'Mon' },
+    { value: 2, label: isZh ? '周二' : 'Tue' },
+    { value: 3, label: isZh ? '周三' : 'Wed' },
+    { value: 4, label: isZh ? '周四' : 'Thu' },
+    { value: 5, label: isZh ? '周五' : 'Fri' },
+    { value: 6, label: isZh ? '周六' : 'Sat' },
+    { value: 0, label: isZh ? '周日' : 'Sun' },
+  ];
+
+  const hourOptions = Array.from({ length: 24 }, (_, i) => ({
+    value: i,
+    label: String(i).padStart(2, '0'),
+  }));
+
+  const minuteOptions = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((m) => ({
+    value: m,
+    label: String(m).padStart(2, '0'),
+  }));
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {/* Row 1: frequency + day */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Select
+          size="small"
+          value={freq}
+          onChange={(v) => setFreq(v)}
+          options={freqOptions}
+          style={{ width: isZh ? 80 : 100 }}
+          popupMatchSelectWidth={false}
+        />
+        {freq === 'weekly' && (
+          <Select
+            size="small"
+            value={day}
+            onChange={setDay}
+            options={dayOptions}
+            style={{ width: isZh ? 72 : 72 }}
+            popupMatchSelectWidth={false}
+          />
+        )}
+      </div>
+      {/* Row 2: time + confirm/cancel */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Select size="small" value={hour} onChange={setHour} options={hourOptions} style={{ width: 58 }} popupMatchSelectWidth={false} />
+        <span style={{ fontSize: 13, fontWeight: 500 }}>:</span>
+        <Select size="small" value={minute} onChange={setMinute} options={minuteOptions} style={{ width: 58 }} popupMatchSelectWidth={false} />
+        <Button size="small" type="primary" icon={<CheckOutlined />} loading={saving} onClick={() => onSave(buildCron())} style={{ marginLeft: 4 }} />
+        <Button size="small" icon={<CloseOutlined />} onClick={onCancel} />
+      </div>
+    </div>
+  );
+}
+
 // ── CronPresetCard sub-component ─────────────────────────────────────────────
 
 function CronPresetCard({
@@ -102,11 +207,15 @@ function CronPresetCard({
   onToggleExpand: () => void;
 }) {
   const { t, i18n } = useTranslation();
+  const { message } = App.useApp();
   const activatePreset = useCronStore((s) => s.activatePreset);
   const deactivatePreset = useCronStore((s) => s.deactivatePreset);
   const deletePreset = useCronStore((s) => s.deletePreset);
+  const updatePresetSchedule = useCronStore((s) => s.updatePresetSchedule);
   const send = useChatStore((s) => s.send);
   const [toggling, setToggling] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState(false);
+  const [savingSchedule, setSavingSchedule] = useState(false);
 
   const locale = i18n.language || 'en';
   const meta = PRESET_META[preset.id];
@@ -141,6 +250,23 @@ function CronPresetCard({
     const prompt = t('radar.cron.askAgentPrompt', { name: preset.name });
     send(prompt);
   }, [preset.name, send, t]);
+
+  const handleScheduleSave = useCallback(async (cron: string) => {
+    if (cron === preset.schedule) {
+      setEditingSchedule(false);
+      return;
+    }
+    setSavingSchedule(true);
+    try {
+      await updatePresetSchedule(preset.id, cron);
+      setEditingSchedule(false);
+      message.success(t('radar.cron.scheduleUpdated', { defaultValue: 'Schedule updated' }));
+    } catch {
+      message.error(t('radar.cron.scheduleUpdateFailed', { defaultValue: 'Failed to update schedule' }));
+    } finally {
+      setSavingSchedule(false);
+    }
+  }, [preset.schedule, preset.id, updatePresetSchedule, message, t]);
 
   const humanSchedule = cronToHuman(preset.schedule, locale);
   const lastRunText = relativeTime(preset.last_run_at, locale);
@@ -214,7 +340,26 @@ function CronPresetCard({
           {/* Detail fields */}
           <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', fontSize: 12, marginBottom: 12 }}>
             <Text style={{ color: tokens.text.muted }}>{t('radar.cron.schedule')}</Text>
-            <Text>{humanSchedule}</Text>
+            {editingSchedule ? (
+              <ScheduleEditor
+                schedule={preset.schedule}
+                onSave={handleScheduleSave}
+                onCancel={() => setEditingSchedule(false)}
+                saving={savingSchedule}
+                locale={locale}
+              />
+            ) : (
+              <span>
+                {humanSchedule}
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<EditOutlined />}
+                  onClick={() => setEditingSchedule(true)}
+                  style={{ padding: '0 4px', marginLeft: 4, fontSize: 11 }}
+                />
+              </span>
+            )}
 
             <Text style={{ color: tokens.text.muted }}>{t('radar.cron.lastRun')}</Text>
             <Text>{preset.last_run_at ? relativeTime(preset.last_run_at, locale) : t('radar.cron.neverRun')}</Text>

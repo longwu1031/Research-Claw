@@ -1,7 +1,7 @@
 /**
  * Research-Claw Core — Task RPC Handlers
  *
- * 17 gateway RPC method handlers for the task management module:
+ * 19 gateway RPC method handlers for the task management module:
  *
  * Task methods (rc.task.*):
  *   1.  rc.task.list           — List/filter tasks with pagination
@@ -13,7 +13,8 @@
  *   7.  rc.task.upcoming       — Tasks with deadlines in the next N hours
  *   8.  rc.task.overdue        — Tasks past their deadline
  *   9.  rc.task.link           — Link a task to a paper
- *   10. rc.task.notes.add      — Append a note to a task
+ *   10. rc.task.linkFile       — Link a task to a workspace file
+ *   11. rc.task.notes.add      — Append a note to a task
  *
  * Cron preset methods (rc.cron.presets.*):
  *   11. rc.cron.presets.list       — List all cron presets with state
@@ -221,6 +222,7 @@ export function registerTaskRpc(registerMethod: RegisterMethod, service: TaskSer
         deadline: optionalString(taskData.deadline, 'task.deadline'),
         parent_task_id: optionalString(taskData.parent_task_id, 'task.parent_task_id'),
         related_paper_id: optionalString(taskData.related_paper_id, 'task.related_paper_id'),
+        related_file_path: optionalString(taskData.related_file_path, 'task.related_file_path'),
         tags: optionalStringArray(taskData.tags, 'task.tags', 20),
         notes: optionalString(taskData.notes, 'task.notes'),
       };
@@ -271,6 +273,11 @@ export function registerTaskRpc(registerMethod: RegisterMethod, service: TaskSer
         const rpid = optionalNullableString(patchData.related_paper_id, 'patch.related_paper_id');
         patch.related_paper_id = rpid === undefined ? undefined : rpid;
         if (patchData.related_paper_id === null) patch.related_paper_id = null;
+      }
+      if (patchData.related_file_path !== undefined) {
+        const rfp = optionalNullableString(patchData.related_file_path, 'patch.related_file_path');
+        patch.related_file_path = rfp === undefined ? undefined : rfp;
+        if (patchData.related_file_path === null) patch.related_file_path = null;
       }
       if (patchData.agent_session_id !== undefined) {
         const asid = optionalNullableString(patchData.agent_session_id, 'patch.agent_session_id');
@@ -354,7 +361,21 @@ export function registerTaskRpc(registerMethod: RegisterMethod, service: TaskSer
     }
   });
 
-  // ── 10. rc.task.notes.add ─────────────────────────────────────────
+  // ── 10. rc.task.linkFile ──────────────────────────────────────────
+
+  registerMethod('rc.task.linkFile', async (params: Record<string, unknown>) => {
+    try {
+      const taskId = requireString(params.task_id, 'task_id');
+      const filePath = requireString(params.file_path, 'file_path');
+
+      service.linkFile(taskId, filePath, 'human');
+      return { ok: true, linked: true, task_id: taskId, file_path: filePath };
+    } catch (err) {
+      throw err instanceof RpcValidationError ? new Error(err.message) : err;
+    }
+  });
+
+  // ── 11. rc.task.notes.add ─────────────────────────────────────────
 
   registerMethod('rc.task.notes.add', async (params: Record<string, unknown>) => {
     try {
@@ -438,7 +459,20 @@ export function registerTaskRpc(registerMethod: RegisterMethod, service: TaskSer
     }
   });
 
-  // ── 17. rc.notifications.pending ────────────────────────────────
+  // ── 17. rc.cron.presets.updateSchedule ──────────────────────────
+
+  registerMethod('rc.cron.presets.updateSchedule', async (params: Record<string, unknown>) => {
+    try {
+      const presetId = requireString(params.preset_id, 'preset_id');
+      const schedule = requireString(params.schedule, 'schedule');
+
+      return service.cronPresetsUpdateSchedule(presetId, schedule);
+    } catch (err) {
+      throw err instanceof RpcValidationError ? new Error(err.message) : err;
+    }
+  });
+
+  // ── 18. rc.notifications.pending ────────────────────────────────
   //
   // Returns overdue + upcoming tasks for the dashboard notification bell.
   // Dashboard polls this on connect, after chat turns, and on a 60s timer.

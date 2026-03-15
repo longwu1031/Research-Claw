@@ -73,6 +73,16 @@ const MIGRATIONS: readonly Migration[] = [
   read       INTEGER NOT NULL DEFAULT 0
 );`,
   },
+  {
+    version: 4,
+    name: 'add_task_related_file_path',
+    sql: `ALTER TABLE rc_tasks ADD COLUMN related_file_path TEXT;`,
+  },
+  {
+    version: 5,
+    name: 'add_cron_state_schedule',
+    sql: `ALTER TABLE rc_cron_state ADD COLUMN schedule TEXT;`,
+  },
 ];
 
 // ── Helpers ─────────────────────────────────────────────────────────

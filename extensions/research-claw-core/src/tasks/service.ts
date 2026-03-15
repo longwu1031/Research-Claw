@@ -35,6 +35,7 @@ export interface Task {
   updated_at: string;
   parent_task_id: string | null;
   related_paper_id: string | null;
+  related_file_path: string | null;
   agent_session_id: string | null;
   tags: string[];
   notes: string | null;
@@ -48,6 +49,7 @@ export interface TaskInput {
   deadline?: string;
   parent_task_id?: string;
   related_paper_id?: string;
+  related_file_path?: string;
   agent_session_id?: string;
   tags?: string[];
   notes?: string;
@@ -62,6 +64,7 @@ export interface TaskPatch {
   deadline?: string | null;
   parent_task_id?: string | null;
   related_paper_id?: string | null;
+  related_file_path?: string | null;
   agent_session_id?: string | null;
   tags?: string[];
   notes?: string | null;
@@ -215,6 +218,7 @@ interface TaskRow {
   updated_at: string;
   parent_task_id: string | null;
   related_paper_id: string | null;
+  related_file_path: string | null;
   agent_session_id: string | null;
   tags: string | null;
   notes: string | null;
@@ -242,6 +246,7 @@ function rowToTask(row: TaskRow): Task {
     updated_at: row.updated_at,
     parent_task_id: row.parent_task_id,
     related_paper_id: row.related_paper_id,
+    related_file_path: row.related_file_path,
     agent_session_id: row.agent_session_id,
     tags,
     notes: row.notes,
@@ -308,6 +313,13 @@ export class TaskService {
       // Column already exists — ignore
     }
 
+    // Migration: add schedule column if missing (for existing DBs)
+    try {
+      this.db.exec('ALTER TABLE rc_cron_state ADD COLUMN schedule TEXT');
+    } catch {
+      // Column already exists — ignore
+    }
+
     // Only seed preset definitions when table is empty (first initialization).
     // This ensures deleted presets don't reappear on restart.
     const count = this.db.prepare(
@@ -362,6 +374,14 @@ export class TaskService {
       }
     }
 
+    // Validate related_file_path if provided (must be a safe relative path)
+    if (input.related_file_path) {
+      const fp = input.related_file_path;
+      if (fp.startsWith('/') || fp.startsWith('\\') || fp.includes('..') || fp.includes('\0')) {
+        throw new RpcError(-32005, 'related_file_path must be a relative path within the workspace');
+      }
+    }
+
     // M3: Wrap INSERT + logActivity in a transaction
     const doCreate = this.db.transaction(() => {
       const id = randomUUID();
@@ -372,8 +392,8 @@ export class TaskService {
         `INSERT INTO rc_tasks (
           id, title, description, task_type, status, priority, deadline,
           completed_at, created_at, updated_at, parent_task_id, related_paper_id,
-          agent_session_id, tags, notes
-        ) VALUES (?, ?, ?, ?, 'todo', ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
+          related_file_path, agent_session_id, tags, notes
+        ) VALUES (?, ?, ?, ?, 'todo', ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
 
       stmt.run(
@@ -387,6 +407,7 @@ export class TaskService {
         timestamp,
         input.parent_task_id ?? null,
         input.related_paper_id ?? null,
+        input.related_file_path ?? null,
         input.agent_session_id ?? null,
         tagsJson,
         input.notes ?? null,
@@ -597,6 +618,14 @@ export class TaskService {
       }
     }
 
+    // Validate related_file_path before entering transaction
+    if (patch.related_file_path !== undefined && patch.related_file_path !== null) {
+      const fp = patch.related_file_path;
+      if (fp.startsWith('/') || fp.startsWith('\\') || fp.includes('..') || fp.includes('\0')) {
+        throw new RpcError(-32005, 'related_file_path must be a relative path within the workspace');
+      }
+    }
+
     // Wrap all mutations (activity log INSERTs + task UPDATE) in a transaction
     const doUpdate = this.db.transaction(() => {
       const setClauses: string[] = [];
@@ -660,6 +689,19 @@ export class TaskService {
           logActivity(this.db, id, 'paper_linked', null, patch.related_paper_id, actor);
         } else {
           logActivity(this.db, id, 'paper_unlinked', currentTask.related_paper_id, null, actor);
+        }
+      }
+
+      if (patch.related_file_path !== undefined && patch.related_file_path !== currentTask.related_file_path) {
+        setClauses.push('related_file_path = ?');
+        bindings.push(patch.related_file_path);
+        if (currentTask.related_file_path && patch.related_file_path) {
+          logActivity(this.db, id, 'file_unlinked', currentTask.related_file_path, null, actor);
+          logActivity(this.db, id, 'file_linked', null, patch.related_file_path, actor);
+        } else if (patch.related_file_path) {
+          logActivity(this.db, id, 'file_linked', null, patch.related_file_path, actor);
+        } else {
+          logActivity(this.db, id, 'file_unlinked', currentTask.related_file_path, null, actor);
         }
       }
 
@@ -878,6 +920,42 @@ export class TaskService {
     doLink();
   }
 
+  // ── 9b. linkFile ────────────────────────────────────────────────────
+
+  /**
+   * Link a task to a workspace file by setting related_file_path.
+   * Validates that the task exists and the file path is a safe relative path.
+   * Logs 'file_linked' activity event (and 'file_unlinked' if replacing).
+   */
+  linkFile(taskId: string, filePath: string, actor: Actor = 'human'): void {
+    const taskRow = this.db.prepare('SELECT * FROM rc_tasks WHERE id = ?').get(taskId) as TaskRow | undefined;
+    if (!taskRow) {
+      throw new RpcError(-32001, `Task not found: ${taskId}`);
+    }
+
+    // Validate file path is a safe relative path
+    if (filePath.startsWith('/') || filePath.startsWith('\\') || filePath.includes('..') || filePath.includes('\0')) {
+      throw new RpcError(-32005, 'file_path must be a relative path within the workspace');
+    }
+
+    const currentTask = rowToTask(taskRow);
+
+    const doLink = this.db.transaction(() => {
+      const timestamp = now();
+
+      if (currentTask.related_file_path && currentTask.related_file_path !== filePath) {
+        logActivity(this.db, taskId, 'file_unlinked', currentTask.related_file_path, null, actor);
+      }
+
+      this.db.prepare(
+        'UPDATE rc_tasks SET related_file_path = ?, updated_at = ? WHERE id = ?',
+      ).run(filePath, timestamp, taskId);
+
+      logActivity(this.db, taskId, 'file_linked', null, filePath, actor);
+    });
+    doLink();
+  }
+
   // ── 10. addNote ─────────────────────────────────────────────────────
 
   /**
@@ -917,8 +995,8 @@ export class TaskService {
     return PRESET_DEFINITIONS
       .map((def) => {
         const row = this.db.prepare(
-          'SELECT enabled, config, last_run_at, next_run_at, gateway_job_id FROM rc_cron_state WHERE preset_id = ?',
-        ).get(def.id) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null; gateway_job_id: string | null } | undefined;
+          'SELECT enabled, config, last_run_at, next_run_at, gateway_job_id, schedule FROM rc_cron_state WHERE preset_id = ?',
+        ).get(def.id) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null; gateway_job_id: string | null; schedule: string | null } | undefined;
 
         // Deleted preset: no row in rc_cron_state, omit from list
         if (!row) return null;
@@ -930,7 +1008,7 @@ export class TaskService {
           id: def.id,
           name: def.name,
           description: def.description,
-          schedule: def.schedule,
+          schedule: row.schedule ?? def.schedule,
           enabled: row.enabled === 1,
           config,
           last_run_at: row.last_run_at ?? null,
@@ -961,8 +1039,8 @@ export class TaskService {
 
     // Read back persisted state
     const row = this.db.prepare(
-      'SELECT enabled, config, last_run_at, next_run_at, gateway_job_id FROM rc_cron_state WHERE preset_id = ?',
-    ).get(presetId) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null; gateway_job_id: string | null };
+      'SELECT enabled, config, last_run_at, next_run_at, gateway_job_id, schedule FROM rc_cron_state WHERE preset_id = ?',
+    ).get(presetId) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null; gateway_job_id: string | null; schedule: string | null };
 
     let storedConfig: Record<string, unknown> = {};
     try { storedConfig = JSON.parse(row.config) as Record<string, unknown>; } catch { /* */ }
@@ -971,7 +1049,7 @@ export class TaskService {
       id: def.id,
       name: def.name,
       description: def.description,
-      schedule: def.schedule,
+      schedule: row.schedule ?? def.schedule,
       enabled: true,
       config: storedConfig,
       last_run_at: row.last_run_at,
@@ -994,8 +1072,8 @@ export class TaskService {
     ).run(presetId);
 
     const row = this.db.prepare(
-      'SELECT enabled, config, last_run_at, next_run_at, gateway_job_id FROM rc_cron_state WHERE preset_id = ?',
-    ).get(presetId) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null; gateway_job_id: string | null };
+      'SELECT enabled, config, last_run_at, next_run_at, gateway_job_id, schedule FROM rc_cron_state WHERE preset_id = ?',
+    ).get(presetId) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null; gateway_job_id: string | null; schedule: string | null };
 
     let storedConfig: Record<string, unknown> = {};
     try { storedConfig = JSON.parse(row.config) as Record<string, unknown>; } catch { /* */ }
@@ -1004,7 +1082,7 @@ export class TaskService {
       id: def.id,
       name: def.name,
       description: def.description,
-      schedule: def.schedule,
+      schedule: row.schedule ?? def.schedule,
       enabled: false,
       config: storedConfig,
       last_run_at: row.last_run_at,
@@ -1044,8 +1122,8 @@ export class TaskService {
 
     // Read back the row
     const row = this.db.prepare(
-      'SELECT enabled, config, last_run_at, next_run_at, gateway_job_id FROM rc_cron_state WHERE preset_id = ?',
-    ).get(presetId) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null; gateway_job_id: string | null };
+      'SELECT enabled, config, last_run_at, next_run_at, gateway_job_id, schedule FROM rc_cron_state WHERE preset_id = ?',
+    ).get(presetId) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null; gateway_job_id: string | null; schedule: string | null };
 
     let storedConfig: Record<string, unknown> = {};
     try { storedConfig = JSON.parse(row.config) as Record<string, unknown>; } catch { /* */ }
@@ -1056,7 +1134,7 @@ export class TaskService {
         id: def.id,
         name: def.name,
         description: def.description,
-        schedule: def.schedule,
+        schedule: row.schedule ?? def.schedule,
         enabled: row.enabled === 1,
         config: storedConfig,
         last_run_at: row.last_run_at,
@@ -1078,6 +1156,59 @@ export class TaskService {
     ).run(jobId, presetId);
 
     return { ok: true };
+  }
+
+  /**
+   * Update the schedule of a cron preset.
+   * Persists the new cron expression to DB. Returns the updated preset
+   * including gateway_job_id so the caller can re-register the gateway job.
+   */
+  cronPresetsUpdateSchedule(presetId: string, schedule: string): { ok: true; preset: CronPreset } {
+    const def = PRESET_DEFINITIONS.find((p) => p.id === presetId);
+    if (!def) {
+      throw new RpcError(-32001, `Cron preset not found: ${presetId}`);
+    }
+
+    // Basic cron expression validation: 5 space-separated fields
+    const fields = schedule.trim().split(/\s+/);
+    if (fields.length !== 5) {
+      throw new RpcError(-32600, `Invalid cron expression: expected 5 fields, got ${fields.length}`);
+    }
+
+    // Check preset exists in DB
+    const exists = this.db.prepare(
+      'SELECT preset_id FROM rc_cron_state WHERE preset_id = ?',
+    ).get(presetId);
+    if (!exists) {
+      throw new RpcError(-32001, `Cron preset not found in database: ${presetId}`);
+    }
+
+    this.db.prepare(
+      'UPDATE rc_cron_state SET schedule = ? WHERE preset_id = ?',
+    ).run(schedule.trim(), presetId);
+
+    // Read back full state
+    const row = this.db.prepare(
+      'SELECT enabled, config, last_run_at, next_run_at, gateway_job_id, schedule FROM rc_cron_state WHERE preset_id = ?',
+    ).get(presetId) as { enabled: number; config: string; last_run_at: string | null; next_run_at: string | null; gateway_job_id: string | null; schedule: string | null };
+
+    let storedConfig: Record<string, unknown> = {};
+    try { storedConfig = JSON.parse(row.config) as Record<string, unknown>; } catch { /* */ }
+
+    return {
+      ok: true,
+      preset: {
+        id: def.id,
+        name: def.name,
+        description: def.description,
+        schedule: row.schedule ?? def.schedule,
+        enabled: row.enabled === 1,
+        config: storedConfig,
+        last_run_at: row.last_run_at,
+        next_run_at: row.next_run_at,
+        gateway_job_id: row.gateway_job_id,
+      },
+    };
   }
 
   // ── Agent Notifications ──────────────────────────────────────────────

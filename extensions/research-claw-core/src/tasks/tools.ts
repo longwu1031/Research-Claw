@@ -1,14 +1,16 @@
 /**
  * Research-Claw Core — Task Agent Tools
  *
- * 7 agent tools for the task management module:
- *   1. task_create        — Create a new research task
- *   2. task_list          — List/filter tasks with smart sorting
- *   3. task_complete      — Mark a task as done
- *   4. task_update        — Update task fields (state-machine validated)
- *   5. task_link          — Link a task to a paper
- *   6. task_note          — Append a timestamped note to a task
- *   7. send_notification  — Push a notification to the dashboard bell
+ * 9 agent tools for the task management module:
+ *   1. task_create           — Create a new research task
+ *   2. task_list             — List/filter tasks with smart sorting
+ *   3. task_complete         — Mark a task as done
+ *   4. task_update           — Update task fields (state-machine validated)
+ *   5. task_link             — Link a task to a paper
+ *   6. task_note             — Append a timestamped note to a task
+ *   7. task_link_file        — Link a task to a workspace file
+ *   8. cron_update_schedule  — Update cron preset schedule
+ *   9. send_notification     — Push a notification to the dashboard bell
  *
  * Each tool uses plain JSON Schema objects for parameters (no TypeBox).
  * Registered via api.registerTool() from the OpenClaw plugin SDK.
@@ -54,6 +56,9 @@ function formatTask(task: Task): string {
   if (task.related_paper_id) {
     parts.push(`  linked paper: ${task.related_paper_id}`);
   }
+  if (task.related_file_path) {
+    parts.push(`  linked file: ${task.related_file_path}`);
+  }
   if (task.tags.length > 0) {
     parts.push(`  tags: ${task.tags.join(', ')}`);
   }
@@ -94,6 +99,7 @@ export function createTaskTools(service: TaskService): ToolDefinition[] {
         deadline: { type: 'string', description: 'ISO 8601 deadline string (e.g. 2026-03-15T09:00:00Z)' },
         parent_task_id: { type: 'string', description: 'UUID of a parent task to create this as a subtask' },
         related_paper_id: { type: 'string', description: 'UUID of a paper to link to this task' },
+        related_file_path: { type: 'string', description: 'Workspace-relative path of an output file (e.g. "outputs/drafts/review.md")' },
         tags: {
           type: 'array',
           items: { type: 'string' },
@@ -130,6 +136,7 @@ export function createTaskTools(service: TaskService): ToolDefinition[] {
           deadline: typeof params.deadline === 'string' ? params.deadline : undefined,
           parent_task_id: typeof params.parent_task_id === 'string' ? params.parent_task_id : undefined,
           related_paper_id: typeof params.related_paper_id === 'string' ? params.related_paper_id : undefined,
+          related_file_path: typeof params.related_file_path === 'string' ? params.related_file_path : undefined,
           tags: Array.isArray(params.tags) ? params.tags.filter((t): t is string => typeof t === 'string') : undefined,
           notes: typeof params.notes === 'string' ? params.notes : undefined,
         };
@@ -300,6 +307,10 @@ export function createTaskTools(service: TaskService): ToolDefinition[] {
           type: ['string', 'null'],
           description: 'Link to a different paper (null to unlink)',
         },
+        related_file_path: {
+          type: ['string', 'null'],
+          description: 'Link to a workspace file (null to unlink). Use relative paths like "outputs/drafts/review.md".',
+        },
         agent_session_id: {
           type: ['string', 'null'],
           description: 'Associate with an agent session',
@@ -334,6 +345,7 @@ export function createTaskTools(service: TaskService): ToolDefinition[] {
         if (params.deadline !== undefined) patch.deadline = params.deadline === null ? null : typeof params.deadline === 'string' ? params.deadline : undefined;
         if (params.parent_task_id !== undefined) patch.parent_task_id = params.parent_task_id === null ? null : typeof params.parent_task_id === 'string' ? params.parent_task_id : undefined;
         if (params.related_paper_id !== undefined) patch.related_paper_id = params.related_paper_id === null ? null : typeof params.related_paper_id === 'string' ? params.related_paper_id : undefined;
+        if (params.related_file_path !== undefined) patch.related_file_path = params.related_file_path === null ? null : typeof params.related_file_path === 'string' ? params.related_file_path : undefined;
         if (params.agent_session_id !== undefined) patch.agent_session_id = params.agent_session_id === null ? null : typeof params.agent_session_id === 'string' ? params.agent_session_id : undefined;
         if (params.tags !== undefined && Array.isArray(params.tags)) patch.tags = params.tags.filter((t): t is string => typeof t === 'string');
         if (params.notes !== undefined) patch.notes = params.notes === null ? null : typeof params.notes === 'string' ? params.notes : undefined;
@@ -433,7 +445,95 @@ export function createTaskTools(service: TaskService): ToolDefinition[] {
     },
   });
 
-  // ── 7. send_notification ────────────────────────────────────────
+  // ── 7. task_link_file ──────────────────────────────────────────────
+
+  tools.push({
+    name: 'task_link_file',
+    description:
+      'Link a task to a workspace file. This associates the task with a specific ' +
+      'output file for cross-referencing (e.g. linking a "Write Chapter 3" task to ' +
+      '"outputs/drafts/chapter-3.md").',
+    parameters: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'string', description: 'UUID of the task' },
+        file_path: {
+          type: 'string',
+          description: 'Workspace-relative path of the file (e.g. "outputs/drafts/review.md")',
+        },
+      },
+      required: ['task_id', 'file_path'],
+    },
+    async execute(_toolCallId: string, params: Record<string, unknown>): Promise<unknown> {
+      try {
+        if (typeof params.task_id !== 'string' || !params.task_id.trim()) {
+          return fail('task_id is required and must be a non-empty string');
+        }
+        if (typeof params.file_path !== 'string' || !params.file_path.trim()) {
+          return fail('file_path is required and must be a non-empty string');
+        }
+        const taskId = params.task_id.trim();
+        const filePath = params.file_path.trim();
+
+        service.linkFile(taskId, filePath, 'agent');
+
+        return ok(
+          `Linked task ${taskId} to file "${filePath}".`,
+          { task_id: taskId, file_path: filePath, ok: true },
+        );
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    },
+  });
+
+  // ── 8. cron_update_schedule ─────────────────────────────────────
+
+  tools.push({
+    name: 'cron_update_schedule',
+    description:
+      'Update the schedule of a cron preset (e.g. weekly_report, arxiv_daily_scan). ' +
+      'Accepts a standard 5-field cron expression. The change is persisted to the database ' +
+      'and the dashboard will reflect the new schedule immediately on refresh.',
+    parameters: {
+      type: 'object',
+      properties: {
+        preset_id: {
+          type: 'string',
+          description: 'Cron preset ID (e.g. "weekly_report", "arxiv_daily_scan", "deadline_reminders_daily", "citation_tracking_weekly", "group_meeting_prep")',
+        },
+        schedule: {
+          type: 'string',
+          description: 'Cron expression with 5 fields: "minute hour day-of-month month day-of-week". Examples: "0 12 * * 4" = Thursday 12:00, "0 9 * * *" = daily 09:00, "0 8 * * 1-5" = weekdays 08:00',
+        },
+      },
+      required: ['preset_id', 'schedule'],
+    },
+    async execute(_toolCallId: string, params: Record<string, unknown>): Promise<unknown> {
+      try {
+        if (typeof params.preset_id !== 'string' || !params.preset_id.trim()) {
+          return fail('preset_id is required and must be a non-empty string');
+        }
+        if (typeof params.schedule !== 'string' || !params.schedule.trim()) {
+          return fail('schedule is required and must be a non-empty string');
+        }
+        const presetId = params.preset_id.trim();
+        const schedule = params.schedule.trim();
+
+        const result = service.cronPresetsUpdateSchedule(presetId, schedule);
+
+        return ok(
+          `Updated schedule for "${result.preset.name}" to "${schedule}" (${result.preset.enabled ? 'active' : 'inactive'}).` +
+          `\nDashboard will show the new schedule on refresh.`,
+          result.preset,
+        );
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    },
+  });
+
+  // ── 9. send_notification ────────────────────────────────────────
 
   tools.push({
     name: 'send_notification',

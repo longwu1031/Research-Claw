@@ -22,7 +22,7 @@
  */
 
 // ── Current schema version ──────────────────────────────────────────
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 4;
 
 // ── CREATE TABLE statements ─────────────────────────────────────────
 
@@ -145,10 +145,13 @@ CREATE TABLE IF NOT EXISTS rc_tasks (
   updated_at       TEXT NOT NULL,
   parent_task_id   TEXT REFERENCES rc_tasks(id)  ON DELETE SET NULL,
   related_paper_id TEXT REFERENCES rc_papers(id) ON DELETE SET NULL,
+  related_file_path TEXT,
   agent_session_id TEXT,
   tags             TEXT,
   notes            TEXT
 );`;
+// Note: related_file_path added in v4 migration for existing DBs.
+// New installs get it from this DDL directly.
 
 const RC_ACTIVITY_LOG = `
 CREATE TABLE IF NOT EXISTS rc_activity_log (
@@ -171,6 +174,16 @@ CREATE TABLE IF NOT EXISTS rc_radar_config (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );`;
 
+const RC_AGENT_NOTIFICATIONS = `
+CREATE TABLE IF NOT EXISTS rc_agent_notifications (
+  id         TEXT PRIMARY KEY,
+  type       TEXT NOT NULL DEFAULT 'system',
+  title      TEXT NOT NULL,
+  body       TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  read       INTEGER NOT NULL DEFAULT 0
+);`;
+
 // ── Aggregate table creation list ───────────────────────────────────
 
 export const CREATE_TABLES_SQL: readonly string[] = [
@@ -187,6 +200,7 @@ export const CREATE_TABLES_SQL: readonly string[] = [
   RC_TASKS,
   RC_ACTIVITY_LOG,
   RC_RADAR_CONFIG,
+  RC_AGENT_NOTIFICATIONS,
 ];
 
 // ── Indexes ─────────────────────────────────────────────────────────

@@ -88,6 +88,41 @@ Common requests span multiple skill categories. Use these combinations:
 | Entering a new field | domains/{field} |
 | Grant writing | research/funding + writing/composition |
 
+## Workspace Integration
+
+All research outputs MUST be persisted to the workspace. Never leave important
+content only in chat messages.
+
+### Output Patterns
+
+| Research activity | Save to | Example filename |
+|:-----------------|:--------|:-----------------|
+| Literature review | `outputs/drafts/` | `literature-review-{topic}.md` |
+| Paper reading notes | `outputs/notes/` | `{paper-short-title}-notes.md` |
+| Data analysis results | `outputs/reports/` | `analysis-{dataset}.md` |
+| Radar scan findings | `outputs/radar/` | `radar-scan-{date}.md` |
+| Weekly/progress report | `outputs/reports/` | `weekly-report-{date}.md` |
+| BibTeX export | `outputs/exports/` | `bibliography-{project}.bib` |
+| Figures/plots | `outputs/figures/` | `fig-{description}.{ext}` |
+
+### Task-File Linking
+
+When a task produces an output file:
+
+1. Save the file with `workspace_save`
+2. Update the task with `task_update(id, { related_file_path: "outputs/..." })`
+   or use `task_link_file(task_id, file_path)`
+3. Complete the task with `task_complete(id, notes: "Output: outputs/...")`
+
+### Session Continuity
+
+At session start, the `[Research-Claw]` context shows library stats and task
+overview. When resuming prior work, also check:
+
+- `workspace_history` — recent file changes
+- `workspace_list` — current workspace contents
+- `task_list` — active and upcoming tasks
+
 ## Error Handling
 
 When a tool call fails or returns unexpected results:
@@ -101,6 +136,7 @@ When a tool call fails or returns unexpected results:
 
 At the end of a productive session:
 
-1. Offer to generate a `progress_card` summarizing the session.
-2. Ask if any findings should be persisted to MEMORY.md.
-3. Remind the user of upcoming deadlines if any exist within 48 hours.
+1. Offer to save any important output to the workspace with `workspace_save`.
+2. Summarize what was accomplished (briefly).
+3. Update `memory/YYYY-MM-DD.md` with key decisions and findings.
+4. Remind the user of upcoming deadlines if any exist within 48 hours.

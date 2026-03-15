@@ -5,9 +5,9 @@
  * for the literature library, task system, and workspace tracking.
  *
  * Registration totals:
- *   - 29 agent tools (12 literature + 8 task + 6 workspace + 3 radar)
- *   - 56 WS RPC methods + 1 HTTP route = 57 interface methods
- *     (26 rc.lit.* + 11 rc.task.* + 6 rc.cron.* + 2 rc.notifications.* + 9 rc.ws.* + 3 rc.radar.* = 57 WS; POST /rc/upload = 1 HTTP)
+ *   - 30 agent tools (12 literature + 9 task + 6 workspace + 3 radar)
+ *   - 57 WS RPC methods + 1 HTTP route = 58 interface methods
+ *     (26 rc.lit.* + 11 rc.task.* + 7 rc.cron.* + 2 rc.notifications.* + 9 rc.ws.* + 3 rc.radar.* = 58 WS; POST /rc/upload = 1 HTTP)
  *   - 7 hooks (before_prompt_build, session_start, session_end, before_tool_call, agent_end, after_tool_call, gateway_start)
  *   - 1 service (research-claw-db lifecycle)
  */
@@ -330,6 +330,9 @@ const plugin: PluginDefinition = {
           }
         }
 
+        // Cron schedule management guidance
+        lines.push('[Research-Claw] To change cron schedules, use cron_update_schedule(preset_id, schedule). Do NOT use native cron tools.');
+
         return { prependContext: lines.join('\n') };
       } catch {
         return {};
@@ -409,14 +412,61 @@ const plugin: PluginDefinition = {
 
     api.on('before_tool_call', (event: unknown) => {
       const evt = event as { toolName?: string; params?: Record<string, unknown> } | undefined;
-      if (!evt || evt.toolName !== 'exec') return {};
+      if (!evt) return {};
+
+      // ── Cron schedule sync ──────────────────────────────────────────
+      // The agent uses OpenClaw's built-in `cron` tool (action: "update")
+      // which bypasses our rc_cron_state DB. Intercept here and sync the
+      // schedule BEFORE the tool executes. Even if the tool later fails,
+      // the next loadPresets → reconcile will fix the mismatch.
+      if (evt.toolName === 'cron' && dbManager?.isOpen()) {
+        try {
+          const params = evt.params ?? {};
+          if (params.action === 'update') {
+            const jobId =
+              typeof params.jobId === 'string' ? params.jobId :
+              typeof params.id === 'string' ? params.id : undefined;
+
+            // Extract schedule from patch.schedule (could be string or {kind, expr})
+            const patch = params.patch as Record<string, unknown> | undefined;
+            let scheduleExpr: string | undefined;
+            if (patch) {
+              const sched = patch.schedule;
+              if (typeof sched === 'string') {
+                scheduleExpr = sched;
+              } else if (typeof sched === 'object' && sched !== null) {
+                const obj = sched as Record<string, unknown>;
+                if (typeof obj.expr === 'string') scheduleExpr = obj.expr;
+                if (typeof obj.expression === 'string') scheduleExpr = obj.expression;
+              }
+            }
+
+            if (jobId && scheduleExpr) {
+              const row = dbManager.db.prepare(
+                'SELECT preset_id FROM rc_cron_state WHERE gateway_job_id = ?',
+              ).get(jobId) as { preset_id: string } | undefined;
+
+              if (row) {
+                dbManager.db.prepare(
+                  'UPDATE rc_cron_state SET schedule = ? WHERE preset_id = ?',
+                ).run(scheduleExpr, row.preset_id);
+                api.logger.info(`[CronSync] Synced schedule "${scheduleExpr}" for preset "${row.preset_id}" from native cron tool`);
+              }
+            }
+          }
+        } catch (err) {
+          api.logger.warn(`[CronSync] Failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        return {}; // Always allow — let the built-in cron tool proceed
+      }
+
+      // ── Exec safety guard ──────────────────────────────────────────
+      if (evt.toolName !== 'exec') return {};
 
       const command = typeof evt.params?.command === 'string' ? evt.params.command : '';
       if (!command) return {};
 
       // Always check catastrophic patterns — no short-circuit bypass.
-      // A command may reference the workspace path AND contain a destructive
-      // suffix (e.g. "cd /workspace && rm -rf /"), so we never skip checks.
       for (const pattern of CATASTROPHIC_PATTERNS) {
         if (pattern.test(command)) {
           api.logger.warn(`[SafeGuard] Blocked catastrophic command: ${command.slice(0, 120)}`);
@@ -438,10 +488,69 @@ const plugin: PluginDefinition = {
       // Lightweight: future versions can log session summary to activity_log
     });
 
-    // Hook 6: Capture results from research-plugins tools
+    // Hook 6: Sync native cron schedule changes back to rc_cron_state.
+    //
+    // The agent may use OpenClaw's built-in cron management tools (e.g.
+    // cron_update) which bypass our plugin DB. When that happens, the
+    // gateway cron job gets the new schedule but our DB still has the old
+    // one, causing the dashboard to show stale data.
+    //
+    // This hook detects native cron tool calls, extracts the schedule
+    // expression, maps the gateway job ID back to our preset, and updates
+    // rc_cron_state.schedule so the dashboard stays in sync.
     api.on('after_tool_call', (event: unknown) => {
-      // Future: if tool is from research-plugins, offer to add papers
-      void event;
+      const evt = event as {
+        toolName?: string;
+        params?: Record<string, unknown>;
+        result?: unknown;
+      } | undefined;
+
+      if (!evt?.toolName || !dbManager?.isOpen()) return;
+
+      // Only intercept cron-related tools
+      const toolName = evt.toolName.toLowerCase();
+      if (!toolName.includes('cron')) return;
+
+      try {
+        const params = evt.params ?? {};
+
+        // Extract schedule expression from various possible param shapes:
+        //   { schedule: "0 12 * * 4" }
+        //   { schedule: { kind: "cron", expr: "0 12 * * 4" } }
+        let scheduleExpr: string | undefined;
+        const schedParam = params.schedule;
+        if (typeof schedParam === 'string') {
+          scheduleExpr = schedParam;
+        } else if (typeof schedParam === 'object' && schedParam !== null) {
+          const obj = schedParam as Record<string, unknown>;
+          if (typeof obj.expr === 'string') scheduleExpr = obj.expr;
+          if (typeof obj.expression === 'string') scheduleExpr = obj.expression;
+        }
+
+        if (!scheduleExpr) return;
+
+        // Try to find the preset by gateway_job_id
+        const jobId =
+          typeof params.id === 'string' ? params.id :
+          typeof params.job_id === 'string' ? params.job_id :
+          typeof params.jobId === 'string' ? params.jobId : undefined;
+
+        if (jobId) {
+          const row = dbManager.db.prepare(
+            'SELECT preset_id FROM rc_cron_state WHERE gateway_job_id = ?',
+          ).get(jobId) as { preset_id: string } | undefined;
+
+          if (row) {
+            dbManager.db.prepare(
+              'UPDATE rc_cron_state SET schedule = ? WHERE preset_id = ?',
+            ).run(scheduleExpr, row.preset_id);
+            api.logger.info(`[CronSync] Synced schedule "${scheduleExpr}" for preset "${row.preset_id}" from native cron tool`);
+          }
+        }
+      } catch (err) {
+        // Non-fatal — just log
+        api.logger.warn(`[CronSync] Failed to sync cron schedule: ${err instanceof Error ? err.message : String(err)}`);
+      }
     });
 
     // Hook 7: Verify DB integrity on gateway start
@@ -457,7 +566,7 @@ const plugin: PluginDefinition = {
       }
     });
 
-    api.logger.info('Research-Claw Core registered (29 tools, 56 WS RPC + 1 HTTP = 57 interfaces, 7 hooks)');
+    api.logger.info('Research-Claw Core registered (30 tools, 57 WS RPC + 1 HTTP = 58 interfaces, 7 hooks)');
   },
 };
 
