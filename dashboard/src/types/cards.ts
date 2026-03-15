@@ -64,6 +64,8 @@ export interface TaskCard {
   deadline?: string; // ISO 8601
   /** Title of a related paper, for cross-referencing. */
   related_paper_title?: string;
+  /** Workspace-relative path of a linked output file. */
+  related_file_path?: string;
 }
 
 // ---------------------------------------------------------------------------

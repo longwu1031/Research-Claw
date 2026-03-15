@@ -70,6 +70,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     updated_at: '2025-01-01T00:00:00Z',
     parent_task_id: null,
     related_paper_id: null,
+    related_file_path: null,
     agent_session_id: null,
     tags: ['writing', 'survey'],
     notes: null,
@@ -435,6 +436,7 @@ describe('TaskPanel', () => {
       const detail = makeTaskWithDetails({
         id: 'task-1',
         related_paper_id: 'paper-abc-123',
+    related_file_path: null,
       });
       useTasksStore.setState({
         tasks: [makeTask({ id: 'task-1' })],

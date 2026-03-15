@@ -20,6 +20,7 @@ export interface Task {
   updated_at: string;
   parent_task_id: string | null;
   related_paper_id: string | null;
+  related_file_path: string | null;
   agent_session_id: string | null;
   tags: string[];
   notes: string | null;

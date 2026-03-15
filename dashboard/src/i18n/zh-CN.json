@@ -115,6 +115,7 @@
       "tags": "标签",
       "noTags": "无标签",
       "relatedPaper": "关联论文",
+      "relatedFile": "关联文件",
       "noPaper": "无关联论文",
       "subtasks": "子任务",
       "noSubtasks": "无子任务",
@@ -377,6 +378,7 @@
       "priority": "优先级",
       "status": "状态",
       "relatedPaper": "关联论文",
+      "relatedFile": "关联文件",
       "overdue": "已逾期",
       "dueIn": "{{days}} 天后到期",
       "noDl": "无截止日期"

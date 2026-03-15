@@ -115,6 +115,7 @@
       "tags": "Tags",
       "noTags": "No tags",
       "relatedPaper": "Related Paper",
+      "relatedFile": "Related File",
       "noPaper": "No linked paper",
       "subtasks": "Subtasks",
       "noSubtasks": "No subtasks",
@@ -377,6 +378,7 @@
       "priority": "Priority",
       "status": "Status",
       "relatedPaper": "Related Paper",
+      "relatedFile": "Related File",
       "overdue": "Overdue",
       "dueIn": "Due in {{days}} days",
       "noDl": "No deadline"

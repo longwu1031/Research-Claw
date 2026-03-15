@@ -393,14 +393,15 @@ export class WorkspaceService {
       );
     }
 
-    // Symlink escape guard: verify existing paths and their parent dirs
-    // resolve (via realpath) to within the workspace root. This prevents
-    // attacks where a symlink inside the workspace points outside it.
+    // Symlink escape guard: walk up from resolved path to workspace root,
+    // checking the first existing ancestor via fs.realpathSync(). This catches
+    // symlinks at any depth (e.g. workspace/a → /tmp/x/, write to a/b/c.txt).
     try {
       const realRoot = fs.realpathSync(this.root);
-      for (const p of [resolved, path.dirname(resolved)]) {
+      let checkPath = resolved;
+      while (checkPath !== realRoot && checkPath !== path.dirname(checkPath)) {
         try {
-          const real = fs.realpathSync(p);
+          const real = fs.realpathSync(checkPath);
           if (real !== realRoot && !real.startsWith(realRoot + path.sep)) {
             throw new WorkspaceError(
               'Invalid path: resolves outside workspace root via symlink.',
@@ -408,9 +409,11 @@ export class WorkspaceService {
               { path: relativePath },
             );
           }
+          break; // Found existing path within bounds — safe
         } catch (e) {
           if (e instanceof WorkspaceError) throw e;
-          // ENOENT or permission errors: skip check for non-existent paths
+          // ENOENT: path doesn't exist yet, check parent
+          checkPath = path.dirname(checkPath);
         }
       }
     } catch (e) {

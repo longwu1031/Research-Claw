@@ -10,7 +10,7 @@
  *   - "M H * * N"   → Weekly on {day} at HH:MM
  */
 
-const DAY_NAMES_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAY_NAMES_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_NAMES_ZH = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
 export function cronToHuman(expr: string, locale: string = 'en'): string {

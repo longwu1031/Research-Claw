@@ -222,6 +222,7 @@ describe('Tasks store error handling and edge cases', () => {
       status: 'todo' as const, priority: 'medium' as const, deadline: null,
       completed_at: null, created_at: '', updated_at: '', parent_task_id: null,
       related_paper_id: null, agent_session_id: null, tags: [], notes: null,
+    related_file_path: null,
     };
     mockGatewayClient.request.mockResolvedValueOnce(newTask);
 
@@ -252,6 +253,7 @@ describe('Tasks store error handling and edge cases', () => {
       status: 'todo' as const, priority: 'low' as const, deadline: null,
       completed_at: null, created_at: '', updated_at: '', parent_task_id: null,
       related_paper_id: null, agent_session_id: null, tags: [], notes: null,
+    related_file_path: null,
     };
     useTasksStore.setState({ tasks: [original], total: 1 });
 
@@ -271,6 +273,7 @@ describe('Tasks store error handling and edge cases', () => {
       status: 'todo' as const, priority: 'low' as const, deadline: null,
       completed_at: null, created_at: '', updated_at: '', parent_task_id: null,
       related_paper_id: null, agent_session_id: null, tags: [], notes: null,
+    related_file_path: null,
     };
     useTasksStore.setState({ tasks: [task], total: 1 });
     mockGatewayClient.request.mockResolvedValueOnce({});

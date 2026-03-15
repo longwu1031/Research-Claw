@@ -1,8 +1,9 @@
 import React from 'react';
 import { Button, Spin, Tag, Typography } from 'antd';
-import { RobotOutlined, UpOutlined } from '@ant-design/icons';
+import { FileOutlined, RobotOutlined, UpOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { TaskWithDetails, ActivityLogEntry, Task } from '../../stores/tasks';
+import { useUiStore } from '../../stores/ui';
 import type { ThemeTokens } from '../../styles/theme';
 
 const { Text } = Typography;
@@ -171,6 +172,25 @@ export default function TaskDetailExpand({
           <Text style={{ fontSize: 11, color: tokens.accent.blue }}>
             {detail.related_paper_id}
           </Text>
+        </div>
+      )}
+
+      {/* Related File */}
+      {detail.related_file_path && (
+        <div style={{ marginBottom: 6 }} data-testid="task-detail-related-file">
+          <Text style={{ fontSize: 11, color: tokens.text.muted }}>
+            {t('tasks.detail.relatedFile', { defaultValue: 'Related File' })}:{' '}
+          </Text>
+          <a
+            role="button"
+            tabIndex={0}
+            onClick={() => useUiStore.getState().requestWorkspacePreview(detail.related_file_path!)}
+            onKeyDown={(e) => { if (e.key === 'Enter') useUiStore.getState().requestWorkspacePreview(detail.related_file_path!); }}
+            style={{ fontSize: 11, color: tokens.accent.blue, cursor: 'pointer' }}
+          >
+            <FileOutlined style={{ marginRight: 3 }} />
+            {detail.related_file_path}
+          </a>
         </div>
       )}
 

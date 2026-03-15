@@ -1,7 +1,7 @@
 // Verified against spec 03d §3.2 + 01 §12.2
 import React, { useCallback } from 'react';
 import { Button, Tag, Typography } from 'antd';
-import { CheckCircleOutlined, RightOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, FileOutlined, RightOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import CardContainer from './CardContainer';
 import { useConfigStore } from '@/stores/config';
@@ -162,6 +162,24 @@ export default function TaskCard(props: TaskCardType) {
             <Text style={{ fontSize: 12, color: tokens.text.secondary }}>
               {props.related_paper_title}
             </Text>
+          </div>
+        )}
+
+        {/* Related file */}
+        {props.related_file_path && (
+          <div>
+            <Text style={{ fontSize: 12, color: tokens.text.muted }}>
+              {t('card.task.relatedFile', { defaultValue: 'Related File' })}:{' '}
+            </Text>
+            <a
+              role="button"
+              tabIndex={0}
+              onClick={() => useUiStore.getState().requestWorkspacePreview(props.related_file_path!)}
+              style={{ fontSize: 12, color: tokens.accent.blue, cursor: 'pointer' }}
+            >
+              <FileOutlined style={{ marginRight: 3 }} />
+              {props.related_file_path}
+            </a>
           </div>
         )}
       </div>
