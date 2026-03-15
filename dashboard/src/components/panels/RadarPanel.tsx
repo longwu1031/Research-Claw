@@ -454,6 +454,7 @@ export default function RadarPanel() {
   const messages = useChatStore((s) => s.messages);
   const client = useGatewayStore((s) => s.client);
   const connState = useGatewayStore((s) => s.state);
+  const locale = i18n.language || 'en';
   const tracking = useRadarStore((s) => s.config);
   const configLoaded = useRadarStore((s) => s.configLoaded);
   const loadConfig = useRadarStore((s) => s.loadConfig);
