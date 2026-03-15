@@ -271,17 +271,22 @@ Windows 用户推荐用 Docker Desktop，无需安装 WSL2 或 Node.js。macOS /
 
 #### 1. 直接拉取预构建镜像（推荐）
 
-无需克隆代码，一条命令即可运行（如果是MacOS/Linux的话, 需要将^替换为\）：
+无需克隆代码，拉取后一条命令启动：
 
 ```bash
 docker pull ghcr.io/wentorai/research-claw:latest
+```
 
-docker run -d --name research-claw ^
-  -p 127.0.0.1:28789:28789 ^
-  -v rc-config:/app/config ^
-  -v rc-data:/root/.research-claw ^
-  -v rc-workspace:/app/workspace ^
-  ghcr.io/wentorai/research-claw:latest
+**macOS / Linux：**
+
+```bash
+docker run -d --name research-claw -p 127.0.0.1:28789:28789 -v rc-config:/app/config -v rc-data:/root/.research-claw -v rc-workspace:/app/workspace ghcr.io/wentorai/research-claw:latest
+```
+
+**Windows（PowerShell）：**
+
+```powershell
+docker run -d --name research-claw -p 127.0.0.1:28789:28789 -v rc-config:/app/config -v rc-data:/root/.research-claw -v rc-workspace:/app/workspace ghcr.io/wentorai/research-claw:latest
 ```
 
 > 大陆用户如果拉取超时，请先配置 Docker 镜像加速（见下方），或使用方式 2 本地构建。

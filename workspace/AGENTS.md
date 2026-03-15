@@ -83,6 +83,29 @@ User request
   `gateway.restart` MUST present an `approval_card` (risk_level: high) and wait for
   confirmation.
 
+### Gateway Restart Mechanism (SIGUSR1)
+
+The gateway auto-restarts on ANY config change. When `config.apply` or `config.patch`
+writes to `openclaw.json`, the file watcher detects the change and sends SIGUSR1 to
+the gateway process. The supervisor script (run.sh / install.sh / docker-entrypoint.sh)
+catches the exit and restarts the gateway automatically.
+
+**Critical rules:**
+1. **Do NOT call `gateway.restart` after `config.apply` or `config.patch`** — the
+   SIGUSR1 auto-restart will handle it. Calling restart manually causes a double-restart
+   and potential conflicts (especially with Telegram polling).
+2. **When enabling ANY channel** (Telegram, Feishu, Discord, Slack, etc.), ALWAYS
+   include `"commands": { "native": false }` in the config patch. Research-Claw
+   registers 529 commands (28 tools + 431 skills + built-in), which exceeds every
+   IM channel's command menu limit. Without this, the gateway may enter a
+   `BOT_COMMANDS_TOO_MUCH → restart → conflict` crash loop.
+3. **Restart delay is 3 seconds.** After SIGUSR1, the gateway takes ~3s to restart.
+   The dashboard will auto-reconnect. Do not panic or retry if the connection drops
+   briefly after a config change.
+4. **Telegram getUpdates conflict (409)** is normal after restart — Telegram's long-poll
+   connection takes up to 30s to expire. The gateway retries with exponential backoff
+   and resolves automatically. Do NOT attempt to fix this by restarting again.
+
 ### PDF Import Protocol
 
 When the user requests importing a PDF (triggers: "导入PDF", "添加这篇论文",

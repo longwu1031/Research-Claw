@@ -45,6 +45,20 @@ chars: ~800
 -->
 
 ## Tool Notes
+- **MCP采集统计** (2026-03-14 首批): 学术科研专题采集 46 个高质量 MCP
+  - 文献管理: 10 个 (academic-search, paper-search, openalex, arxiv, cite-nexus, refcheck, paperclip, Scientific-Papers, cinii 等)
+  - 学术写作: 9 个 (arxiv-latex, texflow, mcp-latex, TexMCP, scitex, docwriter, OverLeaf, bibextract, PaperDebugger)
+  - 文献综述: 6 个 (GPT-Researcher, deep-research, academia_mcp, openalex-research, deep-research-mcp, Adaptive-Graph)
+  - 实验统计: 6 个 (scitex-stats, JeffersonStats, mcp-excel, us-census, estat, swiss-statistics, statfin)
+  - 学术作图: 1 个 (paperbanana)
+  - 学科专业: 12 个 (biomcp, AlphaFold, PDB, UniProt, clinicaltrials, pubchem, ensembl, ChatSpatial, ucsc-genome, SureChEMBL, opentargets 等)
+  - 学术会议: 2 个 (Anki-MCP, lecture-mcp)
+  - 本批新增: 46 条
+  - 累计: 46 条
+  - 中文翻译率: 100%
+  - 数据源: GitHub Topics (mcp-server topic)
+  - 技术限制: web_search 需要 Brave API key，使用 web_fetch 直接访问数据源
+
 - **Skills采集统计** (2026-03-14 第四批): 新增5个高质量学术 Skills
   - 学术写作: +2 个 (Typst, Quarto)
   - 实验统计: +1 个 (FEDOT)

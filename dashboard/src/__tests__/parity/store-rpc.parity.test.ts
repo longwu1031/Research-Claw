@@ -50,12 +50,14 @@ vi.mock('../../stores/gateway', () => ({
 // ── Mock chat store (used by sessions store) ────────────────────────────
 const mockSetSessionKey = vi.fn();
 const mockLoadHistory = vi.fn();
+const mockLoadSessionUsage = vi.fn();
 
 vi.mock('../../stores/chat', () => ({
   useChatStore: {
     getState: () => ({
       setSessionKey: mockSetSessionKey,
       loadHistory: mockLoadHistory,
+      loadSessionUsage: mockLoadSessionUsage,
     }),
     setState: vi.fn(),
     subscribe: vi.fn(),

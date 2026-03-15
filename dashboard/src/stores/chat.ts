@@ -186,6 +186,7 @@ interface ChatState {
   send: (text: string, attachments?: ChatAttachment[]) => Promise<void>;
   abort: () => void;
   loadHistory: () => Promise<void>;
+  loadSessionUsage: () => Promise<void>;
   handleChatEvent: (event: ChatStreamEvent) => void;
   setSessionKey: (key: string) => void;
   clearError: () => void;
@@ -406,6 +407,28 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     }
   },
 
+  loadSessionUsage: async () => {
+    const client = useGatewayStore.getState().client;
+    if (!client || !client.isConnected) return;
+
+    try {
+      // Fetch aggregate token usage across all sessions (last 30 days default).
+      // We deliberately omit `key` to avoid session key format mismatch:
+      // the chat store uses 'main' but the gateway stores 'agent:main:main'.
+      const result = await client.request<{
+        totals: { input: number; output: number };
+      }>('sessions.usage', {});
+
+      console.log('[Chat] sessions.usage totals:', result.totals);
+      set({
+        tokensIn: result.totals?.input ?? 0,
+        tokensOut: result.totals?.output ?? 0,
+      });
+    } catch (err) {
+      console.warn('[Chat] loadSessionUsage failed:', err);
+    }
+  },
+
   handleChatEvent: (event: ChatStreamEvent) => {
     const { runId } = get();
 
@@ -469,6 +492,8 @@ export const useChatStore = create<ChatState>()((set, get) => ({
             useUiStore.getState().triggerWorkspaceRefresh();
             // Channel A: poll for deadline-based notifications
             useUiStore.getState().checkNotifications();
+            // Refresh token usage from gateway transcript
+            get().loadSessionUsage();
           }, 500);
 
           // Channel B: extract notifications from card types in assistant message
@@ -515,7 +540,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   setSessionKey: (key: string) => {
-    set({ sessionKey: key, messages: [], streamText: null, runId: null });
+    set({ sessionKey: key, messages: [], streamText: null, runId: null, tokensIn: 0, tokensOut: 0 });
   },
 
   clearError: () => {

@@ -188,6 +188,58 @@ describe('Chat streaming parity with OpenClaw native UI', () => {
     });
   });
 
+  describe('Session usage loading via sessions.usage RPC', () => {
+    it('loads token usage from sessions.usage RPC', async () => {
+      // OpenClaw gateway tracks token usage in session transcripts but does NOT
+      // include usage in chat stream events. We fetch aggregate totals via the
+      // sessions.usage RPC (without key param to avoid key format mismatch).
+      mockGatewayClient.request.mockResolvedValueOnce({
+        totals: { input: 1200, output: 350 },
+      });
+
+      await useChatStore.getState().loadSessionUsage();
+
+      expect(mockGatewayClient.request).toHaveBeenCalledWith('sessions.usage', {});
+      expect(useChatStore.getState().tokensIn).toBe(1200);
+      expect(useChatStore.getState().tokensOut).toBe(350);
+    });
+
+    it('sets absolute values (not accumulating)', async () => {
+      // Ensure RPC result REPLACES existing counters, not adds to them
+      useChatStore.setState({ tokensIn: 500, tokensOut: 100 });
+
+      mockGatewayClient.request.mockResolvedValueOnce({
+        totals: { input: 800, output: 200 },
+      });
+
+      await useChatStore.getState().loadSessionUsage();
+
+      expect(useChatStore.getState().tokensIn).toBe(800);
+      expect(useChatStore.getState().tokensOut).toBe(200);
+    });
+
+    it('handles RPC failure gracefully (non-fatal)', async () => {
+      useChatStore.setState({ tokensIn: 100, tokensOut: 50 });
+      mockGatewayClient.request.mockRejectedValueOnce(new Error('timeout'));
+
+      await useChatStore.getState().loadSessionUsage();
+
+      // Values unchanged on error
+      expect(useChatStore.getState().tokensIn).toBe(100);
+      expect(useChatStore.getState().tokensOut).toBe(50);
+    });
+
+    it('resets tokens on session switch', () => {
+      useChatStore.setState({ tokensIn: 500, tokensOut: 200 });
+
+      useChatStore.getState().setSessionKey('project-abc');
+
+      expect(useChatStore.getState().tokensIn).toBe(0);
+      expect(useChatStore.getState().tokensOut).toBe(0);
+      expect(useChatStore.getState().sessionKey).toBe('project-abc');
+    });
+  });
+
   describe('Full streaming sequence (realistic)', () => {
     it('handles a complete delta → final lifecycle', () => {
       // Simulate what actually happens: multiple deltas then a final

@@ -83,9 +83,10 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
     if (safeKey === prev) return;
     set({ activeSessionKey: safeKey });
     persistKey(safeKey);
-    // Switch chat store and reload history for the new session
+    // Switch chat store and reload history + usage for the new session
     useChatStore.getState().setSessionKey(safeKey);
     useChatStore.getState().loadHistory();
+    useChatStore.getState().loadSessionUsage();
   },
 
   createSession: async () => {
@@ -122,6 +123,7 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
       persistKey(MAIN_SESSION_KEY);
       useChatStore.getState().setSessionKey(MAIN_SESSION_KEY);
       useChatStore.getState().loadHistory();
+      useChatStore.getState().loadSessionUsage();
     }
   },
 

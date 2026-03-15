@@ -45,6 +45,6 @@ while true; do
     exit 0
   fi
 
-  echo "[research-claw] Gateway exited (code $CODE) — restarting in 1s..."
-  sleep 1
+  echo "[research-claw] Gateway exited (code $CODE) — restarting in 3s..."
+  sleep 3
 done

@@ -148,6 +148,14 @@ export default function App() {
     }
   }, [connState, loadHistory, setAgentStatus]);
 
+  // Load session usage once boot completes (after config.get finishes).
+  // Deferred from connection effect to avoid competing with the critical config.get RPC.
+  useEffect(() => {
+    if (bootState === 'ready' && connState === 'connected') {
+      useChatStore.getState().loadSessionUsage();
+    }
+  }, [bootState, connState]);
+
   // Poll for deadline notifications every 60s while connected
   useEffect(() => {
     if (connState !== 'connected') return;

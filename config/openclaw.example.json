@@ -118,6 +118,13 @@
     "restart": true,
     "ownerDisplay": "raw"
   },
+  "channels": {
+    "telegram": {
+      "commands": {
+        "native": false
+      }
+    }
+  },
   "cron": {
     "enabled": true
   }

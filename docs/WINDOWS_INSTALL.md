@@ -19,26 +19,20 @@
 
 > Docker Desktop 会自动在后台启用 WSL2 作为引擎，你不需要手动配置 WSL。
 
-### 2. 配置镜像加速（大陆必做）
-
-Docker Hub 在大陆无法直接访问。打开 Docker Desktop → **Settings → Docker Engine**，在 JSON 配置中添加：
-
-```json
-{
-  "registry-mirrors": [
-    "https://docker.1panel.live",
-    "https://docker.xuanyuan.me"
-  ]
-}
-```
-
-点击 **Apply & Restart**。
-
-> 公共加速器随时可能失效。如果拉取超时，搜索「Docker 镜像加速 2026」获取最新可用地址，或使用阿里云 / 腾讯云控制台申请专属加速器。
-
-### 3. 克隆并启动
+### 2. 启动
 
 打开 PowerShell 或 Windows Terminal：
+
+**方式 A：拉取预构建镜像（推荐）**
+
+```powershell
+docker pull ghcr.io/wentorai/research-claw:latest
+docker run -d --name research-claw -p 127.0.0.1:28789:28789 -v rc-config:/app/config -v rc-data:/root/.research-claw -v rc-workspace:/app/workspace ghcr.io/wentorai/research-claw:latest
+```
+
+> 大陆用户如果拉取超时，需要在 Docker Desktop → Settings → Resources → Proxies 中配置代理，或使用方式 B。
+
+**方式 B：本地构建（大陆用户备选）**
 
 ```powershell
 git clone https://github.com/wentorai/Research-Claw.git
@@ -46,13 +40,12 @@ cd Research-Claw
 docker compose up -d --build
 ```
 
-首次构建约 5-10 分钟（Dockerfile 已内置清华 apt 源 + npmmirror，构建过程不需要翻墙）。
+> Dockerfile 已内置清华 apt 源 + npmmirror，构建过程不需要翻墙。首次构建约 5-10 分钟。
+> 如果 `git clone` 也超时，编辑 `docker-compose.yml`，取消注释 `HTTP_PROXY` 行并填入代理地址。
 
-> **如果 `git clone` 也超时**：编辑 `docker-compose.yml`，取消注释 `build.args` 中的 `HTTP_PROXY` 和 `HTTPS_PROXY`，填入你的代理地址（如 `http://host.docker.internal:7890`）。
+### 3. 使用
 
-### 4. 使用
-
-浏览器打开：
+浏览器打开（注意用 `127.0.0.1`，不要用 `localhost`）：
 
 ```
 http://127.0.0.1:28789/?token=research-claw
@@ -60,6 +53,8 @@ http://127.0.0.1:28789/?token=research-claw
 
 在 **Setup Wizard** 中填入 API Key，即可使用。
 
+> **为什么不用 localhost？** Windows 上 `localhost` 可能解析到 IPv6 (`::1`)，而 Docker 容器仅绑定 IPv4，导致连接失败。
+>
 > **Token 认证**：Docker 模式使用 token 认证。默认 token 为 `research-claw`，可通过 `-e OPENCLAW_GATEWAY_TOKEN=your-token` 自定义。
 >
 > **数据持久化**：数据库、配置、工作区存储在 Docker 具名 volume 中，即使容器删除数据也不丢失。

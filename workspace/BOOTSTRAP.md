@@ -68,32 +68,92 @@ communication preferences -- just follow this default.
 
 6. "Would you like to connect any messaging or work tools? I can currently
    integrate with:
-   - **Telegram** (available now -- connect via @Hihhoobot)
-   - **QQ** (available now -- via official QQ Bot API)
-   - **Email** (coming soon)
+   - **Telegram** (available now -- Bot API, recommended for fastest setup)
+   - **Feishu / 飞书** (available now -- bundled, WebSocket mode)
+   - **Discord** (available now -- Bot API)
+   - **Slack** (available now -- Bolt SDK)
+   - **WhatsApp** (available now -- QR pairing)
+   - **QQ** (coming soon -- not yet supported by gateway)
    - **DingTalk / 钉钉** (coming soon)
-   - **Feishu / 飞书** (coming soon)
 
-   If you use Telegram or QQ, I can guide you through connecting right now."
+   If you want to connect Telegram or Feishu, I can guide you through it now."
 
-   If user wants Telegram:
-   a. Direct them to find @Hihhoobot on Telegram.
-   b. Walk through the bot setup step by step.
-   c. Store connection status in MEMORY.md under `## Global > ### Environment`.
+   **CRITICAL: When enabling ANY channel, you MUST include
+   `commands.native: false` in the config patch. Research-Claw registers
+   529 commands which exceeds every IM channel's command menu limit.
+   Without this, the gateway enters a crash loop.**
 
-   If user wants QQ:
-   a. Check if they have a QQ Bot AppID and AppSecret from https://q.qq.com/.
-      If not, walk them through creating a bot on the QQ Open Platform.
-   b. Install the QQ Bot plugin:
-      `openclaw plugins install @tencent-connect/openclaw-qqbot@latest`
-   c. Configure credentials (qqbot is a custom plugin, use `config set`):
-      `openclaw config set channels.qqbot.appId "<ID>"`
-      `openclaw config set channels.qqbot.clientSecret "<SECRET>"`
-      `openclaw config set channels.qqbot.enabled true`
-   d. Restart the gateway: `openclaw gateway restart`
-   e. Ask user to send a test message from QQ to verify.
+   **CRITICAL: After writing config via `config.patch`, do NOT call
+   `gateway.restart`. Config changes auto-trigger SIGUSR1 and the
+   supervisor script restarts the gateway automatically. Calling restart
+   manually causes double-restart and Telegram polling conflicts.**
+
+   If user wants **Telegram**:
+   a. Direct them to open Telegram and chat with **@BotFather**.
+   b. Run `/newbot`, follow prompts, and save the bot token.
+   c. Use `config.patch` to inject the Telegram channel config:
+      ```json
+      {
+        "channels": {
+          "telegram": {
+            "enabled": true,
+            "botToken": "<USER_TOKEN>",
+            "dmPolicy": "open",
+            "groupPolicy": "open",
+            "groups": { "*": { "requireMention": true } },
+            "commands": { "native": false }
+          }
+        }
+      }
+      ```
+   d. Wait 3-5 seconds for the gateway to auto-restart (SIGUSR1).
+      The dashboard will auto-reconnect. A brief 409 getUpdates conflict
+      in logs is normal and resolves automatically.
+   e. Ask the user to DM the bot to verify.
    f. Store connection status in MEMORY.md under `## Global > ### Environment`.
-   See skill `qq-connect` for full setup details and troubleshooting.
+
+   If user wants **Feishu / 飞书**:
+   a. Feishu is bundled with the gateway -- no plugin install needed.
+   b. Direct them to https://open.feishu.cn/app to create an enterprise app.
+      (Lark users: https://open.larksuite.com/app)
+   c. Walk through:
+      - Create app → copy **App ID** (`cli_xxx`) and **App Secret**
+      - Permissions: batch import the required scopes (im:message, etc.)
+      - App Capability: enable Bot
+      - Event Subscription: choose "Use long connection" (WebSocket),
+        add event `im.message.receive_v1`
+      - Publish the app and wait for admin approval
+   d. Use `config.patch` to inject the Feishu channel config:
+      ```json
+      {
+        "channels": {
+          "feishu": {
+            "enabled": true,
+            "dmPolicy": "pairing",
+            "groupPolicy": "open",
+            "commands": { "native": false },
+            "accounts": {
+              "main": {
+                "appId": "<APP_ID>",
+                "appSecret": "<APP_SECRET>"
+              }
+            }
+          }
+        }
+      }
+      ```
+   e. Wait 3-5 seconds for the gateway to auto-restart.
+   f. Ask user to DM the bot in Feishu. First message triggers pairing.
+      The pairing code appears in gateway logs -- tell the user to approve
+      it or set `dmPolicy: "open"` for simpler access.
+   g. Store connection status in MEMORY.md under `## Global > ### Environment`.
+
+   If user wants **QQ**:
+   a. Inform them: "QQ channel is not yet supported by the gateway core.
+      We're working on it. For now, I recommend Telegram or Feishu as
+      alternatives. I'll note your interest so we can follow up when
+      QQ support is available."
+   b. Store interest in MEMORY.md under `## Global > ### Environment`.
 
 7. "Do you use a reference manager? If so, which one?"
    Options: Zotero / EndNote / Mendeley / Paperpile / JabRef / None / Other

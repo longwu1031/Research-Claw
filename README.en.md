@@ -271,17 +271,22 @@ Download and install from the [Docker Desktop official page](https://docs.docker
 
 #### 1. Pull pre-built image (recommended)
 
-No need to clone — one command to run (replace ^ with \ if you are using MacOS/Linux):
+No need to clone — pull and run:
 
 ```bash
 docker pull ghcr.io/wentorai/research-claw:latest
+```
 
-docker run -d --name research-claw ^
-  -p 127.0.0.1:28789:28789 ^
-  -v rc-config:/app/config ^
-  -v rc-data:/root/.research-claw ^
-  -v rc-workspace:/app/workspace ^
-  ghcr.io/wentorai/research-claw:latest
+**macOS / Linux:**
+
+```bash
+docker run -d --name research-claw -p 127.0.0.1:28789:28789 -v rc-config:/app/config -v rc-data:/root/.research-claw -v rc-workspace:/app/workspace ghcr.io/wentorai/research-claw:latest
+```
+
+**Windows (PowerShell):**
+
+```powershell
+docker run -d --name research-claw -p 127.0.0.1:28789:28789 -v rc-config:/app/config -v rc-data:/root/.research-claw -v rc-workspace:/app/workspace ghcr.io/wentorai/research-claw:latest
 ```
 
 > China mainland users: if the pull times out, configure a Docker mirror accelerator (see step 3) or use the local build method below.
