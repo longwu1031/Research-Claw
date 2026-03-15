@@ -136,20 +136,41 @@ fi
 install_node_fnm() {
   info "Installing Node.js $NODE_MIN via fnm..."
   if ! command -v fnm &>/dev/null; then
+    local FNM_DIR="$HOME/.local/share/fnm"
+    mkdir -p "$FNM_DIR"
+    local INSTALLED=false
+
+    # Method 1: installer script (requires Homebrew on macOS)
     local tmp; tmp="$(mktemp)"
-    if ! curl -fsSL https://fnm.vercel.app/install -o "$tmp" 2>/dev/null; then
-      rm -f "$tmp"
-      warn "Failed to download fnm (fnm.vercel.app may be blocked)."
-      warn "Install Node.js $NODE_MIN manually, then re-run this script:"
+    if curl -fsSL https://fnm.vercel.app/install -o "$tmp" 2>/dev/null; then
+      if bash "$tmp" --install-dir "$FNM_DIR" --skip-shell &>/dev/null; then
+        INSTALLED=true
+      fi
+    fi
+    rm -f "$tmp"
+
+    # Method 2: direct binary from GitHub (no Homebrew needed)
+    if ! $INSTALLED; then
+      info "Downloading fnm binary from GitHub..."
+      local FNM_ZIP="fnm-macos.zip"
+      if [ "$(uname -m)" = "arm64" ]; then FNM_ZIP="fnm-arm64.zip"; fi
+      if [ "$RC_OS" = "linux" ]; then FNM_ZIP="fnm-linux.zip"; fi
+      local dl; dl="$(mktemp)"
+      if curl -fsSL "https://github.com/Schniz/fnm/releases/latest/download/$FNM_ZIP" -o "$dl" 2>/dev/null; then
+        unzip -o "$dl" -d "$FNM_DIR" &>/dev/null && chmod +x "$FNM_DIR/fnm" && INSTALLED=true
+      fi
+      rm -f "$dl"
+    fi
+
+    if ! $INSTALLED; then
+      warn "Failed to install fnm. Install Node.js $NODE_MIN manually, then re-run:"
       if [ "$RC_OS" = mac ]; then
-        warn "  brew install node@$NODE_MIN"
+        warn "  brew install node@$NODE_MIN    # requires Homebrew: https://brew.sh"
       fi
       warn "Or set a proxy:  export HTTPS_PROXY=http://127.0.0.1:7890"
       return 1
     fi
-    bash "$tmp" --install-dir "$HOME/.local/share/fnm" --skip-shell
-    rm -f "$tmp"
-    export PATH="$HOME/.local/share/fnm:$PATH"
+    export PATH="$FNM_DIR:$PATH"
   fi
   eval "$(fnm env --shell bash 2>/dev/null || true)"
   fnm install "$NODE_MIN" --progress=never && fnm use "$NODE_MIN" && fnm default "$NODE_MIN"
