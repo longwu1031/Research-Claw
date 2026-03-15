@@ -90,6 +90,20 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   },
 
   // ── Tier 2: Chinese providers ──
+  // NOTE: zai-coding MUST come before zai so detectPresetFromUrl() matches
+  // the more specific coding URL pattern before the broader standard pattern.
+  {
+    id: 'zai-coding',
+    label: 'Z.AI Coding / 智谱 Coding',
+    baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
+    api: 'openai-completions',
+    models: [
+      { id: 'glm-5', name: 'GLM-5 Coding', reasoning: true, input: ['text'], contextWindow: 204_800, maxTokens: 131_072 },
+      { id: 'glm-4.7', name: 'GLM-4.7 Coding', reasoning: true, input: ['text'], contextWindow: 204_800, maxTokens: 131_072 },
+      { id: 'glm-4.7-flash', name: 'GLM-4.7 Flash Coding', reasoning: true, input: ['text'], contextWindow: 204_800, maxTokens: 131_072 },
+    ],
+    urlPattern: /bigmodel\.cn\/api\/coding|z\.ai\/api\/coding/i,
+  },
   {
     id: 'zai',
     label: 'Z.AI / 智谱',
@@ -103,18 +117,6 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       { id: 'glm-4.6v', name: 'GLM-4.6V (Vision)', input: ['text', 'image'], contextWindow: 8_192, maxTokens: 4_096 },
     ],
     urlPattern: /bigmodel\.cn|api\.z\.ai/i,
-  },
-  {
-    id: 'zai-coding',
-    label: 'Z.AI Coding / 智谱 Coding',
-    baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
-    api: 'openai-completions',
-    models: [
-      { id: 'glm-5', name: 'GLM-5 Coding', reasoning: true, input: ['text'], contextWindow: 204_800, maxTokens: 131_072 },
-      { id: 'glm-4.7', name: 'GLM-4.7 Coding', reasoning: true, input: ['text'], contextWindow: 204_800, maxTokens: 131_072 },
-      { id: 'glm-4.7-flash', name: 'GLM-4.7 Flash Coding', reasoning: true, input: ['text'], contextWindow: 204_800, maxTokens: 131_072 },
-    ],
-    urlPattern: /bigmodel\.cn\/api\/coding|z\.ai\/api\/coding/i,
   },
   {
     id: 'moonshot',
