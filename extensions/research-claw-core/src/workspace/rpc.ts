@@ -1,8 +1,9 @@
 /**
- * workspace/rpc — 7 Gateway WS RPC Handlers
+ * workspace/rpc — 11 Gateway WS RPC Handlers
  *
  * Registers rc.ws.tree, rc.ws.read, rc.ws.save, rc.ws.history, rc.ws.diff,
- * rc.ws.restore, and rc.ws.delete as gateway WebSocket RPC methods.
+ * rc.ws.restore, rc.ws.delete, rc.ws.saveImage, rc.ws.openExternal,
+ * rc.ws.openFolder, and rc.ws.move as gateway WebSocket RPC methods.
  *
  * rc.ws.upload is HTTP-only (POST /rc/upload) and is NOT registered here.
  * It should be registered as an HTTP route in the plugin entry point (index.ts).

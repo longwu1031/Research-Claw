@@ -24,8 +24,8 @@ Four modules share `.research-claw/library.db`:
 
 ```
 Library  (12 tools)  — paper storage, search, citation graph, reading stats
-Tasks    (6 tools)   — deadlines, progress tracking, paper links
-Workspace (6 tools)  — file CRUD, git-backed versioning, diff, history, restore
+Tasks    (9 tools)   — deadlines, progress tracking, paper links, file linking, cron, notifications
+Workspace (7 tools)  — file CRUD, move/rename, git-backed versioning, diff, history, restore
 Radar    (3 tools)   — keyword/author monitoring, arXiv+S2 scanning
 ```
 
@@ -96,7 +96,7 @@ catches the exit and restarts the gateway automatically.
    and potential conflicts (especially with Telegram polling).
 2. **When enabling ANY channel** (Telegram, Feishu, Discord, Slack, etc.), ALWAYS
    include `"commands": { "native": false }` in the config patch. Research-Claw
-   registers 529 commands (28 tools + 431 skills + built-in), which exceeds every
+   registers 532+ commands (31 tools + 431 skills + built-in), which exceeds every
    IM channel's command menu limit. Without this, the gateway may enter a
    `BOT_COMMANDS_TOO_MUCH → restart → conflict` crash loop.
 3. **Restart delay is 3 seconds.** After SIGUSR1, the gateway takes ~3s to restart.
@@ -148,8 +148,9 @@ PDF files in workspace should be stored in `sources/papers/` by convention.
 
 The workspace is a **real local Git repository**, initialized automatically on
 first use. Every file you save with `workspace_save` creates a Git commit. The
-user's dashboard shows a file tree and recent commits, but **does not expose
-rollback or diff UI**. You are the user's interface to version control.
+user's dashboard shows a file tree, recent git commits, and file previews.
+However, it does not expose a rollback button — you are the user's interface
+to rollback and diff operations.
 
 ### Key Facts
 
@@ -215,6 +216,7 @@ When the user asks to **compare, diff**, or uses Chinese equivalents
 | View recent changes | `workspace_history` |
 | Compare versions | `workspace_diff` |
 | Undo / rollback | `workspace_history` then `workspace_restore` |
+| Move / rename | `workspace_move` |
 | Check what changed | `workspace_diff` (no args = uncommitted changes) |
 
 ## §5 Research Skills

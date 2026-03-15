@@ -47,6 +47,31 @@ vi.mock('../../stores/gateway', () => ({
   },
 }));
 
+// ─── Mock config store — vision capability for attachment tests ──
+// The unified image pipeline (chat.ts:268-337) checks primaryModelSupportsVision()
+// and hasImageModelConfigured() before sending attachments. Without this mock,
+// send() returns early with an error and never calls chat.send.
+vi.mock('../../stores/config', () => ({
+  primaryModelSupportsVision: vi.fn(() => true),
+  hasImageModelConfigured: vi.fn(() => true),
+}));
+
+/**
+ * Find the chat.send RPC call from mock history.
+ *
+ * The unified image pipeline calls rc.ws.saveImage for each attachment BEFORE
+ * chat.send, so we can't rely on mock.calls[0] being chat.send.
+ */
+function getChatSendCall() {
+  return mockGatewayClient.request.mock.calls.find(
+    (c: unknown[]) => c[0] === 'chat.send',
+  );
+}
+function getChatSendParams() {
+  const call = getChatSendCall();
+  return call?.[1] as Record<string, unknown> | undefined;
+}
+
 describe('Chat send parity with OpenClaw native UI', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -85,7 +110,7 @@ describe('Chat send parity with OpenClaw native UI', () => {
       );
 
       // Verify idempotencyKey is non-empty (NonEmptyString in schema)
-      const params = mockGatewayClient.request.mock.calls[0][1];
+      const params = getChatSendParams()!;
       expect(params.idempotencyKey).toBeTruthy();
       expect(params.idempotencyKey.length).toBeGreaterThan(0);
     });
@@ -95,7 +120,7 @@ describe('Chat send parity with OpenClaw native UI', () => {
       useChatStore.setState({ sessionKey: 'research-session-42' });
       await useChatStore.getState().send('hello');
 
-      const params = mockGatewayClient.request.mock.calls[0][1];
+      const params = getChatSendParams()!;
       expect(params.sessionKey).toBe('research-session-42');
     });
 
@@ -104,7 +129,7 @@ describe('Chat send parity with OpenClaw native UI', () => {
       // Schema: attachments is Type.Optional
       await useChatStore.getState().send('text only');
 
-      const params = mockGatewayClient.request.mock.calls[0][1];
+      const params = getChatSendParams()!;
       expect(params.attachments).toBeUndefined();
     });
 
@@ -112,7 +137,7 @@ describe('Chat send parity with OpenClaw native UI', () => {
       // OpenClaw chat.ts:200-214 + 222: builds apiAttachments from ChatAttachment[]
       await useChatStore.getState().send('What is this?', [CLIENT_ATTACHMENT_PNG]);
 
-      const params = mockGatewayClient.request.mock.calls[0][1];
+      const params = getChatSendParams()!;
       expect(params.attachments).toBeDefined();
       expect(params.attachments).toHaveLength(1);
     });
@@ -123,8 +148,11 @@ describe('Chat send parity with OpenClaw native UI', () => {
       await useChatStore.getState().send('first');
       await useChatStore.getState().send('second');
 
-      const key1 = mockGatewayClient.request.mock.calls[0][1].idempotencyKey;
-      const key2 = mockGatewayClient.request.mock.calls[1][1].idempotencyKey;
+      const chatSendCalls = mockGatewayClient.request.mock.calls.filter(
+        (c: unknown[]) => c[0] === 'chat.send',
+      );
+      const key1 = (chatSendCalls[0][1] as Record<string, unknown>).idempotencyKey;
+      const key2 = (chatSendCalls[1][1] as Record<string, unknown>).idempotencyKey;
       expect(key1).not.toBe(key2);
     });
   });
@@ -140,7 +168,7 @@ describe('Chat send parity with OpenClaw native UI', () => {
       // Our impl (chat.ts:199): /^data:[^;]+;base64,(.+)$/ strips prefix
       await useChatStore.getState().send('check image', [CLIENT_ATTACHMENT_PNG]);
 
-      const attachment = mockGatewayClient.request.mock.calls[0][1].attachments[0];
+      const attachment = getChatSendParams()!.attachments[0];
       expect(attachment.content).toBe(TINY_PNG_B64);
       expect(attachment.content).not.toContain('data:');
       expect(attachment.content).not.toContain('base64,');
@@ -151,7 +179,7 @@ describe('Chat send parity with OpenClaw native UI', () => {
       // Gateway attachment-normalize.ts:16: mimeType: typeof a?.mimeType === "string" ? a.mimeType : undefined
       await useChatStore.getState().send('check image', [CLIENT_ATTACHMENT_PNG]);
 
-      const attachment = mockGatewayClient.request.mock.calls[0][1].attachments[0];
+      const attachment = getChatSendParams()!.attachments[0];
       expect(attachment.mimeType).toBe('image/png');
     });
 
@@ -160,14 +188,14 @@ describe('Chat send parity with OpenClaw native UI', () => {
       // Gateway attachment-normalize.ts:15: type: typeof a?.type === "string" ? a.type : undefined
       await useChatStore.getState().send('check', [CLIENT_ATTACHMENT_PNG]);
 
-      const attachment = mockGatewayClient.request.mock.calls[0][1].attachments[0];
+      const attachment = getChatSendParams()!.attachments[0];
       expect(attachment.type).toBe('image');
     });
 
     it('handles JPEG attachments with correct mime and base64', async () => {
       await useChatStore.getState().send('check jpeg', [CLIENT_ATTACHMENT_JPEG]);
 
-      const attachment = mockGatewayClient.request.mock.calls[0][1].attachments[0];
+      const attachment = getChatSendParams()!.attachments[0];
       expect(attachment.content).toBe(TINY_JPEG_B64);
       expect(attachment.mimeType).toBe('image/jpeg');
       expect(attachment.type).toBe('image');
@@ -180,7 +208,7 @@ describe('Chat send parity with OpenClaw native UI', () => {
         CLIENT_ATTACHMENT_JPEG,
       ]);
 
-      const attachments = mockGatewayClient.request.mock.calls[0][1].attachments;
+      const attachments = getChatSendParams()!.attachments;
       expect(attachments).toHaveLength(2);
       expect(attachments[0].content).toBe(TINY_PNG_B64);
       expect(attachments[0].mimeType).toBe('image/png');
@@ -194,7 +222,7 @@ describe('Chat send parity with OpenClaw native UI', () => {
       // openclaw/src/gateway/chat-attachments.ts:56: att.fileName || att.type || `attachment-${idx + 1}`
       await useChatStore.getState().send('test', [CLIENT_ATTACHMENT_PNG]);
 
-      const attachment = mockGatewayClient.request.mock.calls[0][1].attachments[0];
+      const attachment = getChatSendParams()!.attachments[0];
       expect(attachment.fileName).toMatch(/\.png$/);
     });
 
@@ -202,7 +230,7 @@ describe('Chat send parity with OpenClaw native UI', () => {
       // Our dashboard: att.mimeType.split('/')[1]?.replace('jpeg', 'jpg')
       await useChatStore.getState().send('test', [CLIENT_ATTACHMENT_JPEG]);
 
-      const attachment = mockGatewayClient.request.mock.calls[0][1].attachments[0];
+      const attachment = getChatSendParams()!.attachments[0];
       expect(attachment.fileName).toMatch(/\.jpg$/);
     });
 
@@ -214,7 +242,7 @@ describe('Chat send parity with OpenClaw native UI', () => {
       // Gateway attachment-normalize.ts:19: typeof a?.content === "string" check
       await useChatStore.getState().send('test', [CLIENT_ATTACHMENT_PNG]);
 
-      const attachment = mockGatewayClient.request.mock.calls[0][1].attachments[0];
+      const attachment = getChatSendParams()!.attachments[0];
       // All fields must be strings (not undefined, not null, not objects)
       expect(typeof attachment.content).toBe('string');
       expect(typeof attachment.mimeType).toBe('string');
@@ -382,7 +410,7 @@ describe('Chat send parity with OpenClaw native UI', () => {
       // The locally generated UUID is used as both chatRunId and idempotencyKey.
       await useChatStore.getState().send('hello');
 
-      const params = mockGatewayClient.request.mock.calls[0][1];
+      const params = getChatSendParams()!;
       expect(params.idempotencyKey).toBe(useChatStore.getState().runId);
     });
   });

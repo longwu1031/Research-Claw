@@ -34,7 +34,7 @@ const ACTUAL_LITERATURE_TOOLS = [
   'library_citation_graph',
 ] as const;
 
-/** 7 task agent tools (from tasks/tools.ts) — includes send_notification */
+/** 9 task agent tools (from tasks/tools.ts) — includes task_link_file, cron_update_schedule, send_notification */
 const ACTUAL_TASK_TOOLS = [
   'task_create',
   'task_list',
@@ -42,10 +42,12 @@ const ACTUAL_TASK_TOOLS = [
   'task_update',
   'task_link',
   'task_note',
+  'task_link_file',
+  'cron_update_schedule',
   'send_notification',
 ] as const;
 
-/** 6 workspace agent tools (from workspace/tools.ts) */
+/** 7 workspace agent tools (from workspace/tools.ts) */
 const ACTUAL_WORKSPACE_TOOLS = [
   'workspace_save',
   'workspace_read',
@@ -53,6 +55,7 @@ const ACTUAL_WORKSPACE_TOOLS = [
   'workspace_diff',
   'workspace_history',
   'workspace_restore',
+  'workspace_move',
 ] as const;
 
 /** 3 radar agent tools (from radar/tools.ts) */
@@ -62,7 +65,7 @@ const ACTUAL_RADAR_TOOLS = [
   'radar_scan',
 ] as const;
 
-/** All 28 agent tools (12 + 7 + 6 + 3) — from index.ts registration */
+/** All 31 agent tools (12 + 9 + 7 + 3) — from index.ts registration */
 const ALL_AGENT_TOOLS = [
   ...ACTUAL_LITERATURE_TOOLS,
   ...ACTUAL_TASK_TOOLS,
@@ -70,7 +73,7 @@ const ALL_AGENT_TOOLS = [
   ...ACTUAL_RADAR_TOOLS,
 ] as const;
 
-/** 9 workspace WS RPC methods (from workspace/rpc.ts) */
+/** 11 workspace WS RPC methods (from workspace/rpc.ts) */
 const ACTUAL_WORKSPACE_RPC = [
   'rc.ws.tree',
   'rc.ws.read',
@@ -79,8 +82,10 @@ const ACTUAL_WORKSPACE_RPC = [
   'rc.ws.diff',
   'rc.ws.restore',
   'rc.ws.delete',
+  'rc.ws.saveImage',
   'rc.ws.openExternal',
   'rc.ws.openFolder',
+  'rc.ws.move',
 ] as const;
 
 /** 26 literature WS RPC methods (from literature/rpc.ts) */
@@ -113,7 +118,7 @@ const ACTUAL_LITERATURE_RPC = [
   'rc.lit.notes.delete',
 ] as const;
 
-/** 18 task/cron/notification WS RPC methods (from tasks/rpc.ts) */
+/** 20 task/cron/notification WS RPC methods (from tasks/rpc.ts) */
 const ACTUAL_TASK_RPC = [
   'rc.task.list',
   'rc.task.get',
@@ -124,6 +129,7 @@ const ACTUAL_TASK_RPC = [
   'rc.task.upcoming',
   'rc.task.overdue',
   'rc.task.link',
+  'rc.task.linkFile',
   'rc.task.notes.add',
   'rc.cron.presets.list',
   'rc.cron.presets.activate',
@@ -131,15 +137,17 @@ const ACTUAL_TASK_RPC = [
   'rc.cron.presets.setJobId',
   'rc.cron.presets.delete',
   'rc.cron.presets.restore',
+  'rc.cron.presets.updateSchedule',
   'rc.notifications.pending',
   'rc.notifications.markRead',
 ] as const;
 
-/** 3 radar WS RPC methods (from radar/rpc.ts) */
+/** 4 radar WS RPC methods (from radar/rpc.ts) */
 const ACTUAL_RADAR_RPC = [
   'rc.radar.config.get',
   'rc.radar.config.set',
   'rc.radar.scan',
+  'rc.radar.lastScan',
 ] as const;
 
 /** All WS RPC methods */
@@ -208,11 +216,11 @@ describe('Bootstrap file consistency (AGENTS.md v3.1 & TOOLS.md v3.1)', () => {
       }
     });
 
-    it('lists all 6 task tools (excluding send_notification which is in Special Tools)', () => {
-      const taskToolsExclNotification = ACTUAL_TASK_TOOLS.filter(
-        (t) => t !== 'send_notification',
+    it('lists all task tools (excluding send_notification and cron_update_schedule which are in Special Tools)', () => {
+      const taskToolsExclSpecial = ACTUAL_TASK_TOOLS.filter(
+        (t) => t !== 'send_notification' && t !== 'cron_update_schedule',
       );
-      for (const tool of taskToolsExclNotification) {
+      for (const tool of taskToolsExclSpecial) {
         expect(toolsMd).toContain(`\`${tool}\``);
       }
     });
@@ -221,7 +229,7 @@ describe('Bootstrap file consistency (AGENTS.md v3.1 & TOOLS.md v3.1)', () => {
       expect(toolsMd).toContain('send_notification');
     });
 
-    it('lists all 6 workspace tools', () => {
+    it('lists all 7 workspace tools', () => {
       for (const tool of ACTUAL_WORKSPACE_TOOLS) {
         expect(toolsMd).toContain(`\`${tool}\``);
       }
@@ -277,23 +285,22 @@ describe('Bootstrap file consistency (AGENTS.md v3.1 & TOOLS.md v3.1)', () => {
       // TOOLS.md counts only 6 task tools, excluding send_notification from the count
       // since it is listed under Special Tools. Let's verify the stated subcounts.
       expect(ACTUAL_LITERATURE_TOOLS.length).toBe(12);
-      expect(ACTUAL_WORKSPACE_TOOLS.length).toBe(6);
+      expect(ACTUAL_WORKSPACE_TOOLS.length).toBe(7);
       expect(ACTUAL_RADAR_TOOLS.length).toBe(3);
-      // Task tools: 7 in code (including send_notification)
-      // TOOLS.md lists 6 in the Tasks table + send_notification separately
-      expect(ACTUAL_TASK_TOOLS.length).toBe(7);
+      // Task tools: 9 in code (including task_link_file, cron_update_schedule, send_notification)
+      expect(ACTUAL_TASK_TOOLS.length).toBe(9);
     });
 
     it('TOOLS.md states "Library (12 tools)"', () => {
       expect(toolsMd).toContain('Library (12 tools)');
     });
 
-    it('TOOLS.md states "Tasks (7 tools, incl. send_notification in §3)"', () => {
-      expect(toolsMd).toContain('Tasks (7 tools');
+    it('TOOLS.md states "Tasks (9 tools, incl. send_notification in §3)"', () => {
+      expect(toolsMd).toContain('Tasks (9 tools');
     });
 
-    it('TOOLS.md states "Workspace (6 tools)"', () => {
-      expect(toolsMd).toContain('Workspace (6 tools)');
+    it('TOOLS.md states "Workspace (7 tools)"', () => {
+      expect(toolsMd).toContain('Workspace (7 tools)');
     });
 
     it('TOOLS.md states "Radar (3 tools)"', () => {
@@ -305,13 +312,13 @@ describe('Bootstrap file consistency (AGENTS.md v3.1 & TOOLS.md v3.1)', () => {
       expect(stated).not.toBeNull();
       const statedCount = parseInt(stated![1], 10);
 
-      // 12 lit + 7 task (incl. send_notification) + 6 ws + 3 radar = 28
-      expect(statedCount).toBe(28);
-      expect(ALL_AGENT_TOOLS.length).toBe(28);
+      // 12 lit + 9 task (incl. task_link_file, cron_update_schedule, send_notification) + 7 ws + 3 radar = 31
+      expect(statedCount).toBe(31);
+      expect(ALL_AGENT_TOOLS.length).toBe(31);
     });
 
-    it('TOOLS.md §6 states total tool count (28 local + 13 API = 41)', () => {
-      expect(toolsMd).toContain('28 local + 13 API = **41 registered tools**');
+    it('TOOLS.md §6 states total tool count (31 local + 13 API = 44)', () => {
+      expect(toolsMd).toContain('31 local + 13 API = **44 registered tools**');
     });
   });
 
@@ -591,7 +598,7 @@ describe('Bootstrap file consistency (AGENTS.md v3.1 & TOOLS.md v3.1)', () => {
       expect(wsSection).toContain('workspace_diff');
     });
 
-    it('tool chain reference table lists all 6 workspace tools', () => {
+    it('tool chain reference table lists all 7 workspace tools', () => {
       const wsSection = agentsMd.slice(
         agentsMd.indexOf('## §4 Workspace & Version Control'),
         agentsMd.indexOf('## §5'),
@@ -650,12 +657,12 @@ describe('Bootstrap file consistency (AGENTS.md v3.1 & TOOLS.md v3.1)', () => {
       expect(agentsMd).toMatch(/Library\s+\(12 tools\)/);
     });
 
-    it('states Tasks has 6 tools', () => {
-      expect(agentsMd).toMatch(/Tasks\s+\(6 tools\)/);
+    it('states Tasks has 9 tools', () => {
+      expect(agentsMd).toMatch(/Tasks\s+\(9 tools\)/);
     });
 
-    it('states Workspace has 6 tools', () => {
-      expect(agentsMd).toMatch(/Workspace\s+\(6 tools\)/);
+    it('states Workspace has 7 tools', () => {
+      expect(agentsMd).toMatch(/Workspace\s+\(7 tools\)/);
     });
 
     it('states Radar has 3 tools', () => {
@@ -691,9 +698,9 @@ describe('Bootstrap file consistency (AGENTS.md v3.1 & TOOLS.md v3.1)', () => {
       }
     });
 
-    it('both files agree on workspace tool count (6)', () => {
-      expect(agentsMd).toMatch(/Workspace\s+\(6 tools\)/);
-      expect(toolsMd).toMatch(/Workspace \(6 tools\)/);
+    it('both files agree on workspace tool count (7)', () => {
+      expect(agentsMd).toMatch(/Workspace\s+\(7 tools\)/);
+      expect(toolsMd).toMatch(/Workspace \(7 tools\)/);
     });
 
     it('AGENTS.md §4 tool chain table matches TOOLS.md workspace tool list', () => {
@@ -713,7 +720,7 @@ describe('Bootstrap file consistency (AGENTS.md v3.1 & TOOLS.md v3.1)', () => {
 
       // Extract from TOOLS.md workspace section
       const wsSection = toolsMd.slice(
-        toolsMd.indexOf('### Workspace (6 tools)'),
+        toolsMd.indexOf('### Workspace (7 tools)'),
         toolsMd.indexOf('### Radar'),
       );
       for (const tool of ACTUAL_WORKSPACE_TOOLS) {
@@ -731,17 +738,15 @@ describe('Bootstrap file consistency (AGENTS.md v3.1 & TOOLS.md v3.1)', () => {
 
   describe('TOOLS.md — workspace RPC awareness', () => {
     it('TOOLS.md documents agent tools (not RPC methods) — RPC is internal', () => {
-      // Workspace has 9 RPC methods but only 6 agent tools.
-      // The 3 extra RPCs (rc.ws.tree, rc.ws.delete, rc.ws.openExternal,
-      // rc.ws.openFolder) are dashboard-only and not agent tools.
-      // TOOLS.md correctly lists only the 6 agent-facing tools.
-      expect(ACTUAL_WORKSPACE_TOOLS.length).toBe(6);
-      expect(ACTUAL_WORKSPACE_RPC.length).toBe(9);
+      // Workspace has 11 RPC methods but only 7 agent tools.
+      // The 4 extra RPCs (rc.ws.tree, rc.ws.delete, rc.ws.saveImage,
+      // rc.ws.openExternal, rc.ws.openFolder) are dashboard-only.
+      // TOOLS.md correctly lists only the 7 agent-facing tools.
+      expect(ACTUAL_WORKSPACE_TOOLS.length).toBe(7);
+      expect(ACTUAL_WORKSPACE_RPC.length).toBe(11);
 
       // The delta: tree, delete, openExternal, openFolder are RPC-only
-      // (tree is consumed by the dashboard sidebar, not the agent;
-      //  delete is exposed as RPC but not as agent tool;
-      //  openExternal and openFolder are desktop-only RPCs)
+      // (rc.ws.saveImage is matched by the heuristic because "save" ⊂ "saveImage")
       const rpcOnlyMethods = ACTUAL_WORKSPACE_RPC.filter(
         (rpc) => !ACTUAL_WORKSPACE_TOOLS.some((tool) => rpc.includes(tool.replace('workspace_', ''))),
       );

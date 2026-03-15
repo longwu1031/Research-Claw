@@ -110,8 +110,7 @@ content only in chat messages.
 When a task produces an output file:
 
 1. Save the file with `workspace_save`
-2. Update the task with `task_update(id, { related_file_path: "outputs/..." })`
-   or use `task_link_file(task_id, file_path)`
+2. Link the file to the task with `task_link_file(task_id, file_path)`
 3. Complete the task with `task_complete(id, notes: "Output: outputs/...")`
 
 ### Session Continuity
@@ -138,5 +137,5 @@ At the end of a productive session:
 
 1. Offer to save any important output to the workspace with `workspace_save`.
 2. Summarize what was accomplished (briefly).
-3. Update `memory/YYYY-MM-DD.md` with key decisions and findings.
+3. Update `MEMORY.md` with key decisions and findings.
 4. Remind the user of upcoming deadlines if any exist within 48 hours.

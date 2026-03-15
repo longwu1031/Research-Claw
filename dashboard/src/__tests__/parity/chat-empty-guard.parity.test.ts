@@ -48,6 +48,12 @@ vi.mock('../../stores/gateway', () => ({
   },
 }));
 
+// Mock config store — vision capability for attachment tests
+vi.mock('../../stores/config', () => ({
+  primaryModelSupportsVision: vi.fn(() => true),
+  hasImageModelConfigured: vi.fn(() => true),
+}));
+
 describe('Empty message guard parity — openclaw/ui/src/ui/controllers/chat.ts:160-164', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -108,11 +114,15 @@ describe('Empty message guard parity — openclaw/ui/src/ui/controllers/chat.ts:
     // OpenClaw: const hasAttachments = attachments && attachments.length > 0;
     // if (!msg && !hasAttachments) → hasAttachments is true → guard does NOT trigger → RPC proceeds
     // This supports the vision model use case: image-only messages are valid.
+    // Note: The unified image pipeline calls rc.ws.saveImage before chat.send,
+    // so total request count is 2 (saveImage + chat.send).
     await useChatStore.getState().send('', [CLIENT_ATTACHMENT_PNG]);
 
-    expect(mockGatewayClient.request).toHaveBeenCalledTimes(1);
-    expect(mockGatewayClient.request).toHaveBeenCalledWith(
-      'chat.send',
+    const chatSendCall = mockGatewayClient.request.mock.calls.find(
+      (c: unknown[]) => c[0] === 'chat.send',
+    );
+    expect(chatSendCall).toBeDefined();
+    expect(chatSendCall![1]).toEqual(
       expect.objectContaining({
         sessionKey: 'main',
       }),
@@ -137,8 +147,12 @@ describe('Empty message guard parity — openclaw/ui/src/ui/controllers/chat.ts:
 
   it('whitespace-only text with attachments DOES call gateway RPC — chat.ts:160-162', async () => {
     // OpenClaw: msg = "  ".trim() = "", falsy BUT hasAttachments = true → guard passes
+    // Note: rc.ws.saveImage + chat.send = 2 calls
     await useChatStore.getState().send('  ', [CLIENT_ATTACHMENT_PNG]);
 
-    expect(mockGatewayClient.request).toHaveBeenCalledTimes(1);
+    const chatSendCall = mockGatewayClient.request.mock.calls.find(
+      (c: unknown[]) => c[0] === 'chat.send',
+    );
+    expect(chatSendCall).toBeDefined();
   });
 });

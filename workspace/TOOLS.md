@@ -6,7 +6,7 @@ updated: 2026-03-14
 
 # Tool Reference
 
-## §1 Local Tools (28)
+## §1 Local Tools (31)
 
 ### Library (12 tools)
 
@@ -25,7 +25,7 @@ updated: 2026-03-14
 | `library_import_bibtex` | Import papers from BibTeX content |
 | `library_citation_graph` | Query citation relationships between papers |
 
-### Tasks (7 tools, incl. send_notification in §3)
+### Tasks (9 tools, incl. send_notification in §3)
 
 | Tool | Purpose |
 |:-----|:--------|
@@ -35,8 +35,10 @@ updated: 2026-03-14
 | `task_update` | Update task details |
 | `task_link` | Link a task to a paper in the library |
 | `task_note` | Add a timestamped note to a task |
+| `task_link_file` | Link a task to a workspace file path |
+| `cron_update_schedule` | Update the schedule of a cron preset |
 
-### Workspace (6 tools)
+### Workspace (7 tools)
 
 | Tool | Purpose |
 |:-----|:--------|
@@ -46,6 +48,7 @@ updated: 2026-03-14
 | `workspace_diff` | Show git diff: uncommitted changes, single-file diff, or commit range comparison. Use when user asks "what changed" or wants to compare versions. |
 | `workspace_history` | Show git commit log for the workspace or a specific file. Shows commit hashes, messages, timestamps. Use to find commit hashes for restore. |
 | `workspace_restore` | Restore a file to a previous version by commit hash. Creates a new commit with the restored content. Use when user wants to undo changes or rollback. |
+| `workspace_move` | Move or rename a file/directory within workspace. Auto-commits to git. |
 
 ### Radar (3 tools)
 
@@ -113,5 +116,5 @@ Tools always take priority over skill guidance.
 
 ## §6 Tool Count
 
-28 local + 13 API = **41 registered tools**, all in `openclaw.json` `tools.alsoAllow`.
+31 local + 13 API = **44 registered tools**, all in `openclaw.json` `tools.alsoAllow`.
 431 skills accessible on-demand via research-plugins (40 subcategory indexes).

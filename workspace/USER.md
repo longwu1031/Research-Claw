@@ -29,5 +29,5 @@ updated: 2026-03-12
 - **Citation style:** APA
 - **Language:** 中文
 - **Working hours:** 09:00-18:00
-- **Timezone:** UTC+0
+- **Timezone:** UTC+8
 - **Notification frequency:** daily

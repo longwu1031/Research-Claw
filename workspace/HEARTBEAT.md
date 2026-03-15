@@ -47,8 +47,8 @@ schedule (default: first heartbeat after 09:00 local time each day).
 
 ### 4. Reading Reminders [configurable: stale_threshold = 7 days]
 
-- Query `library_search` for papers with status "reading" and no activity
-  for longer than the stale threshold.
+- Query `library_reading_stats` and check for papers with status "reading"
+  and no activity for longer than the stale threshold.
 - For each stale paper, note it in highlights.
 
 ### 5. Quiet Hours [configurable: start = 23:00, end = 08:00]
@@ -73,14 +73,15 @@ If there are no alerts, reminders, or digest items, output:
 
 ## Configuration
 
-All configurable values are set in `openclaw.json` under
-`plugins.entries.research-claw-core.config`:
+Only `heartbeatDeadlineWarningHours` is currently configurable in `openclaw.json`
+under `plugins.entries.research-claw-core.config`. Other values are hardcoded
+defaults used by the agent when executing heartbeat routines:
 
-| Parameter | Config Key | Default | Description |
-|:---|:---|:---|:---|
-| Deadline window | `heartbeatDeadlineWarningHours` | 48 | Hours before deadline to start alerting |
-| Digest frequency | `heartbeatDigestFrequency` | `"daily"` | `"daily"` or `"never"` |
-| Digest time | `heartbeatDigestTime` | `"09:00"` | Local time for daily digest |
-| Stale threshold | `heartbeatStaleReadingDays` | 7 | Days before a "reading" paper is flagged |
-| Quiet start | `heartbeatQuietStart` | `"23:00"` | Start of quiet hours (local time) |
-| Quiet end | `heartbeatQuietEnd` | `"08:00"` | End of quiet hours (local time) |
+| Parameter | Config Key | Default | Status | Description |
+|:---|:---|:---|:---|:---|
+| Deadline window | `heartbeatDeadlineWarningHours` | 48 | ✅ implemented | Hours before deadline to start alerting |
+| Digest frequency | — | `"daily"` | ⚠️ hardcoded | `"daily"` or `"never"` (not yet configurable) |
+| Digest time | — | `"09:00"` | ⚠️ hardcoded | Local time for daily digest (not yet configurable) |
+| Stale threshold | — | 7 | ⚠️ hardcoded | Days before a "reading" paper is flagged (not yet configurable) |
+| Quiet start | — | `"23:00"` | ⚠️ hardcoded | Start of quiet hours (not yet configurable) |
+| Quiet end | — | `"08:00"` | ⚠️ hardcoded | End of quiet hours (not yet configurable) |

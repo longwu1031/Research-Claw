@@ -80,7 +80,7 @@ communication preferences -- just follow this default.
 
    **CRITICAL: When enabling ANY channel, you MUST include
    `commands.native: false` in the config patch. Research-Claw registers
-   529 commands which exceeds every IM channel's command menu limit.
+   532+ commands (31 tools + 431 skills + built-in) which exceeds every IM channel's command menu limit.
    Without this, the gateway enters a crash loop.**
 
    **CRITICAL: After writing config via `config.patch`, do NOT call
