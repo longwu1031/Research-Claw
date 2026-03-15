@@ -44,6 +44,14 @@ curl -fsSL https://wentor.ai/install.sh | bash
 
 **你的论文库、笔记、实验数据，全部存在你自己的机器上。唯一的外部依赖是你选择的大模型 API。**
 
+<div align="center">
+
+扫码加入**科研龙虾 · WentorOS** 微信群
+
+<img src="assets/community-qr.jpg" width="260" alt="微信群二维码" />
+
+</div>
+
 ---
 
 ## 六个场景
@@ -404,20 +412,6 @@ research-claw/
 ├── skills/           # 自定义 SKILL.md 文件
 └── workspace/        # Bootstrap files (SOUL.md, AGENTS.md …)
 ```
-
----
-
-## 社区
-
-<div align="center">
-
-扫码加入**科研龙虾 · WentorOS** 微信群
-
-<img src="assets/community-qr.jpg" width="260" alt="微信群二维码" />
-
-[wentor.ai](https://wentor.ai) · [GitHub Issues](https://github.com/wentorai/Research-Claw/issues)
-
-</div>
 
 ---
 

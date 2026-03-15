@@ -44,6 +44,14 @@ Research-Claw runs entirely on your local machine. It reads papers so you don't 
 
 **Your papers, notes, and research data stay on your machine. The only external dependency is the LLM API you choose.**
 
+<div align="center">
+
+Join our **Research-Claw · WentorOS** WeChat group
+
+<img src="assets/community-qr.jpg" width="260" alt="WeChat community QR code" />
+
+</div>
+
 ---
 
 ## Six Scenarios
@@ -403,20 +411,6 @@ research-claw/
 ├── skills/           # Custom SKILL.md files
 └── workspace/        # Bootstrap files (SOUL.md, AGENTS.md …)
 ```
-
----
-
-## Community
-
-<div align="center">
-
-Join our **Research-Claw · WentorOS** WeChat group
-
-<img src="assets/community-qr.jpg" width="260" alt="WeChat community QR code" />
-
-[wentor.ai](https://wentor.ai) · [GitHub Issues](https://github.com/wentorai/Research-Claw/issues)
-
-</div>
 
 ---
 
