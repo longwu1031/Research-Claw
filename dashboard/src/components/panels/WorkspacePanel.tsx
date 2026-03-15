@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Dropdown, message, Modal, Spin, Typography, Upload } from 'antd';
+import { App, Button, Dropdown, Modal, Spin, Typography, Upload } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   FileOutlined,
@@ -111,12 +111,16 @@ interface FileTreeNodeProps {
   workspaceRoot: string;
   onOpenFile?: (path: string) => void;
   onDeleted?: () => void;
+  onMoved?: () => void;
 }
 
-function FileTreeNode({ node, depth, tokens, workspaceRoot, onOpenFile, onDeleted }: FileTreeNodeProps) {
+function FileTreeNode({ node, depth, tokens, workspaceRoot, onOpenFile, onDeleted, onMoved }: FileTreeNodeProps) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const client = useGatewayStore((s) => s.client);
   const [expanded, setExpanded] = useState(depth < 2);
+  const [dragOver, setDragOver] = useState(false);
+  const expandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { icon, color } = getFileIcon(node.name, node.type, expanded);
 
   const contextMenuItems: MenuProps['items'] = useMemo(() => [
@@ -179,12 +183,88 @@ function FileTreeNode({ node, depth, tokens, workspaceRoot, onOpenFile, onDelete
         });
       },
     },
-  ], [node.path, t, client, workspaceRoot, onDeleted]);
+  ], [node.path, t, client, workspaceRoot, onDeleted, message]);
+
+  // --- Drag source: lightweight custom ghost image ---
+  const handleDragStart = useCallback((e: React.DragEvent) => {
+    e.dataTransfer.setData('text/x-workspace-path', node.path);
+    e.dataTransfer.effectAllowed = 'move';
+    // Create a small, unobtrusive drag ghost so it doesn't block drop targets
+    const ghost = document.createElement('div');
+    ghost.textContent = node.name;
+    ghost.style.cssText =
+      'position:fixed;top:-999px;left:-999px;padding:4px 10px;border-radius:4px;' +
+      'font-size:12px;background:rgba(59,130,246,0.85);color:#fff;white-space:nowrap;' +
+      'pointer-events:none;z-index:9999;max-width:200px;overflow:hidden;text-overflow:ellipsis';
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, 0, 0);
+    // Clean up the off-screen element after the browser captures it
+    requestAnimationFrame(() => document.body.removeChild(ghost));
+  }, [node.path, node.name]);
+
+  // --- Drop target (directories only) + auto-expand on hover ---
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (node.type !== 'directory') return;
+    if (!e.dataTransfer.types.includes('text/x-workspace-path')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (!dragOver) {
+      setDragOver(true);
+      // Auto-expand collapsed folder after 500ms hover
+      if (!expanded) {
+        expandTimerRef.current = setTimeout(() => setExpanded(true), 500);
+      }
+    }
+  }, [node.type, dragOver, expanded]);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOver(false);
+    if (expandTimerRef.current) {
+      clearTimeout(expandTimerRef.current);
+      expandTimerRef.current = null;
+    }
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    setDragOver(false);
+    if (expandTimerRef.current) {
+      clearTimeout(expandTimerRef.current);
+      expandTimerRef.current = null;
+    }
+    if (node.type !== 'directory') return;
+    e.preventDefault();
+
+    const srcPath = e.dataTransfer.getData('text/x-workspace-path');
+    if (!srcPath) return;
+
+    // Don't drop onto own parent or into itself
+    const srcDir = srcPath.includes('/') ? srcPath.substring(0, srcPath.lastIndexOf('/')) : '';
+    if (srcDir === node.path || srcPath === node.path) return;
+
+    const fileName = srcPath.includes('/') ? srcPath.substring(srcPath.lastIndexOf('/') + 1) : srcPath;
+    const destPath = `${node.path}/${fileName}`;
+
+    try {
+      await client?.request('rc.ws.move', { from: srcPath, to: destPath });
+      // Auto-expand the target folder so the user sees the moved file
+      setExpanded(true);
+      message.success(t('workspace.moveSuccess', { defaultValue: `Moved to ${node.name}` }));
+      onMoved?.();
+    } catch (err) {
+      console.error('[WorkspacePanel] move failed:', err);
+      message.error(t('workspace.moveFailed', { defaultValue: 'Move failed' }));
+    }
+  }, [node, client, t, message, onMoved]);
 
   return (
     <div>
       <Dropdown menu={{ items: contextMenuItems }} trigger={['contextMenu']}>
         <div
+          draggable
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
           onClick={() => {
             if (node.type === 'directory') {
               setExpanded(!expanded);
@@ -201,12 +281,15 @@ function FileTreeNode({ node, depth, tokens, workspaceRoot, onOpenFile, onDelete
             cursor: 'pointer',
             fontSize: 12,
             color: tokens.text.primary,
+            background: dragOver ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+            borderRadius: dragOver ? 4 : 0,
+            transition: 'background 0.15s',
           }}
           onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.background = tokens.bg.surfaceHover;
+            if (!dragOver) (e.currentTarget as HTMLElement).style.background = tokens.bg.surfaceHover;
           }}
           onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.background = 'transparent';
+            if (!dragOver) (e.currentTarget as HTMLElement).style.background = 'transparent';
           }}
         >
           <span style={{ color, fontSize: 14, flexShrink: 0 }}>{icon}</span>
@@ -217,7 +300,7 @@ function FileTreeNode({ node, depth, tokens, workspaceRoot, onOpenFile, onDelete
         </div>
       </Dropdown>
       {expanded && node.children?.map((child) => (
-        <FileTreeNode key={child.path} node={child} depth={depth + 1} tokens={tokens} workspaceRoot={workspaceRoot} onOpenFile={onOpenFile} onDeleted={onDeleted} />
+        <FileTreeNode key={child.path} node={child} depth={depth + 1} tokens={tokens} workspaceRoot={workspaceRoot} onOpenFile={onOpenFile} onDeleted={onDeleted} onMoved={onMoved} />
       ))}
     </div>
   );
@@ -266,6 +349,7 @@ function RecentChanges({ commits, tokens }: { commits: CommitEntry[]; tokens: Re
 
 export default function WorkspacePanel() {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const configTheme = useConfigStore((s) => s.theme);
   const tokens = useMemo(() => getThemeTokens(configTheme), [configTheme]);
   const client = useGatewayStore((s) => s.client);
@@ -277,7 +361,54 @@ export default function WorkspacePanel() {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [workspaceRoot, setWorkspaceRoot] = useState('');
-  const uploadingRef = useRef(false);
+  const [uploading, setUploading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRafRef = useRef<number | null>(null);
+
+  // Auto-scroll file tree when dragging near top/bottom edges.
+  // Uses requestAnimationFrame for smooth 60fps scrolling.
+  const handleTreeDragOver = useCallback((e: React.DragEvent) => {
+    const container = scrollRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const EDGE = 40; // px from edge to trigger scroll
+    const SPEED = 6; // px per frame
+
+    const y = e.clientY;
+    const nearTop = y - rect.top < EDGE;
+    const nearBottom = rect.bottom - y < EDGE;
+
+    if (!nearTop && !nearBottom) {
+      // Cursor in safe zone — stop scrolling
+      if (scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+      return;
+    }
+
+    // Already scrolling — let the rAF loop handle it
+    if (scrollRafRef.current) return;
+
+    const tick = () => {
+      if (!scrollRef.current) return;
+      if (nearTop) scrollRef.current.scrollTop -= SPEED;
+      else scrollRef.current.scrollTop += SPEED;
+      scrollRafRef.current = requestAnimationFrame(tick);
+    };
+    scrollRafRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  // Stop auto-scroll when drag leaves the tree area or ends
+  const stopAutoScroll = useCallback(() => {
+    if (scrollRafRef.current) {
+      cancelAnimationFrame(scrollRafRef.current);
+      scrollRafRef.current = null;
+    }
+  }, []);
+
+  // Clean up rAF on unmount
+  useEffect(() => () => stopAutoScroll(), [stopAutoScroll]);
 
   const loadData = useCallback(async () => {
     if (!client?.isConnected) return;
@@ -303,14 +434,12 @@ export default function WorkspacePanel() {
   const pendingPreviewPath = useUiStore((s) => s.pendingPreviewPath);
   const clearPendingPreview = useUiStore((s) => s.clearPendingPreview);
 
-  // Re-trigger load when connection is established
   useEffect(() => {
     if (connState === 'connected') {
       loadData();
     }
   }, [connState, loadData]);
 
-  // Refresh workspace when chat store triggers it (e.g. after agent creates/modifies files)
   useEffect(() => {
     if (workspaceRefreshKey > 0 && connState === 'connected') {
       loadData();
@@ -318,7 +447,6 @@ export default function WorkspacePanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceRefreshKey]);
 
-  // Handle pending preview requests from FileCard
   useEffect(() => {
     if (pendingPreviewPath) {
       setPreviewPath(pendingPreviewPath);
@@ -328,33 +456,38 @@ export default function WorkspacePanel() {
 
   const handleUpload = useCallback(
     async (file: File) => {
-      if (uploadingRef.current) return false;
-      uploadingRef.current = true;
+      if (uploading) return false;
+      setUploading(true);
       try {
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('destination', 'sources/');
-        const res = await fetch('/rc/upload', { method: 'POST', body: formData });
+        formData.append('destination', 'uploads/');
+        // Gateway HTTP routes with auth:'gateway' require a Bearer token.
+        // Use the same token resolution as App.tsx:getGatewayToken().
+        const token = new URLSearchParams(window.location.search).get('token') || 'research-claw';
+        const res = await fetch('/rc/upload', {
+          method: 'POST',
+          body: formData,
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body?.error?.message ?? `Upload failed (${res.status})`);
         }
         message.success(t('workspace.uploadSuccess'));
-        // Refresh tree immediately + delayed retry (gateway may need time to index)
         await loadData();
         setTimeout(() => loadData(), 1000);
       } catch (err) {
         console.error('[WorkspacePanel] upload failed:', err);
         message.error(t('workspace.uploadFailed', { defaultValue: 'Upload failed' }));
       } finally {
-        uploadingRef.current = false;
+        setUploading(false);
       }
-      return false; // prevent ant Upload default behavior
+      return false;
     },
-    [loadData, t],
+    [uploading, loadData, t, message],
   );
 
-  // Loading state — show spinner during initial data fetch
   if (!hasLoaded && connState === 'connected' && tree.length === 0) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', minHeight: 200 }}>
@@ -363,7 +496,6 @@ export default function WorkspacePanel() {
     );
   }
 
-  // Empty state
   if (!loading && tree.length === 0 && commits.length === 0) {
     return (
       <div style={{ padding: 24, textAlign: 'center', paddingTop: 60 }}>
@@ -378,8 +510,9 @@ export default function WorkspacePanel() {
             accept="*"
             showUploadList={false}
             beforeUpload={handleUpload}
+            disabled={uploading}
           >
-            <Button icon={<UploadOutlined />} size="small">
+            <Button icon={uploading ? <LoadingOutlined /> : <UploadOutlined />} size="small" loading={uploading}>
               {t('workspace.upload')}
             </Button>
           </Upload>
@@ -390,44 +523,63 @@ export default function WorkspacePanel() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Recent changes */}
       <RecentChanges commits={commits} tokens={tokens} />
 
-      {/* Divider */}
       {commits.length > 0 && tree.length > 0 && (
         <div style={{ borderTop: `1px solid ${tokens.border.default}`, margin: '4px 16px' }} />
       )}
 
-      {/* File tree */}
       {tree.length > 0 && (
-        <div style={{ flex: 1, overflow: 'auto', paddingTop: 4 }}>
+        <div
+          ref={scrollRef}
+          onDragOver={handleTreeDragOver}
+          onDragLeave={stopAutoScroll}
+          onDrop={stopAutoScroll}
+          onDragEnd={stopAutoScroll}
+          style={{ flex: 1, overflow: 'auto', paddingTop: 4 }}
+        >
           <div style={{ padding: '0 16px 4px' }}>
             <Text strong style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5, color: tokens.text.muted }}>
               {t('workspace.fileTree')}
             </Text>
           </div>
           {tree.map((node) => (
-            <FileTreeNode key={node.path} node={node} depth={0} tokens={tokens} workspaceRoot={workspaceRoot} onOpenFile={setPreviewPath} onDeleted={loadData} />
+            <FileTreeNode key={node.path} node={node} depth={0} tokens={tokens} workspaceRoot={workspaceRoot} onOpenFile={setPreviewPath} onDeleted={loadData} onMoved={loadData} />
           ))}
         </div>
       )}
 
-      {/* Drag-drop zone at bottom */}
+      {/* Upload drop zone — locked with loading state during upload */}
       <div style={{ padding: '8px 16px', borderTop: `1px solid ${tokens.border.default}` }}>
-        <Dragger
-          accept="*"
-          showUploadList={false}
-          beforeUpload={handleUpload}
-          style={{ padding: '8px 0', border: `1px dashed ${tokens.border.hover}`, background: 'transparent' }}
-        >
-          <p style={{ color: tokens.text.muted, fontSize: 12, margin: 0 }}>
-            <InboxOutlined style={{ fontSize: 16, marginRight: 4 }} />
-            {t('workspace.dragDrop')}
-          </p>
-        </Dragger>
+        {uploading ? (
+          <div
+            style={{
+              padding: '12px 0',
+              border: `1px dashed ${tokens.border.hover}`,
+              borderRadius: 4,
+              textAlign: 'center',
+            }}
+          >
+            <LoadingOutlined style={{ fontSize: 16, color: tokens.text.muted, marginRight: 6 }} spin />
+            <span style={{ color: tokens.text.muted, fontSize: 12 }}>
+              {t('workspace.uploading', { defaultValue: 'Uploading...' })}
+            </span>
+          </div>
+        ) : (
+          <Dragger
+            accept="*"
+            showUploadList={false}
+            beforeUpload={handleUpload}
+            style={{ padding: '8px 0', border: `1px dashed ${tokens.border.hover}`, background: 'transparent' }}
+          >
+            <p style={{ color: tokens.text.muted, fontSize: 12, margin: 0 }}>
+              <InboxOutlined style={{ fontSize: 16, marginRight: 4 }} />
+              {t('workspace.dragDrop')}
+            </p>
+          </Dragger>
+        )}
       </div>
 
-      {/* File preview modal */}
       <FilePreviewModal
         open={previewPath !== null}
         filePath={previewPath}

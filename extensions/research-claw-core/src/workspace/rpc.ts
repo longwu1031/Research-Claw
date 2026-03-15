@@ -282,4 +282,19 @@ export function registerWorkspaceRpc(
       });
     });
   });
+
+  // -----------------------------------------------------------------------
+  // 10. rc.ws.move — Move or rename a file/directory within the workspace
+  //     params: { from: string, to: string }
+  // -----------------------------------------------------------------------
+  registerMethod('rc.ws.move', async (params: Record<string, unknown>) => {
+    try {
+      const from = requireString(params, 'from');
+      const to = requireString(params, 'to');
+
+      return service.move(from, to);
+    } catch (err) {
+      mapError(err);
+    }
+  });
 }

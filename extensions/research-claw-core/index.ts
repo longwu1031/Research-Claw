@@ -5,9 +5,9 @@
  * for the literature library, task system, and workspace tracking.
  *
  * Registration totals:
- *   - 28 agent tools (12 literature + 7 task + 6 workspace + 3 radar)
- *   - 54 WS RPC methods + 1 HTTP route = 55 interface methods
- *     (26 rc.lit.* + 10 rc.task.* + 4 rc.cron.* + 2 rc.notifications.* + 9 rc.ws.* + 3 rc.radar.* = 54 WS; POST /rc/upload = 1 HTTP)
+ *   - 29 agent tools (12 literature + 8 task + 6 workspace + 3 radar)
+ *   - 56 WS RPC methods + 1 HTTP route = 57 interface methods
+ *     (26 rc.lit.* + 11 rc.task.* + 6 rc.cron.* + 2 rc.notifications.* + 9 rc.ws.* + 3 rc.radar.* = 57 WS; POST /rc/upload = 1 HTTP)
  *   - 7 hooks (before_prompt_build, session_start, session_end, before_tool_call, agent_end, after_tool_call, gateway_start)
  *   - 1 service (research-claw-db lifecycle)
  */
@@ -29,16 +29,6 @@ import { registerWorkspaceRpc } from './src/workspace/rpc.js';
 import { registerRadarRpc } from './src/radar/rpc.js';
 import { createRadarTools } from './src/radar/tools.js';
 import type { RegisterMethod } from './src/types.js';
-
-// ── Upload file extension whitelist ──────────────────────────────────────
-
-const ALLOWED_UPLOAD_EXTENSIONS = new Set([
-  '.pdf', '.doc', '.docx', '.txt', '.md', '.tex', '.bib',
-  '.csv', '.tsv', '.json', '.xml',
-  '.png', '.jpg', '.jpeg', '.gif', '.svg',
-  '.py', '.r', '.m', '.ipynb',
-  '.zip', '.tar', '.gz',
-]);
 
 // ── Plugin config shape ────────────────────────────────────────────────
 
@@ -124,7 +114,7 @@ const plugin: PluginDefinition = {
       autoTrackGit: cfg.autoTrackGit ?? true,
       commitDebounceMs: cfg.workspace?.commitDebounceMs ?? 5000,
       maxGitFileSize: cfg.workspace?.maxGitFileSize ?? 10_485_760,
-      maxUploadSize: cfg.workspace?.maxUploadSize ?? 104_857_600,
+      maxUploadSize: cfg.workspace?.maxUploadSize ?? 0, // 0 = unlimited (local tool, no need to restrict)
       gitAuthorName: cfg.workspace?.gitAuthorName ?? 'Research-Claw',
       gitAuthorEmail: cfg.workspace?.gitAuthorEmail ?? 'research-claw@wentor.ai',
     };
@@ -231,7 +221,7 @@ const plugin: PluginDefinition = {
           }
 
           // Sanitize destination: resolve and verify it stays within workspace root
-          const destDir = destination || 'sources';
+          const destDir = destination || 'uploads';
           const resolvedDest = path.resolve(wsConfig.root, destDir);
           if (!resolvedDest.startsWith(path.resolve(wsConfig.root) + path.sep) && resolvedDest !== path.resolve(wsConfig.root)) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -247,20 +237,6 @@ const plugin: PluginDefinition = {
           if (!safeFilename) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ ok: false, error: { code: 'UPLOAD_INVALID_FILENAME', message: 'Invalid filename' } }));
-            return true;
-          }
-
-          // Check file extension against whitelist
-          const ext = path.extname(safeFilename).toLowerCase();
-          if (!ALLOWED_UPLOAD_EXTENSIONS.has(ext)) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-              ok: false,
-              error: {
-                code: 'UPLOAD_INVALID_TYPE',
-                message: `File type "${ext}" is not allowed. Allowed types: ${[...ALLOWED_UPLOAD_EXTENSIONS].join(', ')}`,
-              },
-            }));
             return true;
           }
 
@@ -438,10 +414,9 @@ const plugin: PluginDefinition = {
       const command = typeof evt.params?.command === 'string' ? evt.params.command : '';
       if (!command) return {};
 
-      // Allow anything explicitly targeting workspace (uses resolved absolute path)
-      if (command.includes(wsRoot)) return {};
-
-      // Check against catastrophic patterns only
+      // Always check catastrophic patterns — no short-circuit bypass.
+      // A command may reference the workspace path AND contain a destructive
+      // suffix (e.g. "cd /workspace && rm -rf /"), so we never skip checks.
       for (const pattern of CATASTROPHIC_PATTERNS) {
         if (pattern.test(command)) {
           api.logger.warn(`[SafeGuard] Blocked catastrophic command: ${command.slice(0, 120)}`);
@@ -482,7 +457,7 @@ const plugin: PluginDefinition = {
       }
     });
 
-    api.logger.info('Research-Claw Core registered (28 tools, 54 WS RPC + 1 HTTP = 55 interfaces, 7 hooks)');
+    api.logger.info('Research-Claw Core registered (29 tools, 56 WS RPC + 1 HTTP = 57 interfaces, 7 hooks)');
   },
 };
 
@@ -517,7 +492,7 @@ async function parseMultipartUpload(
   await new Promise<void>((resolve, reject) => {
     req.on('data', (chunk: Buffer) => {
       totalSize += chunk.length;
-      if (totalSize > maxSize) {
+      if (maxSize > 0 && totalSize > maxSize) {
         req.destroy();
         reject(new Error('UPLOAD_TOO_LARGE'));
         return;

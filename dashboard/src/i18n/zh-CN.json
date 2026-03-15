@@ -174,6 +174,10 @@
       "deleteSuccess": "文件已删除",
       "deleteFailed": "删除文件失败"
     },
+    "uploading": "上传中...",
+    "uploadFailed": "上传失败",
+    "moveSuccess": "文件已移动",
+    "moveFailed": "移动失败",
     "preview": {
       "title": "文件预览",
       "loading": "加载文件中...",

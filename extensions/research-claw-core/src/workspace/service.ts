@@ -231,6 +231,7 @@ const DEFAULT_TREE_DEPTH = 3;
 
 /** Standard workspace directory scaffold. */
 const WORKSPACE_DIRS = [
+  'uploads',
   'sources/papers',
   'sources/data',
   'sources/references',
@@ -238,6 +239,8 @@ const WORKSPACE_DIRS = [
   'outputs/figures',
   'outputs/exports',
   'outputs/reports',
+  'outputs/notes',
+  'outputs/radar',
 ] as const;
 
 const DEFAULT_GITIGNORE = `# Research-Claw workspace — auto-generated
@@ -375,6 +378,7 @@ export class WorkspaceService {
 
   /**
    * Resolve a relative path to an absolute path within the workspace.
+   * Also checks for symlink escapes on existing paths and their parent dirs.
    */
   private resolvePath(relativePath: string): string {
     this.validatePath(relativePath);
@@ -387,6 +391,31 @@ export class WorkspaceService {
         WS_PATH_TRAVERSAL,
         { path: relativePath },
       );
+    }
+
+    // Symlink escape guard: verify existing paths and their parent dirs
+    // resolve (via realpath) to within the workspace root. This prevents
+    // attacks where a symlink inside the workspace points outside it.
+    try {
+      const realRoot = fs.realpathSync(this.root);
+      for (const p of [resolved, path.dirname(resolved)]) {
+        try {
+          const real = fs.realpathSync(p);
+          if (real !== realRoot && !real.startsWith(realRoot + path.sep)) {
+            throw new WorkspaceError(
+              'Invalid path: resolves outside workspace root via symlink.',
+              WS_PATH_TRAVERSAL,
+              { path: relativePath },
+            );
+          }
+        } catch (e) {
+          if (e instanceof WorkspaceError) throw e;
+          // ENOENT or permission errors: skip check for non-existent paths
+        }
+      }
+    } catch (e) {
+      if (e instanceof WorkspaceError) throw e;
+      // If realpath on root fails, skip symlink check entirely
     }
 
     return resolved;
@@ -961,6 +990,59 @@ export class WorkspaceService {
     }
 
     return { ok: true, path: filePath, committed };
+  }
+
+  // -----------------------------------------------------------------------
+  // move — rc.ws.move
+  // -----------------------------------------------------------------------
+
+  /**
+   * Move or rename a file/directory within the workspace.
+   *
+   * @param srcPath  - Source relative path within workspace
+   * @param destPath - Destination relative path within workspace
+   */
+  async move(
+    srcPath: string,
+    destPath: string,
+  ): Promise<{ ok: boolean; from: string; to: string; committed: boolean }> {
+    const fullSrc = this.resolvePath(srcPath);
+    const fullDest = this.resolvePath(destPath);
+
+    // Verify source exists
+    try {
+      await fsp.stat(fullSrc);
+    } catch {
+      throw new WorkspaceError(
+        `Source not found: ${srcPath}`,
+        WS_FILE_NOT_FOUND,
+        { path: srcPath },
+      );
+    }
+
+    // Create destination parent directory if needed
+    const destDir = path.dirname(fullDest);
+    await fsp.mkdir(destDir, { recursive: true });
+
+    // Move
+    await fsp.rename(fullSrc, fullDest);
+
+    // Auto-commit if git tracking is enabled
+    let committed = false;
+    if (this.tracker) {
+      try {
+        // Stage both old (deleted) and new (added) paths
+        const result = await this.tracker.commitFile(
+          destPath,
+          `Move: ${path.basename(srcPath)} → ${destPath}`,
+        );
+        committed = result.committed;
+      } catch {
+        // Git failure is non-fatal
+      }
+    }
+
+    return { ok: true, from: srcPath, to: destPath, committed };
   }
 
   // -----------------------------------------------------------------------
