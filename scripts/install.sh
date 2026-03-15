@@ -107,9 +107,25 @@ if [ "$RC_OS" = mac ]; then
   # Xcode CLT is required for native module compilation (better-sqlite3)
   if ! xcode-select -p &>/dev/null; then
     info "Installing Xcode Command Line Tools (required for native modules)..."
-    xcode-select --install 2>/dev/null || true
-    warn "Please complete Xcode CLT installation in the popup, then re-run this script."
-    exit 1
+    # Clean residual state that can block reinstallation
+    sudo rm -rf /Library/Developer/CommandLineTools 2>/dev/null || true
+    sudo xcode-select --reset 2>/dev/null || true
+    # Method 1: softwareupdate (non-interactive, works in curl|bash, more reliable on macOS 26+)
+    CLT_PKG="$(softwareupdate --list 2>&1 | grep -o 'Command Line Tools for Xcode[^"]*' | head -1 || true)"
+    if [ -n "$CLT_PKG" ]; then
+      info "Downloading $CLT_PKG (this may take a few minutes)..."
+      softwareupdate --install "$CLT_PKG" --agree-to-license 2>&1 | tail -3 || true
+    fi
+    # Method 2: popup fallback (if softwareupdate didn't work)
+    if ! xcode-select -p &>/dev/null; then
+      xcode-select --install 2>/dev/null || true
+      warn "Please complete Xcode CLT installation, then re-run this script."
+      warn "If no popup appears, run manually:"
+      warn "  softwareupdate --list   # find the package name"
+      warn "  softwareupdate --install 'Command Line Tools for Xcode...' --agree-to-license"
+      exit 1
+    fi
+    ok "Xcode CLT installed"
   fi
   # Python 3 is required by node-gyp for native module compilation
   if ! command -v python3 &>/dev/null; then
@@ -399,19 +415,6 @@ else
             changed = true;
           }
         }
-        // Ensure ALL channels have commands.native=false — RC registers 529 commands
-        // which exceeds every IM channel's command menu limit (~80 for Telegram).
-        // Iterates all existing channels so future QQ/Feishu/Discord are covered too.
-        if (c.channels) {
-          for (const [name, ch] of Object.entries(c.channels)) {
-            if (name === 'defaults' || typeof ch !== 'object' || ch === null) continue;
-            if (!ch.commands) ch.commands = {};
-            if (ch.commands.native !== false) {
-              ch.commands.native = false;
-              changed = true;
-            }
-          }
-        }
         if (changed) {
           fs.writeFileSync(f, JSON.stringify(c, null, 2) + '\n');
           anyChanged = true;
@@ -565,7 +568,7 @@ printf "  ${B}Location:${N}   $INSTALL_DIR\n"
 printf "  ${B}Start:${N}      cd $INSTALL_DIR && pnpm serve\n"
 printf "  ${B}Plugins:${N}    cd $INSTALL_DIR && npx openclaw plugins install <name>\n"
 printf "  ${B}Update:${N}     curl -fsSL https://wentor.ai/install.sh | bash\n\n"
-printf "  ${Y}TIP:${N}  Use ${B}Chrome${N} or ${B}Edge${N} for the best experience.\n"
+printf "  ${Y}TIP:${N}  Use ${B}Chrome${N} for the best experience.\n"
 printf "        Safari may have compatibility issues with the Dashboard.\n\n"
 printf "  ${B}Need help?${N} ${D}${ISSUES_URL}${N}\n\n"
 
@@ -605,10 +608,6 @@ done) &
 
 STOP=false
 trap 'STOP=true' INT TERM
-# Clear ERR trap before restart loop — macOS ships bash 3.2 where set +e
-# does NOT prevent ERR trap from firing. Without this, a non-zero gateway
-# exit kills the entire script instead of entering the restart loop.
-trap - ERR
 set +e
 
 cd "$INSTALL_DIR"
