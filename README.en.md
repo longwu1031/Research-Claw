@@ -142,11 +142,7 @@ Tech: React 18 + Vite 6 + Ant Design 5 + Zustand 5 · Bilingual EN/ZH-CN (245 i1
 
 ## Skills & Integrations
 
-```bash
-openclaw plugins install @wentorai/research-plugins
-```
-
-One command to install **431 academic skills** covering the full research workflow:
+Research-Claw comes with **431 academic skills** built-in (auto-configured during install — no manual setup needed), covering the full research workflow:
 
 | Category | Count | Capabilities |
 |:--|:--|:--|
@@ -201,7 +197,7 @@ One command to install **431 academic skills** covering the full research workfl
 
 | Decision | Rationale |
 |:--|:--|
-| **Satellite, not fork** | OpenClaw as npm dependency — upstream upgrades are absorbed cleanly; coupling surface is ~20 lines of pnpm patch |
+| **Satellite, not fork** | OpenClaw as bundled npm dependency (no separate install needed) — upstream upgrades are absorbed cleanly; coupling surface is ~20 lines of pnpm patch |
 | **4-tier coupling** | L0 filesystem → L1 plugin SDK → L2 WS RPC → L3 patch; each tier is independently replaceable |
 | **Local-first** | SQLite + WAL mode, no database server; all data stays local, only external dependency is the LLM API |
 | **Skills over raw prompts** | 431 SKILL.md files encode domain knowledge structurally; installable/removable per research field |
@@ -251,6 +247,8 @@ Four layers of defense-in-depth. The first three are hard constraints enforced i
 
 All platforms require an LLM API key (Anthropic Claude / OpenAI recommended).
 
+> **You do NOT need to install OpenClaw separately.** Research-Claw bundles OpenClaw and all academic skill plugins — the install script / Docker handles everything automatically. If you already have a standalone OpenClaw installation, you can install just the skills plugin: `openclaw plugins install @wentorai/research-plugins`, but a full install is recommended for the Dashboard and complete feature set.
+
 ### Install
 
 ```bash
@@ -275,11 +273,13 @@ No WSL2 or Node.js required — just [Docker Desktop](https://www.docker.com/pro
 
 Download and install from the [Docker Desktop official page](https://docs.docker.com/desktop/setup/install/windows-install/). After installation, launch Docker Desktop and make sure the whale icon in the system tray shows **Running**.
 
+> **Windows users**: If Docker Desktop shows "WSL needs updating", run `wsl --update` in PowerShell first, then restart Docker Desktop.
+>
 > macOS / Linux users also need Docker Desktop or Docker Engine. See [Docker official docs](https://docs.docker.com/engine/install/).
 
 #### 1. Pull pre-built image (recommended)
 
-No need to clone — pull and run:
+Open **PowerShell** (Windows) or **Terminal** (macOS / Linux) and run:
 
 ```bash
 docker pull ghcr.io/wentorai/research-claw:latest

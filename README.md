@@ -142,11 +142,7 @@ curl -fsSL https://wentor.ai/install.sh | bash
 
 ## 技能与集成
 
-```bash
-openclaw plugins install @wentorai/research-plugins
-```
-
-一行命令，接入 **431 个学术技能**，覆盖科研全流程：
+科研龙虾内置 **431 个学术技能**（安装时自动配置，无需手动操作），覆盖科研全流程：
 
 | 类别 | 技能数 | 典型能力 |
 |:--|:--|:--|
@@ -201,7 +197,7 @@ openclaw plugins install @wentorai/research-plugins
 
 | 决策 | 原因 |
 |:--|:--|
-| **Satellite 而非 Fork** | OpenClaw 作为 npm 依赖引入，上游可随时升级，耦合面控制在 ~20 行 pnpm patch |
+| **Satellite 而非 Fork** | OpenClaw 作为内置 npm 依赖引入（无需单独安装），上游可随时升级，耦合面控制在 ~20 行 pnpm patch |
 | **4 层耦合，从外到内** | L0 文件系统 → L1 插件 SDK → L2 WS RPC → L3 patch，每层独立，可单独替换 |
 | **本地优先** | SQLite + WAL 模式，无需数据库服务；数据全在本地，唯一外部依赖是 LLM API |
 | **技能 > 裸提示词** | 431 个 SKILL.md 结构化封装学术场景，可按研究方向安装/卸载 |
@@ -251,6 +247,8 @@ openclaw plugins install @wentorai/research-plugins
 
 所有平台均需 LLM API Key（推荐 Anthropic Claude / OpenAI，支持国内中转 API）。
 
+> **不需要单独安装 OpenClaw。** 科研龙虾已内置 OpenClaw 和全部学术技能插件，安装脚本 / Docker 会自动完成所有配置。如果你已有独立安装的 OpenClaw，也可以只安装技能插件：`openclaw plugins install @wentorai/research-plugins`，但推荐完整安装以获得 Dashboard 和全部功能。
+
 ### 安装
 
 ```bash
@@ -275,11 +273,13 @@ Windows 用户推荐用 Docker Desktop，无需安装 WSL2 或 Node.js。macOS /
 
 前往 [Docker Desktop 官方下载页](https://docs.docker.com/desktop/setup/install/windows-install/) 下载并安装。安装完成后启动 Docker Desktop，确保系统托盘出现鲸鱼图标且显示 **Running**。
 
+> **Windows 用户**：如果 Docker Desktop 提示「WSL needs updating」，先在 PowerShell 中运行 `wsl --update`，重启 Docker Desktop 后再继续。
+>
 > macOS / Linux 用户同样需要安装 Docker Desktop 或 Docker Engine。详见 [Docker 官方文档](https://docs.docker.com/engine/install/)。
 
 #### 1. 直接拉取预构建镜像（推荐）
 
-无需克隆代码，拉取后一条命令启动：
+打开 **PowerShell**（Windows）或**终端**（macOS / Linux），运行以下命令：
 
 ```bash
 docker pull ghcr.io/wentorai/research-claw:latest
