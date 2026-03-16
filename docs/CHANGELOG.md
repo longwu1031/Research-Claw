@@ -857,6 +857,22 @@ Eliminated localStorage as config source. `openclaw.json` via gateway `config.ge
 
 **Files changed:** `utils/config-patch.ts` (rewrite), `stores/config.ts` (refactor), `stores/gateway.ts` (onHello auto-config), `App.tsx` (always-connect + bootState), `components/setup/SetupWizard.tsx` (rewrite), `components/panels/SettingsPanel.tsx` (flatten), `i18n/en.json`, `i18n/zh-CN.json`, `stores/config.test.ts`, `components/panels/SettingsPanel.test.tsx`, `utils/config-patch.test.ts`, `__tests__/stores.test.ts`
 
+### 2026-03-13 — Native Provider Key Alignment (Deep-Dive)
+
+> Merged from `CHANGELOG-model-provider-config.md`. Technical detail for the provider/model naming migration.
+
+**Context**: RC's dashboard previously used custom provider keys `rc` and `rc-vision` (hardcoded in `config-patch.ts`), breaking OpenClaw's `ProviderCapabilities` resolution and automatic `imageModel` fallback. This migration aligned back to OC's native provider keys (`zai`, `openai`, `anthropic`, etc.).
+
+**provider-presets.ts — Complete rewrite**: 7 custom presets → 25 OC-native providers in 4 tiers. Each preset's `id` matches the key in `models.providers.*` and `PROVIDER_CAPABILITIES`. New exports: `detectPresetFromProvider(key, baseUrl?)`.
+
+**config-patch.ts — Rewritten core logic**: Removed `RC_PROVIDER`/`RC_VISION_PROVIDER` constants. `ConfigPatchInput` now takes `provider: string` (native key). `buildConfigPatch()` produces `models.providers.{nativeKey}` entries. Same-provider vision: single entry, two models. Different-provider vision: two entries, each with native key.
+
+**SetupWizard + SettingsPanel**: Default `'zhipu'` → `'zai'`. Searchable provider dropdowns. Pre-fill via `detectPresetFromProvider` (exact ID match first, URL fallback). Vision baseUrl/apiKey hidden when shared provider.
+
+**Known limitations**: (1) Stale `rc` provider in existing configs — harmless dead config. (2) `custom` provider → default capabilities (same as old `rc`). (3) Presets are a static snapshot — may drift as OC adds providers.
+
+**Planned**: Clean up stale `rc` provider, add provider-specific API protocol selector, dynamic model discovery from gateway.
+
 ### 2026-03-13 — Config/Chat Runtime Bugfixes
 
 Five runtime bugs fixed after Unified Config Flow integration testing.

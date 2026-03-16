@@ -25,7 +25,7 @@
 | S2 | `docs/sop/02-modules-dev-sop.md` | — | Plugin modules development SOP & operation log | 03a–03f |
 | S3 | `docs/sop/03-plugin-integration-sop.md` | — | Plugin ecosystem integration SOP | 05 |
 | S4 | `docs/sop/04-prompt-behavior-sop.md` | — | Prompt/bootstrap development SOP | 04 |
-| S5 | `docs/sop/CHANGELOG.md` | — | Global operation log (all tracks) | All |
+| CL | `docs/CHANGELOG.md` | — | Global operation log (all tracks, merged from sop/CHANGELOG + CHANGELOG-model-provider-config) | All |
 
 **Total:** ~17,534 lines across 12 design documents + 5 SOP documents.
 
