@@ -96,8 +96,10 @@
 | — | `rc_papers_fts` | 03a §2.9 | FTS5 virtual table on papers (title, authors, abstract, notes) |
 
 | 13 | `rc_agent_notifications` | — | Agent-sent notifications for dashboard bell (type, title, body, read) |
+| 14 | `rc_radar_config` | — | Radar tracking config (keywords, authors, journals, sources, cached scan results) |
+| 15 | `rc_cron_state` | — | Cron preset state (enabled, config, schedule, gateway_job_id) |
 
-All tables prefixed `rc_` to avoid collision with OpenClaw internals. Database located at `.research-claw/library.db` (configured in `openclaw.json`). **13 regular tables + 1 FTS5 virtual table, 3 FTS sync triggers, 23 indexes.** Schema source of truth: `extensions/research-claw-core/src/db/schema.ts`. Migration v3 adds `rc_agent_notifications`.
+All tables prefixed `rc_` to avoid collision with OpenClaw internals. Database located at `.research-claw/library.db` (configured in `openclaw.json`). **15 regular tables + 1 FTS5 virtual table, 3 FTS sync triggers, 23 indexes.** Schema version: 6. Schema source of truth: `extensions/research-claw-core/src/db/schema.ts`.
 
 **Obsolete tables from earlier specs** (do NOT exist in the actual schema):
 - ~~`rc_meta`~~ — replaced by `rc_schema_version`
@@ -110,38 +112,46 @@ All tables prefixed `rc_` to avoid collision with OpenClaw internals. Database l
 | Namespace | Count | Defining Doc | Notes |
 |-----------|------:|-------------|-------|
 | `rc.lit.*` | 26 | 03a §5 | Literature CRUD, search, tags, reading sessions, citations, notes, collections, batch/import/export |
-| `rc.task.*` | 10 | 03b §5 | Task CRUD, complete, upcoming, overdue, link, notes |
-| `rc.ws.*` | 6 | 03c §4 | Workspace tree, read, history, diff, restore, save (upload is HTTP — see §3.6) |
-| `rc.cron.*` | 4 | 03b §5 | Cron preset list, activate, deactivate, setJobId |
-| `rc.radar.*` | 3 | — | Radar config get/set, scan (arXiv + Semantic Scholar) |
+| `rc.task.*` | 11 | 03b §5 | Task CRUD, complete, upcoming, overdue, link, linkFile, notes |
+| `rc.ws.*` | 11 | 03c §4 | Workspace tree, read, save, history, diff, restore, delete, saveImage, openExternal, openFolder, move (upload is HTTP — see §3.6) |
+| `rc.cron.presets.*` | 7 | 03b §5 | Cron preset list, activate, deactivate, setJobId, delete, restore, updateSchedule |
+| `rc.radar.*` | 4 | — | Radar config get/set, scan, lastScan (arXiv + Semantic Scholar) |
 | `rc.notifications.*` | 2 | — | Pending notifications (tasks + custom) + mark-read for dashboard bell |
 
 **Full RPC method list** (canonical names from module docs):
 
 ```
-rc.lit.list          rc.lit.get           rc.lit.add           rc.lit.update
-rc.lit.delete        rc.lit.status        rc.lit.rate          rc.lit.tags
-rc.lit.tag           rc.lit.untag         rc.lit.reading.start rc.lit.reading.end
-rc.lit.reading.list  rc.lit.cite          rc.lit.citations     rc.lit.stats
-rc.lit.search        rc.lit.duplicate_check
-rc.lit.batch_add     rc.lit.import_bibtex rc.lit.export_bibtex
-rc.lit.collections.list  rc.lit.collections.manage
-rc.lit.notes.list    rc.lit.notes.add     rc.lit.notes.delete
+rc.lit.list             rc.lit.get              rc.lit.add              rc.lit.update
+rc.lit.delete           rc.lit.status           rc.lit.rate             rc.lit.tags
+rc.lit.tag              rc.lit.untag            rc.lit.reading.start    rc.lit.reading.end
+rc.lit.reading.list     rc.lit.cite             rc.lit.citations        rc.lit.stats
+rc.lit.search           rc.lit.duplicate_check
+rc.lit.batch_add        rc.lit.import_bibtex    rc.lit.export_bibtex
+rc.lit.collections.list rc.lit.collections.manage
+rc.lit.notes.list       rc.lit.notes.add        rc.lit.notes.delete
+                                                                        (26 methods)
 
-rc.task.list         rc.task.get          rc.task.create       rc.task.update
-rc.task.complete     rc.task.delete       rc.task.upcoming     rc.task.overdue
-rc.task.link         rc.task.notes.add
+rc.task.list            rc.task.get             rc.task.create          rc.task.update
+rc.task.complete        rc.task.delete          rc.task.upcoming        rc.task.overdue
+rc.task.link            rc.task.linkFile        rc.task.notes.add
+                                                                        (11 methods)
 
-rc.ws.tree           rc.ws.read           rc.ws.history        rc.ws.diff
-rc.ws.restore        rc.ws.save
+rc.ws.tree              rc.ws.read              rc.ws.save              rc.ws.history
+rc.ws.diff              rc.ws.restore           rc.ws.delete            rc.ws.saveImage
+rc.ws.openExternal      rc.ws.openFolder        rc.ws.move
 (rc.ws.upload is HTTP POST, not WS RPC — see §3.6)
+                                                                        (11 methods)
 
-rc.cron.presets.list rc.cron.presets.activate rc.cron.presets.deactivate
-rc.cron.presets.setJobId
+rc.cron.presets.list         rc.cron.presets.activate    rc.cron.presets.deactivate
+rc.cron.presets.setJobId     rc.cron.presets.delete      rc.cron.presets.restore
+rc.cron.presets.updateSchedule
+                                                                        (7 methods)
 
-rc.radar.config.get  rc.radar.config.set  rc.radar.scan
+rc.radar.config.get     rc.radar.config.set     rc.radar.scan           rc.radar.lastScan
+                                                                        (4 methods)
 
-rc.notifications.pending  rc.notifications.markRead
+rc.notifications.pending     rc.notifications.markRead
+                                                                        (2 methods)
 ```
 
 ### 3.3 Agent Tools
@@ -172,12 +182,15 @@ rc.notifications.pending  rc.notifications.markRead
 | `workspace_diff` | 03c §3 | Show changes to file |
 | `workspace_history` | 03c §3 | Show file edit history |
 | `workspace_restore` | 03c §3 | Restore previous file version |
+| `workspace_move` | 03c §3 | Move or rename a file/directory within workspace |
+| `task_link_file` | 03b §3 | Link a task to a workspace file |
+| `cron_update_schedule` | 03b §3 | Update cron preset schedule expression |
 | `radar_configure` | — | Set radar tracking keywords, authors, journals |
 | `radar_get_config` | — | Read current radar configuration |
 | `radar_scan` | — | Scan arXiv + Semantic Scholar for new papers |
 | `send_notification` | — | Push a notification to the dashboard bell icon |
 
-**Config `tools.alsoAllow`** lists 28 tools (18 base + 7 extended + 3 radar).
+**31 tools total** (12 literature + 9 task + 7 workspace + 3 radar). Config `tools.alsoAllow` lists 41 entries (28 RC tools + 13 external API tools). Three RC tools (task_link_file, cron_update_schedule, workspace_move) are registered by the plugin but not yet in alsoAllow — they work because the agent can call any registered tool, while alsoAllow only gates tools that require explicit pre-approval.
 
 ### 3.4 Message Card Types
 
@@ -316,8 +329,8 @@ Research-Claw operates **entirely local** with a 4-layer defense model:
 - Security must never degrade normal user experience
 - Workspace path validation uses absolute resolved path, not string matching
 
-**Plugin hooks** (7 total): `before_prompt_build`, `prompt_build`, `after_response`, `before_tool_call` (exec guard), `agent_end`, `after_tool_call`, `gateway_start`.
+**Plugin hooks** (7 total): `before_prompt_build`, `session_start`, `session_end`, `before_tool_call` (exec guard + cron sync), `agent_end`, `after_tool_call` (cron sync), `gateway_start`.
 
 ---
 
-*Updated: 2026-03-12 | OpenClaw: 2026.3.9 | Protocol: v3 | RPC: 51 WS + 1 HTTP = 52 methods | Tables: 13 + FTS5 | Tools: 28 | Cards: 6 | Hooks: 7 | Indexes: 23*
+*Updated: 2026-03-16 | OpenClaw: 2026.3.8 | Protocol: v3 | RPC: 61 WS + 1 HTTP = 62 methods | Tables: 15 + FTS5 | Tools: 31 | Cards: 6 | Hooks: 7 | Indexes: 23*

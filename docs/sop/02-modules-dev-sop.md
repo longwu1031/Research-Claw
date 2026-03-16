@@ -22,7 +22,7 @@ This SOP governs all development on the **research-claw-core** plugin — the MV
 | Field | Value |
 |-------|-------|
 | ID | `research-claw-core` |
-| Version | 0.1.0 |
+| Version | 0.4.1 |
 | Entry | `extensions/research-claw-core/index.ts` |
 | Manifest | `openclaw.plugin.json` |
 | Peer dependency | `openclaw@>=2026.3.0` |
@@ -50,12 +50,16 @@ extensions/research-claw-core/
     |   +-- tools.ts         # Workspace agent tools
     |   +-- rpc.ts           # Workspace RPC handlers (rc.ws.*)
     |   +-- git-tracker.ts   # Auto-commit workspace changes
+    +-- radar/
+    |   +-- rpc.ts           # Radar RPC handlers (rc.radar.*)
+    |   +-- tools.ts         # Radar agent tools
+    |   +-- scanner.ts       # arXiv + Semantic Scholar scanner
     +-- cards/
     |   +-- protocol.ts      # Message card type definitions
     |   +-- serializer.ts    # Card serialization/parsing
     +-- db/
-        +-- schema.ts        # DDL constants (12 tables)
-        +-- migrations.ts    # Versioned migrations
+        +-- schema.ts        # DDL constants (15 tables + FTS5)
+        +-- migrations.ts    # Versioned migrations (SCHEMA_VERSION 6)
         +-- connection.ts    # better-sqlite3 manager
 ```
 
@@ -63,10 +67,11 @@ extensions/research-claw-core/
 
 **Location:** `.research-claw/library.db` (configurable via `config.dbPath`)
 
-**12 tables** (all prefixed `rc_`):
+**15 tables + FTS5** (all prefixed `rc_`):
 
 | Table | Module | Purpose |
 |-------|--------|---------|
+| `rc_schema_version` | DB | Migration version tracking |
 | `rc_papers` | Literature | Paper metadata |
 | `rc_tags` | Literature | Tag definitions |
 | `rc_paper_tags` | Literature | Paper-tag junction |
@@ -75,31 +80,44 @@ extensions/research-claw-core/
 | `rc_smart_groups` | Literature | Saved query filters |
 | `rc_reading_sessions` | Literature | Reading time tracking |
 | `rc_citations` | Literature | Inter-paper citation links |
-| `rc_papers_fts` | Literature | FTS5 virtual table |
 | `rc_paper_notes` | Literature | Annotation notes on papers |
 | `rc_tasks` | Tasks | Task items (deadline-sorted) |
 | `rc_activity_log` | Tasks | Event tracking / audit |
+| `rc_radar_config` | Radar | Tracked keywords/authors/journals/sources |
+| `rc_agent_notifications` | Notifications | Agent-pushed bell notifications |
+| `rc_cron_state` | Cron | Preset enable/disable + gateway job IDs |
+| `rc_papers_fts` | Literature | FTS5 virtual table (title, authors, abstract, notes) |
 
-### 2.4 RPC Methods (46 total)
+### 2.4 RPC Methods (61 WS + 1 HTTP = 62 total)
 
 | Namespace | Count | Module Doc |
 |-----------|------:|-----------|
 | `rc.lit.*` | 26 | 03a |
-| `rc.task.*` | 10 | 03b |
-| `rc.ws.*` | 7 | 03c |
-| `rc.cron.*` | 3 | 03b |
+| `rc.task.*` | 11 | 03b |
+| `rc.ws.*` | 11 | 03c |
+| `rc.cron.*` | 7 | 03b |
+| `rc.notifications.*` | 2 | — |
+| `rc.radar.*` | 4 | — |
+| **WS total** | **61** | |
+| `POST /rc/upload` | 1 | 03c (HTTP) |
 
 Full canonical method list: see `docs/00-reference-map.md` SS3.2.
 
-### 2.5 Agent Tools (24 allowlisted)
+### 2.5 Agent Tools (31 allowlisted)
 
-**Base (18):**
-- Literature: `library_add_paper`, `library_search`, `library_update_paper`, `library_get_paper`, `library_export_bibtex`, `library_reading_stats`
-- Tasks: `task_create`, `task_list`, `task_complete`, `task_update`, `task_link`, `task_note`
-- Workspace: `workspace_save`, `workspace_read`, `workspace_list`, `workspace_diff`, `workspace_history`, `workspace_restore`
-
-**Extended (6):**
+**Literature (12):**
+- `library_add_paper`, `library_search`, `library_update_paper`, `library_get_paper`, `library_export_bibtex`, `library_reading_stats`
 - `library_batch_add`, `library_manage_collection`, `library_tag_paper`, `library_add_note`, `library_import_bibtex`, `library_citation_graph`
+
+**Tasks (9):**
+- `task_create`, `task_list`, `task_complete`, `task_update`, `task_link`, `task_note`
+- `task_link_file`, `cron_update_schedule`, `send_notification`
+
+**Workspace (7):**
+- `workspace_save`, `workspace_read`, `workspace_list`, `workspace_diff`, `workspace_history`, `workspace_restore`, `workspace_move`
+
+**Radar (3):**
+- `radar_configure`, `radar_get_config`, `radar_scan`
 
 ### 2.6 HTTP Endpoints
 
@@ -238,7 +256,7 @@ export async function activate(api: PluginRuntime): Promise<void> {
 
 - **Lifecycle**: `activate()` called once at gateway start. `deactivate()` on shutdown.
 - **Config schema**: Validated by OpenClaw plugin loader via manifest `configSchema`.
-- **Total RPC**: 46 methods (26 lit + 10 task + 7 ws + 3 cron).
+- **Total RPC**: 61 WS + 1 HTTP = 62 methods (26 lit + 11 task + 11 ws + 7 cron + 2 notifications + 4 radar).
 
 ---
 

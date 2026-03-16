@@ -28,15 +28,15 @@
 
 `research-claw-core` is the single OpenClaw plugin that aggregates all Research-Claw
 functionality. It acts as the central wiring layer: it owns the SQLite database, registers
-every agent tool (24), every gateway RPC method (46), the HTTP file-upload route, and six
-lifecycle hooks. Individual feature modules (literature, tasks, workspace) are plain
+every agent tool (31), every gateway RPC method (61), the HTTP file-upload route, and seven
+lifecycle hooks. Individual feature modules (literature, tasks, workspace, radar) are plain
 TypeScript modules with no plugin awareness -- this plugin imports them and connects them
-to the OpenClaw runtime via the `OpenClawPluginApi` interface.
+to the OpenClaw runtime via the `PluginApi` interface.
 
 ### Design Principles
 
 - **Single plugin, multiple modules.** One `openclaw.plugin.json`, one `index.ts` entry
-  point. Feature code lives in `src/lit/`, `src/tasks/`, `src/ws/`, `src/db/`.
+  point. Feature code lives in `src/literature/`, `src/tasks/`, `src/workspace/`, `src/radar/`, `src/db/`, `src/cards/`.
 - **Database ownership.** Only this plugin opens the SQLite connection. Modules receive a
   `Database` handle -- they never construct one.
 - **Zero coupling to OpenClaw internals.** All integration goes through the documented
@@ -50,40 +50,38 @@ to the OpenClaw runtime via the `OpenClawPluginApi` interface.
 ```
 research-claw-core/
   openclaw.plugin.json        # Plugin manifest (section 2)
+  index.ts                    # Entry point — PluginDefinition export with register() (section 4)
   src/
-    index.ts                  # Entry point (section 4)
-    config.ts                 # Configuration types + defaults
+    types.ts                  # Shared type definitions (ToolDefinition, RegisterMethod)
     db/
       connection.ts           # SQLite open/close, WAL pragma
       migrations.ts           # Versioned migration runner
-      schema.sql              # Initial DDL (all tables)
-    lit/
+    literature/
+      service.ts              # LiteratureService class
       tools.ts                # 12 agent tool definitions
-      rpc.ts                  # 18 RPC method handlers
-      queries.ts              # SQL query builders
+      rpc.ts                  # 26 RPC method handlers
     tasks/
-      tools.ts                # 6 agent tool definitions
-      rpc.ts                  # 8 RPC method handlers
-      cron-presets.ts          # 3 cron preset RPC methods
-      queries.ts              # SQL query builders
-    ws/
-      tools.ts                # 6 agent tool definitions
-      rpc.ts                  # 6 RPC method handlers
-    hooks/
-      prompt-context.ts       # before_prompt_build handler
-      session.ts              # session_start, session_end handlers
-      agent-end.ts            # agent_end handler
-      tool-intercept.ts       # after_tool_call handler
-      gateway.ts              # gateway_start handler
-    http/
-      upload.ts               # File upload route handler
-  tests/
-    lit.test.ts
-    tasks.test.ts
-    ws.test.ts
-    hooks.test.ts
-    db.test.ts
+      service.ts              # TaskService class (tasks + cron presets + notifications)
+      tools.ts                # 9 agent tool definitions (6 task + cron_update_schedule + task_link_file + send_notification)
+      rpc.ts                  # 11 task + 7 cron + 2 notification RPC method handlers
+    workspace/
+      service.ts              # WorkspaceService class
+      tools.ts                # 7 agent tool definitions
+      rpc.ts                  # 11 RPC method handlers
+    radar/
+      scanner.ts              # arXiv + Semantic Scholar scanner
+      tools.ts                # 3 agent tool definitions
+      rpc.ts                  # 4 RPC method handlers
+    cards/
+      templates.ts            # Message card JSON templates
+    __tests__/
+      literature.test.ts
+      tasks.test.ts
+      workspace.test.ts
 ```
+
+> **Note:** Hooks are registered inline in `index.ts` (not in a separate `hooks/` directory).
+> The HTTP upload route handler is also inline in `index.ts`.
 
 ---
 
@@ -95,9 +93,9 @@ File: `openclaw.plugin.json`
 {
   "id": "research-claw-core",
   "name": "Research-Claw Core",
-  "version": "1.0.0",
-  "description": "Core plugin aggregating literature library, task system, workspace tracking, and research context for Research-Claw.",
-  "main": "src/index.ts",
+  "version": "0.4.1",
+  "description": "Literature library, task management, and workspace tracking for academic research",
+  "main": "dist/index.js",
   "openclaw": ">=0.6.0",
   "configSchema": {
     "type": "object",
@@ -149,26 +147,39 @@ File: `openclaw.plugin.json`
 ```typescript
 // src/config.ts
 
-export interface ResearchClawConfig {
+export interface PluginConfig {
   /** Path to SQLite database, relative to workspace root. */
-  dbPath: string;
+  dbPath?: string;
 
   /** Auto-track workspace file changes via git. */
-  autoTrackGit: boolean;
+  autoTrackGit?: boolean;
 
   /** Default citation export format. */
-  defaultCitationStyle: 'apa' | 'mla' | 'chicago' | 'ieee' | 'bibtex';
+  defaultCitationStyle?: string;
 
   /** Hours before deadline to flag tasks in heartbeat context. */
-  heartbeatDeadlineWarningHours: number;
+  heartbeatDeadlineWarningHours?: number;
+
+  /** Workspace-specific configuration. */
+  workspace?: {
+    root?: string;
+    commitDebounceMs?: number;
+    maxGitFileSize?: number;
+    maxUploadSize?: number;
+    gitAuthorName?: string;
+    gitAuthorEmail?: string;
+  };
 }
 
-export const DEFAULT_CONFIG: ResearchClawConfig = {
-  dbPath: '.research-claw/library.db',
-  autoTrackGit: true,
-  defaultCitationStyle: 'apa',
-  heartbeatDeadlineWarningHours: 48,
-};
+// Defaults are applied inline in register():
+//   dbPath: '.research-claw/library.db'
+//   autoTrackGit: true
+//   defaultCitationStyle: 'apa'
+//   heartbeatDeadlineWarningHours: 48
+//   workspace.root: 'workspace'
+//   workspace.commitDebounceMs: 5000
+//   workspace.gitAuthorName: 'Research-Claw'
+//   workspace.gitAuthorEmail: 'research-claw@wentor.ai'
 
 export function resolveConfig(
   raw: Partial<ResearchClawConfig> | undefined
@@ -205,81 +216,82 @@ The `api.pluginConfig` property returns the validated object at runtime. The
 
 ## 4. Entry Point Registration Flow
 
-File: `src/index.ts`
+File: `index.ts` (at plugin root, **not** in `src/`)
 
-The entry point is the single exported `activate` function. OpenClaw calls it once during
-plugin loading, passing the `OpenClawPluginApi` handle. All registration is synchronous
-except the service start (which is deferred until the gateway is ready).
+The entry point exports a default `PluginDefinition` object with a `register(api)` method.
+OpenClaw calls `register()` once during plugin loading. All registration is synchronous
+except workspace init (fire-and-forget, completes before any dashboard connection).
 
 ```typescript
-// src/index.ts
+// index.ts
 
-import type { OpenClawPluginApi } from 'openclaw';
-import { resolveConfig } from './config.js';
-import { createDbService } from './db/connection.js';
-import { registerLitTools } from './lit/tools.js';
-import { registerLitRpc } from './lit/rpc.js';
-import { registerTaskTools } from './tasks/tools.js';
-import { registerTaskRpc } from './tasks/rpc.js';
-import { registerCronPresetRpc } from './tasks/cron-presets.js';
-import { registerWsTools } from './ws/tools.js';
-import { registerWsRpc } from './ws/rpc.js';
-import { registerUploadRoute } from './http/upload.js';
-import {
-  registerPromptContextHook,
-  registerSessionHooks,
-  registerAgentEndHook,
-  registerToolInterceptHook,
-  registerGatewayStartHook,
-} from './hooks/index.js';
+import { createDatabaseManager } from './src/db/connection.js';
+import { runMigrations } from './src/db/migrations.js';
+import { LiteratureService } from './src/literature/service.js';
+import { createLiteratureTools } from './src/literature/tools.js';
+import { registerLiteratureRpc } from './src/literature/rpc.js';
+import { TaskService } from './src/tasks/service.js';
+import { createTaskTools } from './src/tasks/tools.js';
+import { registerTaskRpc } from './src/tasks/rpc.js';
+import { WorkspaceService } from './src/workspace/service.js';
+import { createWorkspaceTools } from './src/workspace/tools.js';
+import { registerWorkspaceRpc } from './src/workspace/rpc.js';
+import { registerRadarRpc } from './src/radar/rpc.js';
+import { createRadarTools } from './src/radar/tools.js';
 
-export function activate(api: OpenClawPluginApi): void {
-  const log = api.logger;
-  log.info('research-claw-core: activating...');
+const plugin: PluginDefinition = {
+  id: 'research-claw-core',
+  name: 'Research-Claw Core',
+  description: 'Literature library, task management, and workspace tracking for academic research',
+  version: '0.4.1',
 
-  // ── 1. Parse configuration ──────────────────────────────
-  const config = resolveConfig(api.pluginConfig);
-  log.debug('Config resolved', { config });
+  register(api) {
+    const cfg = (api.pluginConfig ?? {}) as PluginConfig;
 
-  // ── 2. Resolve database path ────────────────────────────
-  const dbAbsPath = api.resolvePath(config.dbPath);
-  log.debug('Database path resolved', { dbAbsPath });
+    // ── 1. Initialize database ──────────────────────────────
+    const dbManager = createDatabaseManager(api.resolvePath(cfg.dbPath ?? '.research-claw/library.db'));
+    runMigrations(dbManager.db);
 
-  // ── 3. Register database lifecycle service ──────────────
-  const dbService = createDbService(dbAbsPath, config);
-  api.registerService(dbService);
+    // ── 2. Initialize services ──────────────────────────────
+    const litService = new LiteratureService(dbManager.db);
+    const taskService = new TaskService(dbManager.db);
+    const wsService = new WorkspaceService(wsConfig);
 
-  // ── 4. Register literature tools (12) ───────────────────
-  registerLitTools(api, dbService);
+    // ── 3. Register database lifecycle service ──────────────
+    api.registerService({ id: 'research-claw-db', start() { ... }, stop() { ... } });
 
-  // ── 5. Register task tools (6) ──────────────────────────
-  registerTaskTools(api, dbService);
+    // ── 4. Register tools (31 total) ────────────────────────
+    //   12 literature + 9 task + 7 workspace + 3 radar
+    for (const tool of createLiteratureTools(litService)) api.registerTool(tool);
+    for (const tool of createTaskTools(taskService)) api.registerTool(tool);
+    for (const tool of createWorkspaceTools(wsService)) api.registerTool(tool);
+    for (const tool of createRadarTools(dbManager.db)) api.registerTool(tool);
 
-  // ── 6. Register workspace tools (6) ─────────────────────
-  registerWsTools(api, dbService, config);
+    // ── 5. Register RPC methods (61 WS total) ───────────────
+    registerLiteratureRpc(registerMethod, litService);   // 26 methods
+    registerTaskRpc(registerMethod, taskService);         // 11 task + 7 cron + 2 notifications = 20
+    registerWorkspaceRpc(registerMethod, wsService);      // 11 methods
+    registerRadarRpc(registerMethod, dbManager.db);       // 4 methods
 
-  // ── 7. Register RPC methods (~40) ───────────────────────
-  registerLitRpc(api, dbService);          // 18 methods
-  registerTaskRpc(api, dbService);         //  8 methods
-  registerCronPresetRpc(api, dbService);   //  3 methods
-  registerWsRpc(api, dbService, config);   //  6 methods
+    // ── 6. Register HTTP route: POST /rc/upload ─────────────
+    api.registerHttpRoute({ path: '/rc/upload', auth: 'gateway', ... });
 
-  // ── 8. Register HTTP routes ─────────────────────────────
-  registerUploadRoute(api, dbAbsPath);
+    // ── 7. Register hooks (7) ───────────────────────────────
+    //   before_prompt_build, session_start, session_end,
+    //   before_tool_call, agent_end, after_tool_call, gateway_start
+    api.on('before_prompt_build', () => { ... });
+    api.on('session_start', () => { ... });
+    api.on('session_end', () => { ... });
+    api.on('before_tool_call', (event) => { ... });
+    api.on('agent_end', () => { ... });
+    api.on('after_tool_call', (event) => { ... });
+    api.on('gateway_start', () => { ... });
 
-  // ── 9. Register hooks (6) ──────────────────────────────
-  registerPromptContextHook(api, dbService, config);
-  registerSessionHooks(api, dbService);
-  registerAgentEndHook(api, dbService);
-  registerToolInterceptHook(api, dbService);
-  registerGatewayStartHook(api, dbService);
+    api.logger.info('Research-Claw Core registered (31 tools, 61 WS RPC + 1 HTTP = 62 interfaces, 7 hooks)');
+  },
+};
 
-  // ── 10. Done ────────────────────────────────────────────
-  log.info(
-    'research-claw-core: activated. ' +
-    '24 tools, 46 RPC methods, 1 HTTP route, 6 hooks registered.'
-  );
-}
+export default plugin;
 ```
 
 ### Registration Order Rationale
@@ -298,11 +310,11 @@ The order is intentional:
 
 ## 5. Complete Tool Registry
 
-All 24 agent tools registered via `api.registerTool()`. Grouped by module.
+All 31 agent tools registered via `api.registerTool()`. Grouped by module.
 
 ### 5.1 Literature Tools (12)
 
-Defined in `src/lit/tools.ts`. Canonical schemas in doc `03a`.
+Defined in `src/literature/tools.ts`. Canonical schemas in doc `03a`.
 
 | # | Tool Name | Parameters Summary | Returns | Notes |
 |---|-----------|-------------------|---------|-------|
@@ -319,43 +331,57 @@ Defined in `src/lit/tools.ts`. Canonical schemas in doc `03a`.
 | 11 | `library_citation_graph` | `paper_id`, `depth?` (1-3), `direction?` (`cites` / `cited_by` / `both`) | `{ nodes: Node[], edges: Edge[] }` | Traverses `rc_citations` table. Max depth 3 to bound query cost. |
 | 12 | `library_import_bibtex` | `bibtex: string` | `{ imported: number, skipped: number, errors: string[] }` | Parses BibTeX string, creates papers. Deduplicates on DOI/title. |
 
-### 5.2 Task Tools (6)
+### 5.2 Task Tools (9)
 
 Defined in `src/tasks/tools.ts`. Canonical schemas in doc `03b`.
 
 | # | Tool Name | Parameters Summary | Returns | Notes |
 |---|-----------|-------------------|---------|-------|
-| 13 | `task_create` | `title`, `description?`, `priority?` (`low`/`medium`/`high`/`urgent`), `deadline?`, `tags?`, `related_paper_id?` | `{ id, title, created_at }` | Priority defaults to `medium`. |
-| 14 | `task_list` | `status?` (`open`/`done`/`all`), `priority?`, `tags?`, `related_paper_id?`, `sort?`, `limit?` | `{ tasks: Task[], total }` | Default: open tasks sorted by priority desc, deadline asc. |
-| 15 | `task_complete` | `id`, `summary?` | `{ id, completed_at }` | Sets `status = 'done'`, records completion time. |
-| 16 | `task_update` | `id`, `fields` (partial task object) | `{ id, updated_fields }` | Supports changing title, description, priority, deadline, tags. |
-| 17 | `task_link` | `task_id`, `paper_id` | `{ task_id, paper_id }` | Sets `related_paper_id` on task. Validates paper exists. |
-| 18 | `task_note` | `task_id`, `content` | `{ note_id }` | Appends timestamped note to task. Stored in `rc_task_notes`. |
+| 13 | `task_create` | `title`, `task_type`, `description?`, `priority?`, `deadline?`, `tags?`, `related_paper_id?`, `related_file_path?` | `Task` | Priority defaults to `medium`. Actor: agent. |
+| 14 | `task_list` | `status?`, `priority?`, `task_type?`, `sort_by?`, `include_completed?` | `{ items: Task[], total }` | Default: active tasks only. |
+| 15 | `task_complete` | `id`, `notes?` | `Task` | Sets `status = 'done'`, records completion time. |
+| 16 | `task_update` | `id`, plus any task fields | `Task` | State-machine validated status transitions. |
+| 17 | `task_link` | `task_id`, `paper_id` | `{ ok }` | Sets `related_paper_id` on task. |
+| 18 | `task_note` | `task_id`, `note` | `{ activity entry }` | Appends timestamped note. Actor: agent. |
+| 19 | `task_link_file` | `task_id`, `file_path` | `{ ok }` | Links task to a workspace file. |
+| 20 | `cron_update_schedule` | `preset_id`, `schedule` | `CronPreset` | Updates cron schedule expression. |
+| 21 | `send_notification` | `type`, `title`, `body?` | `Notification` | Pushes notification to dashboard bell. |
 
-### 5.3 Workspace Tools (6)
+### 5.3 Workspace Tools (7)
 
-Defined in `src/ws/tools.ts`. Canonical schemas in doc `03c`.
+Defined in `src/workspace/tools.ts`. Canonical schemas in doc `03c`.
 
 | # | Tool Name | Parameters Summary | Returns | Notes |
 |---|-----------|-------------------|---------|-------|
-| 19 | `workspace_save` | `path`, `content`, `message?` | `{ path, version, bytes }` | Writes file, optionally commits if `autoTrackGit`. |
-| 20 | `workspace_read` | `path`, `version?` | `{ path, content, version }` | Reads current or historical version. |
-| 21 | `workspace_list` | `directory?`, `pattern?`, `recursive?` | `{ files: FileEntry[] }` | Glob-based listing. Respects `.gitignore`. |
-| 22 | `workspace_diff` | `path`, `from_version?`, `to_version?` | `{ path, diff, from, to }` | Unified diff. Defaults: from = previous version, to = current. |
-| 23 | `workspace_history` | `path?`, `limit?` | `{ entries: HistoryEntry[] }` | Git log for file or entire workspace. |
-| 24 | `workspace_restore` | `path`, `version` | `{ path, restored_version }` | Checks out specific version. Creates new commit. |
+| 22 | `workspace_save` | `path`, `content`, `commit_message?` | `{ path, size, committed }` | Writes file, auto-commits to git. Emits file_card JSON. |
+| 23 | `workspace_read` | `path` | `{ content, size, mime_type, git_status }` | Reads current file. UTF-8 or base64. |
+| 24 | `workspace_list` | `directory?`, `pattern?`, `recursive?` | `{ files: FileEntry[], total }` | Glob-based listing with tree flattening. |
+| 25 | `workspace_diff` | `path?`, `commit_range?` | `{ diff, files_changed, insertions, deletions }` | Unified diff. |
+| 26 | `workspace_history` | `path?`, `limit?` | `{ commits, total, has_more }` | Git log for file or entire workspace. |
+| 27 | `workspace_restore` | `path`, `commit_hash` | `{ path, restored_from, new_commit }` | Checks out specific version. Creates new commit. |
+| 28 | `workspace_move` | `from`, `to` | `{ from, to, committed }` | Move/rename file or directory. Auto-commits. |
+
+### 5.4 Radar Tools (3)
+
+Defined in `src/radar/tools.ts`.
+
+| # | Tool Name | Parameters Summary | Returns | Notes |
+|---|-----------|-------------------|---------|-------|
+| 29 | `radar_configure` | `keywords?`, `authors?`, `journals?`, `sources?` | `RadarConfig` | Sets radar tracking config. Each call replaces specified arrays. |
+| 30 | `radar_get_config` | `{}` | `RadarConfig` | Returns current keywords, authors, journals, sources. |
+| 31 | `radar_scan` | `keywords?`, `sources?`, `max_results?` | `{ results }` | Scans arXiv + Semantic Scholar. Does NOT auto-add to library. |
 
 ### Tool Registration Pattern
 
 Every tool follows the same registration pattern:
 
 ```typescript
-// Example: src/lit/tools.ts (excerpt)
+// Example: src/literature/tools.ts (excerpt)
 
-import type { OpenClawPluginApi, ToolDefinition } from 'openclaw';
-import type { DbService } from '../db/connection.js';
+import type { ToolDefinition } from '../types.js';
+import { LiteratureService } from './service.js';
 
-export function registerLitTools(api: OpenClawPluginApi, db: DbService): void {
+export function createLiteratureTools(service: LiteratureService): ToolDefinition[] {
   const tools: ToolDefinition[] = [
     {
       name: 'library_add_paper',
@@ -383,7 +409,7 @@ export function registerLitTools(api: OpenClawPluginApi, db: DbService): void {
         },
         required: ['title', 'authors', 'year'],
       },
-      execute: async (params, ctx) => {
+      execute: async (_toolCallId: string, params: Record<string, unknown>) => {
         const conn = db.getDb();
         const id = crypto.randomUUID();
         const bibtexKey = generateBibtexKey(params.authors, params.year);
@@ -428,7 +454,7 @@ gateway WebSocket (protocol v3) by the dashboard UI.
 
 ### 6.1 Literature RPC Methods (26)
 
-Namespace: `rc.lit.*`. Defined in `src/lit/rpc.ts`. Canonical schemas in doc `03a`.
+Namespace: `rc.lit.*`. Defined in `src/literature/rpc.ts`. Canonical schemas in doc `03a`.
 
 | # | Method | Params | Returns | Notes |
 |---|--------|--------|---------|-------|
@@ -459,81 +485,105 @@ Namespace: `rc.lit.*`. Defined in `src/lit/rpc.ts`. Canonical schemas in doc `03
 | 25 | `rc.lit.notes.add` | `{ paperId, content, page?, highlight? }` | `{ noteId }` | Creates note. |
 | 26 | `rc.lit.notes.delete` | `{ noteId }` | `{ ok }` | Hard delete. |
 
-### 6.2 Task RPC Methods (10)
+### 6.2 Task RPC Methods (11)
 
 Namespace: `rc.task.*`. Defined in `src/tasks/rpc.ts`. Canonical schemas in doc `03b`.
 
 | # | Method | Params | Returns | Notes |
 |---|--------|--------|---------|-------|
-| 27 | `rc.task.list` | `{ status?, priority?, tags?, sort?, limit? }` | `{ tasks: Task[], total }` | Filterable list. |
-| 28 | `rc.task.get` | `{ id }` | `Task` | Full task with notes. |
-| 29 | `rc.task.create` | `{ title, description?, priority?, deadline?, tags?, relatedPaperId? }` | `{ id }` | Creates task. |
-| 30 | `rc.task.update` | `{ id, fields }` | `{ ok }` | Partial update. |
-| 31 | `rc.task.complete` | `{ id, summary? }` | `{ ok }` | Sets status to done. |
-| 32 | `rc.task.delete` | `{ id }` | `{ ok }` | Soft delete. |
-| 33 | `rc.task.upcoming` | `{ days?, limit? }` | `{ tasks: Task[] }` | Tasks due within N days. |
-| 34 | `rc.task.overdue` | `{ limit? }` | `{ tasks: Task[] }` | Tasks past deadline. |
-| 35 | `rc.task.link` | `{ taskId, paperId }` | `{ ok }` | Links task to paper. |
-| 36 | `rc.task.notes.add` | `{ taskId, content }` | `{ noteId }` | Appends note. |
+| 27 | `rc.task.list` | `{ status?, priority?, task_type?, sort?, direction?, limit?, offset?, include_completed? }` | `{ items: Task[], total }` | Filterable list with pagination. |
+| 28 | `rc.task.get` | `{ id }` | `Task` (with activity log + subtasks) | Full task details. |
+| 29 | `rc.task.create` | `{ task: TaskInput }` | `Task` | Actor: human. |
+| 30 | `rc.task.update` | `{ id, patch }` | `Task` | State-machine validated. Actor: human. |
+| 31 | `rc.task.complete` | `{ id, notes? }` | `Task` | Sets status to done. Actor: human. |
+| 32 | `rc.task.delete` | `{ id }` | `{ ok, deleted, id }` | Hard delete. |
+| 33 | `rc.task.upcoming` | `{ hours? }` | `{ items, total, hours }` | Tasks due within N hours (default 48). |
+| 34 | `rc.task.overdue` | `{}` | `{ items, total }` | Tasks past deadline. |
+| 35 | `rc.task.link` | `{ task_id, paper_id }` | `{ ok, linked }` | Links task to paper. |
+| 36 | `rc.task.linkFile` | `{ task_id, file_path }` | `{ ok, linked }` | Links task to workspace file. |
+| 37 | `rc.task.notes.add` | `{ task_id, content }` | `{ activity entry }` | Appends note. Actor: human. |
 
-### 6.3 Workspace RPC Methods (7)
+### 6.3 Cron Preset RPC Methods (7)
 
-Namespace: `rc.ws.*`. Defined in `src/ws/rpc.ts`. Canonical schemas in doc `03c`.
-`rc.ws.upload` is HTTP POST (see §7); listed here for namespace completeness but not
-registered via `registerGatewayMethod`.
-
-| # | Method | Params | Returns | Notes |
-|---|--------|--------|---------|-------|
-| 37 | `rc.ws.tree` | `{ directory?, pattern?, recursive? }` | `{ files: FileEntry[] }` | Directory tree listing. |
-| 38 | `rc.ws.read` | `{ path, version? }` | `{ content, version }` | File contents. |
-| 39 | `rc.ws.history` | `{ path?, limit? }` | `{ entries: HistoryEntry[] }` | Git log. |
-| 40 | `rc.ws.diff` | `{ path, from?, to? }` | `{ diff }` | Unified diff. |
-| 41 | `rc.ws.restore` | `{ path, version }` | `{ ok }` | Checkout + commit. |
-| 42 | `rc.ws.upload` | -- | -- | **HTTP POST only** (see §7). Not a WS RPC method. |
-| 43 | `rc.ws.save` | `{ path, content, message? }` | `{ version }` | Write + optional commit. |
-
-### 6.4 Cron Preset RPC Methods (3)
-
-Namespace: `rc.cron.presets.*`. Defined in `src/tasks/cron-presets.ts`. These provide
+Namespace: `rc.cron.presets.*`. Defined in `src/tasks/rpc.ts`. These provide
 pre-configured cron job templates for common research workflows.
 
 | # | Method | Params | Returns | Notes |
 |---|--------|--------|---------|-------|
-| 44 | `rc.cron.presets.list` | `{}` | `{ presets: CronPreset[] }` | Returns all available presets with descriptions. |
-| 45 | `rc.cron.presets.activate` | `{ id, overrides? }` | `{ cronJobId }` | Activates a preset cron job. |
-| 46 | `rc.cron.presets.deactivate` | `{ id }` | `{ ok }` | Deactivates a preset cron job. |
+| 38 | `rc.cron.presets.list` | `{}` | `{ presets: CronPreset[] }` | Returns all presets with state. |
+| 39 | `rc.cron.presets.activate` | `{ preset_id, config? }` | `CronPreset` | Activates a preset cron job. |
+| 40 | `rc.cron.presets.deactivate` | `{ preset_id }` | `CronPreset` | Deactivates a preset cron job. |
+| 41 | `rc.cron.presets.setJobId` | `{ preset_id, job_id }` | `{ ok }` | Store gateway cron job ID mapping. |
+| 42 | `rc.cron.presets.delete` | `{ preset_id }` | `{ ok }` | Delete a cron preset from DB. |
+| 43 | `rc.cron.presets.restore` | `{ preset_id }` | `CronPreset` | Restore a deleted preset from PRESET_DEFINITIONS. |
+| 44 | `rc.cron.presets.updateSchedule` | `{ preset_id, schedule }` | `{ preset }` | Update schedule expression. |
 
-**Total: 46 RPC methods** (26 lit + 10 task + 7 ws + 3 cron). Note: `rc.ws.upload` (#42) is
-HTTP POST only (see §7) -- it is listed for namespace completeness but is not registered as
-a gateway RPC method.
+### 6.4 Notification RPC Methods (2)
+
+Namespace: `rc.notifications.*`. Defined in `src/tasks/rpc.ts`.
+
+| # | Method | Params | Returns | Notes |
+|---|--------|--------|---------|-------|
+| 45 | `rc.notifications.pending` | `{ hours? }` | `{ overdue, upcoming, custom, timestamp }` | Dashboard notification bell data. |
+| 46 | `rc.notifications.markRead` | `{ id }` | `{ ok }` | Mark a custom notification as read. |
+
+### 6.5 Workspace RPC Methods (11)
+
+Namespace: `rc.ws.*`. Defined in `src/workspace/rpc.ts`. Canonical schemas in doc `03c`.
+`rc.ws.upload` is HTTP POST (see §7) -- not registered here.
+
+| # | Method | Params | Returns | Notes |
+|---|--------|--------|---------|-------|
+| 47 | `rc.ws.tree` | `{ root?, depth? }` | `{ tree: TreeNode[] }` | Directory tree listing. |
+| 48 | `rc.ws.read` | `{ path }` | `{ content, size, mime_type, git_status }` | File contents (UTF-8 or base64). |
+| 49 | `rc.ws.save` | `{ path, content, message? }` | `{ path, size, committed }` | Write + optional commit. |
+| 50 | `rc.ws.history` | `{ path?, limit?, offset? }` | `{ commits, total, has_more }` | Git log. |
+| 51 | `rc.ws.diff` | `{ path?, from?, to? }` | `{ diff, files_changed, insertions, deletions }` | Unified diff. |
+| 52 | `rc.ws.restore` | `{ path, commit }` | `{ path, restored_from, new_commit }` | Checkout + commit. |
+| 53 | `rc.ws.delete` | `{ path }` | `{ ok }` | Delete a file from workspace. |
+| 54 | `rc.ws.saveImage` | `{ path, base64, mimeType? }` | `{ path, size }` | Save base64 image (for chat uploads). |
+| 55 | `rc.ws.openExternal` | `{ path }` | `{ ok }` | Open file in system default app. |
+| 56 | `rc.ws.openFolder` | `{ path }` | `{ ok }` | Open containing folder in file manager. |
+| 57 | `rc.ws.move` | `{ from, to }` | `{ from, to, committed }` | Move/rename within workspace. |
+
+### 6.6 Radar RPC Methods (4)
+
+Namespace: `rc.radar.*`. Defined in `src/radar/rpc.ts`.
+
+| # | Method | Params | Returns | Notes |
+|---|--------|--------|---------|-------|
+| 58 | `rc.radar.config.get` | `{}` | `RadarConfig` | Returns tracked keywords, authors, journals, sources. |
+| 59 | `rc.radar.config.set` | `{ keywords?, authors?, journals?, sources? }` | `RadarConfig` | Persists radar tracking config. |
+| 60 | `rc.radar.scan` | `{ keywords?, sources?, max_results? }` | `{ results }` | Scans arXiv + Semantic Scholar. Persists cache. |
+| 61 | `rc.radar.lastScan` | `{}` | `{ results, scanned_at }` | Returns cached results from last scan. |
+
+**Total: 61 WS RPC methods** (26 lit + 11 task + 7 cron + 2 notifications + 11 ws + 4 radar)
+plus 1 HTTP route (`POST /rc/upload`). Note: `rc.ws.upload` is HTTP POST only (see §7) and
+is not registered as a gateway RPC method.
 
 ### RPC Registration Pattern
 
 ```typescript
-// Example: src/lit/rpc.ts (excerpt)
+// Example: src/literature/rpc.ts (excerpt)
 
-import type { OpenClawPluginApi } from 'openclaw';
-import type { DbService } from '../db/connection.js';
-import { searchPapers, getPaper, addPaper } from './queries.js';
+import type { LiteratureService } from './service.js';
+import type { RegisterMethod } from '../types.js';
 
-export function registerLitRpc(api: OpenClawPluginApi, db: DbService): void {
-  api.registerGatewayMethod('rc.lit.search', async (params) => {
-    const conn = db.getDb();
-    return searchPapers(conn, params);
+export function registerLiteratureRpc(registerMethod: RegisterMethod, service: LiteratureService): void {
+  registerMethod('rc.lit.search', async (params: Record<string, unknown>) => {
+    const query = params.query as string;
+    return service.search(query);
   });
 
-  api.registerGatewayMethod('rc.lit.get', async (params) => {
-    const conn = db.getDb();
-    const paper = getPaper(conn, params.id);
-    if (!paper) {
-      throw new Error(`Paper not found: ${params.id}`);
-    }
+  registerMethod('rc.lit.get', async (params: Record<string, unknown>) => {
+    const id = params.id as string;
+    const paper = service.get(id);
+    if (!paper) throw new Error(`Paper not found: ${id}`);
     return paper;
   });
 
-  api.registerGatewayMethod('rc.lit.add', async (params) => {
-    const conn = db.getDb();
-    return addPaper(conn, params.paper);
+  registerMethod('rc.lit.add', async (params: Record<string, unknown>) => {
+    return service.add(params as any);
   });
 
   // ... remaining 23 methods follow identical pattern
@@ -927,7 +977,7 @@ gateway_stop (or process exit)
 
 ## 10. Hook Registrations
 
-Six hooks are registered. Each hook handler is a focused, single-responsibility function.
+Seven hooks are registered, all inline in `index.ts` (not in separate files).
 
 ### 10.1 `before_prompt_build` -- Research Context Injection
 
@@ -1234,14 +1284,15 @@ export function registerGatewayStartHook(
 
 ### Hook Summary Table
 
-| # | Hook | Handler File | Purpose | Side Effects |
-|---|------|-------------|---------|-------------|
-| 1 | `before_prompt_build` | `hooks/prompt-context.ts` | Inject ~200 char research context | Read-only DB queries |
-| 2 | `session_start` | `hooks/session.ts` | Verify DB connection, safety net | None (read-only check) |
-| 3 | `session_end` | `hooks/session.ts` | Close orphaned reading sessions, flush WAL | Updates `rc_reading_sessions` |
-| 4 | `agent_end` | `hooks/agent-end.ts` | Record agent run summary | Inserts into `rc_activity_log` |
-| 5 | `after_tool_call` | `hooks/tool-intercept.ts` | Detect new papers from external search tools | Read-only; may return `chatSuggestion` |
-| 6 | `gateway_start` | `hooks/gateway.ts` | Run `PRAGMA integrity_check` | Read-only; logs result |
+| # | Hook | Location | Purpose | Side Effects |
+|---|------|----------|---------|-------------|
+| 1 | `before_prompt_build` | `index.ts` (inline) | Inject research context (library stats, overdue/upcoming tasks, active tasks, cron) | Read-only DB queries |
+| 2 | `session_start` | `index.ts` (inline) | Re-run migrations on DB | None (safety net) |
+| 3 | `session_end` | `index.ts` (inline) | Close orphaned reading sessions (>24h stale + current) | Updates `rc_reading_sessions` |
+| 4 | `before_tool_call` | `index.ts` (inline) | Exec safety guard (block catastrophic rm/dd/mkfs) + cron schedule sync | May block exec tool; updates `rc_cron_state` |
+| 5 | `agent_end` | `index.ts` (inline) | Record agent run summary | Placeholder (no-op currently) |
+| 6 | `after_tool_call` | `index.ts` (inline) | Sync native cron schedule changes back to rc_cron_state | Updates `rc_cron_state` |
+| 7 | `gateway_start` | `index.ts` (inline) | Run `PRAGMA integrity_check` | Read-only; logs result |
 
 ---
 
@@ -1633,8 +1684,8 @@ The 24 hooks available in OpenClaw. This plugin uses 6 (marked with **bold**).
 | `message_received` | Inbound message from user | -- |
 | `message_sending` | Outbound message being prepared | -- |
 | `message_sent` | Outbound message delivered | -- |
-| `before_tool_call` | Before a tool executes | -- |
-| `after_tool_call` | After a tool executes | **Cross-plugin paper discovery** |
+| `before_tool_call` | Before a tool executes | **Exec safety guard + cron sync** |
+| `after_tool_call` | After a tool executes | **Cron schedule sync** |
 | `tool_result_persist` | When tool result is stored | -- |
 | `before_message_write` | Before message written to log | -- |
 | `session_start` | Session begins | **DB connection verify** |
@@ -1653,7 +1704,7 @@ interface ToolDefinition {
   name: string;
   description: string;
   parameters: JSONSchema7;
-  execute: (params: Record<string, unknown>, ctx: ToolContext) => Promise<unknown>;
+  execute: (toolCallId: string, params: Record<string, unknown>) => Promise<unknown>;
 }
 ```
 
@@ -1685,8 +1736,8 @@ interface HttpRouteParams {
 | Document | Relationship |
 |----------|-------------|
 | `03a` Literature Library | Defines the 12 literature tools and 26 `rc.lit.*` RPC methods aggregated here |
-| `03b` Task System | Defines the 6 task tools, 10 `rc.task.*` RPC methods, and 3 `rc.cron.presets.*` methods |
-| `03c` Workspace & Git | Defines the 6 workspace tools and 7 `rc.ws.*` RPC methods (+ 1 HTTP upload) |
+| `03b` Task System | Defines the 9 task tools, 11 `rc.task.*` RPC methods, 7 `rc.cron.presets.*` methods, and 2 `rc.notifications.*` methods |
+| `03c` Workspace & Git | Defines the 7 workspace tools and 11 `rc.ws.*` RPC methods (+ 1 HTTP upload) |
 | `03d` Message Card Protocol | Defines card types (`paper_card`, `task_card`, etc.) rendered in dashboard |
 | `05` Plugin Integration Guide | Full Plugin SDK reference, plugin development workflow |
 | `02` Engineering Architecture | Gateway protocol, coupling tiers, overall system design |

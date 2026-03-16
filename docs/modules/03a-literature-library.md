@@ -224,23 +224,23 @@ CREATE VIRTUAL TABLE IF NOT EXISTS rc_papers_fts USING fts5(
 
 ```sql
 -- After INSERT
-CREATE TRIGGER IF NOT EXISTS rc_papers_ai AFTER INSERT ON rc_papers BEGIN
+CREATE TRIGGER IF NOT EXISTS rc_papers_fts_insert AFTER INSERT ON rc_papers BEGIN
   INSERT INTO rc_papers_fts(rowid, title, authors, abstract, notes)
     VALUES (new.rowid, new.title, new.authors, new.abstract, new.notes);
 END;
 
--- After DELETE
-CREATE TRIGGER IF NOT EXISTS rc_papers_ad AFTER DELETE ON rc_papers BEGIN
-  INSERT INTO rc_papers_fts(rc_papers_fts, rowid, title, authors, abstract, notes)
-    VALUES ('delete', old.rowid, old.title, old.authors, old.abstract, old.notes);
-END;
-
--- After UPDATE
-CREATE TRIGGER IF NOT EXISTS rc_papers_au AFTER UPDATE ON rc_papers BEGIN
+-- After UPDATE (delete old + insert new)
+CREATE TRIGGER IF NOT EXISTS rc_papers_fts_update AFTER UPDATE ON rc_papers BEGIN
   INSERT INTO rc_papers_fts(rc_papers_fts, rowid, title, authors, abstract, notes)
     VALUES ('delete', old.rowid, old.title, old.authors, old.abstract, old.notes);
   INSERT INTO rc_papers_fts(rowid, title, authors, abstract, notes)
     VALUES (new.rowid, new.title, new.authors, new.abstract, new.notes);
+END;
+
+-- BEFORE DELETE (must fire before row is removed so old.* is accessible)
+CREATE TRIGGER IF NOT EXISTS rc_papers_fts_delete BEFORE DELETE ON rc_papers BEGIN
+  INSERT INTO rc_papers_fts(rc_papers_fts, rowid, title, authors, abstract, notes)
+    VALUES ('delete', old.rowid, old.title, old.authors, old.abstract, old.notes);
 END;
 ```
 
@@ -295,7 +295,7 @@ CREATE TABLE IF NOT EXISTS rc_schema_version (
 );
 ```
 
-Current schema version: **1**.
+Current schema version: **6**.
 
 ### 2.13 PRAGMA Settings
 
@@ -613,36 +613,21 @@ Full-text search across the library using FTS5.
 const LibrarySearchParams = Type.Object({
   query: Type.String({
     minLength: 1,
-    description: 'Search query (supports FTS5 syntax: AND, OR, NOT, "phrase", prefix*)',
+    description: 'Search query (full-text search across title, abstract, authors)',
   }),
-  filters: Type.Optional(Type.Object({
-    year_min: Type.Optional(Type.Integer({ description: 'Minimum publication year' })),
-    year_max: Type.Optional(Type.Integer({ description: 'Maximum publication year' })),
-    read_status: Type.Optional(ReadStatus),
-    tags: Type.Optional(Type.Array(Type.String(), {
-      description: 'Filter to papers having ALL listed tags',
-    })),
-    source: Type.Optional(PaperSource),
-    rating_min: Type.Optional(Type.Integer({
-      minimum: 1,
-      maximum: 5,
-      description: 'Minimum rating',
-    })),
-    has_pdf: Type.Optional(Type.Boolean({ description: 'Filter to papers with/without PDFs' })),
+  limit: Type.Optional(Type.Number({
+    default: 50,
+    description: 'Maximum results to return (default 50, max 500)',
   })),
-  limit: Type.Optional(Type.Integer({
-    minimum: 1,
-    maximum: 200,
-    default: 20,
-    description: 'Maximum results to return',
-  })),
-  offset: Type.Optional(Type.Integer({
-    minimum: 0,
+  offset: Type.Optional(Type.Number({
     default: 0,
-    description: 'Offset for pagination',
+    description: 'Pagination offset',
   })),
 });
 ```
+
+> **Note:** The actual implementation uses flat `query`, `limit`, `offset` params
+> with no `filters` wrapper object. Default limit is 50, max 500.
 
 **Returns**: `{ items: Paper[], total: number, query: string }`.
 
@@ -701,25 +686,26 @@ Export one or more papers as formatted citations.
 
 ```typescript
 const LibraryExportBibtexParams = Type.Object({
-  paper_ids: Type.Array(Type.String({ format: 'uuid' }), {
-    minItems: 1,
-    description: 'Paper IDs to export',
-  }),
-  style: Type.Optional(Type.Union([
-    Type.Literal('apa'),
-    Type.Literal('mla'),
-    Type.Literal('chicago'),
-    Type.Literal('ieee'),
-    Type.Literal('bibtex'),
-  ], { default: 'bibtex', description: 'Citation format' })),
+  paper_ids: Type.Optional(Type.Array(Type.String(), {
+    description: 'List of paper IDs to export',
+  })),
+  tag: Type.Optional(Type.String({
+    description: 'Export all papers with this tag',
+  })),
+  collection: Type.Optional(Type.String({
+    description: 'Export all papers in this collection ID',
+  })),
+  all: Type.Optional(Type.Boolean({
+    description: 'Export entire library',
+  })),
 });
 ```
 
-**Returns**: `{ citations: string, count: number, style: string }`.
+**Returns**: `{ bibtex: string, count: number }`.
 
-The `citations` field contains the formatted output. For BibTeX style, each entry
-is a standard `@article{...}` / `@inproceedings{...}` block. For APA/MLA/Chicago/IEEE,
-each entry is a formatted text string separated by double newlines.
+Select papers by IDs, tag, collection, or export all. At least one selection
+criterion should be provided. Each entry is a standard `@article{...}` /
+`@inproceedings{...}` BibTeX block.
 
 **BibTeX key generation**: If `bibtex_key` is set on the paper, use it. Otherwise,
 generate as `{first_author_lastname}{year}{first_title_word}` lowercased
@@ -802,23 +788,26 @@ const LibraryManageCollectionParams = Type.Object({
 
 ### 4.9 `library_add_note`
 
-Append a note to a paper's notes field. If the paper already has notes, the new
-note is appended with a timestamp separator.
+Add a note or annotation to a paper, optionally tied to a specific page or
+highlighted text. Notes are stored in the `rc_paper_notes` table (not appended to
+the paper's `notes` text field).
 
 ```typescript
 const LibraryAddNoteParams = Type.Object({
-  paper_id: Type.String({ format: 'uuid', description: 'Paper ID' }),
+  paper_id: Type.String({ description: 'Paper ID' }),
   note_text: Type.String({
-    minLength: 1,
     description: 'Note content (Markdown supported)',
   }),
+  page: Type.Optional(Type.Number({
+    description: 'Page number the note refers to',
+  })),
+  highlight: Type.Optional(Type.String({
+    description: 'Highlighted text the note refers to',
+  })),
 });
 ```
 
-**Returns**: Updated `Paper` object.
-
-**Note format**: Notes are stored as a single text field. Each appended note is
-separated by `\n\n---\n[YYYY-MM-DD HH:mm]\n\n`.
+**Returns**: The created `PaperNote` object (`{ id, paper_id, content, page, highlight, created_at }`).
 
 ### 4.10 `library_tag_paper`
 
@@ -852,7 +841,7 @@ const LibraryCitationGraphParams = Type.Object({
   paper_id: Type.String({ format: 'uuid', description: 'Central paper ID' }),
   direction: Type.Union([
     Type.Literal('citing'),
-    Type.Literal('cited'),
+    Type.Literal('cited_by'),
     Type.Literal('both'),
   ], { default: 'both', description: 'Direction of citation relationships' }),
   depth: Type.Optional(Type.Integer({
@@ -940,7 +929,7 @@ List papers with pagination, filtering, and sorting.
 ```typescript
 Type.Object({
   offset: Type.Optional(Type.Integer({ minimum: 0, default: 0 })),
-  limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200, default: 20 })),
+  limit: Type.Optional(Type.Integer({ minimum: 1, default: 50 })),
   sort: Type.Optional(PaperSort),
   filter: Type.Optional(PaperFilter),
 })
@@ -1271,8 +1260,8 @@ Full-text search via FTS5.
 ```typescript
 Type.Object({
   query: Type.String({ minLength: 1 }),
-  limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200, default: 20 })),
-  offset: Type.Optional(Type.Integer({ minimum: 0, default: 0 })),
+  limit: Type.Optional(Type.Integer({ default: 50 })),
+  offset: Type.Optional(Type.Integer({ default: 0 })),
 })
 ```
 
@@ -1353,27 +1342,27 @@ Export selected papers as BibTeX.
 ### 5.22 `rc.lit.collections.list`
 List all collections with paper counts.
 - **Params:** `{}`
-- **Returns:** `{ collections: Array<{id, name, description, paperCount, createdAt}> }`
+- **Returns:** Collection array
 
 ### 5.23 `rc.lit.collections.manage`
-Create, update, or delete a collection.
-- **Params:** `{ action: "create"|"update"|"delete", id?: string, name?: string, description?: string }`
+Create, update, or delete a collection; add/remove papers.
+- **Params:** `{ action: "create"|"update"|"delete"|"add_paper"|"remove_paper", id?: string, name?: string, description?: string, color?: string, paper_ids?: string[] }`
 - **Returns:** `{ id: string, action: string }`
 
 ### 5.24 `rc.lit.notes.list`
 List notes for a paper.
-- **Params:** `{ paperId: string }`
-- **Returns:** `{ notes: Array<{id, content, page, highlight, createdAt}> }`
+- **Params:** `{ paper_id: string }`
+- **Returns:** `PaperNote[]`
 
 ### 5.25 `rc.lit.notes.add`
 Add a note to a paper.
-- **Params:** `{ paperId: string, content: string, page?: number, highlight?: string }`
-- **Returns:** `{ id: string }`
+- **Params:** `{ paper_id: string, content: string, page?: number, highlight?: string }`
+- **Returns:** `PaperNote`
 
 ### 5.26 `rc.lit.notes.delete`
 Delete a note.
-- **Params:** `{ noteId: string }`
-- **Returns:** `{ deleted: true }`
+- **Params:** `{ note_id: string }`
+- **Returns:** `{ ok: true }`
 
 ---
 

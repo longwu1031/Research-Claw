@@ -10,7 +10,7 @@
 This SOP governs all development on the **bootstrap file system** — the 8 markdown files loaded into agent context at session start that define Research-Claw's personality, capabilities, and research workflow.
 
 **Owner track:** Prompt/behavior team / agent
-**Source files:** `workspace/` directory (8 .md files) + `skills/_always/`
+**Source files:** `workspace/` directory (8 .md files) + `skills/`
 **Design doc:** `docs/04-prompt-design-framework.md`
 
 ---
@@ -21,15 +21,15 @@ This SOP governs all development on the **bootstrap file system** — the 8 mark
 
 | File | Chars | Purpose | Load Priority |
 |------|------:|---------|--------------|
-| `SOUL.md` | 4,058 | Research persona, core principles, red lines (mock data exception) | Always |
-| `AGENTS.md` | 17,316 | Session workflow, SOP, HiL protocol, card JSON examples, discipline workflows | Always |
-| `HEARTBEAT.md` | 3,312 | Periodic checks: deadlines, digest, reading reminders, group meeting prep | Cron only (lightweight mode) |
-| `BOOTSTRAP.md` | 6,363 | First-run onboarding: IM, workspace, group meeting, honey demo (self-renames to .done) | First run only |
-| `IDENTITY.md` | 703 | Product identity, persona | Always |
-| `USER.md` | 970 | User profile template (incl. group meeting) | Always |
-| `TOOLS.md` | 4,604 | API reference, 24 local tools | Always |
-| `MEMORY.md` | 964 | Persistent memory template (v1.1) | Always |
-| **Total** | **38,290** | | |
+| `SOUL.md` | 4,059 | Research persona, core principles, red lines (mock data exception) | Always |
+| `AGENTS.md` | 18,861 | Session workflow, SOP, HiL protocol, card JSON examples, discipline workflows | Always |
+| `HEARTBEAT.md` | 3,879 | Periodic checks: deadlines, digest, reading reminders, group meeting prep | Cron only (lightweight mode) |
+| `BOOTSTRAP.md` | 11,341 | First-run onboarding: IM, workspace, group meeting, honey demo (self-renames to .done) | First run only |
+| `IDENTITY.md` | 723 | Product identity, persona | Always |
+| `USER.md` | 969 | User profile template (incl. group meeting) | Always |
+| `TOOLS.md` | 5,234 | API reference, 31 local tools | Always |
+| `MEMORY.md` | 4,606 | Persistent memory template (v1.1) | Always |
+| **Total** | **49,672** | | |
 
 **Limits:** 150,000 chars total, 20,000 chars per file.
 
@@ -44,7 +44,9 @@ OpenClaw loads bootstrap files from the agent workspace directory:
 
 ### 2.3 Always-Loaded Skill
 
-`skills/_always/research-sop/SKILL.md` — loaded in every session regardless of relevance matching. Contains research methodology SOP that supplements AGENTS.md.
+`skills/research-sop/SKILL.md` — loaded in every session regardless of relevance matching. Contains research methodology SOP that supplements AGENTS.md.
+
+Additionally, `skills/wentor-api/SKILL.md` provides platform API documentation.
 
 ---
 
@@ -138,7 +140,7 @@ Completion: writes MEMORY.md + USER.md, renames BOOTSTRAP.md to BOOTSTRAP.md.don
 - **Language:** English default, bilingual annotations for zh-CN users
 - **Tone:** Professional academic, not corporate. Clear and direct.
 - **Format:** Markdown with YAML frontmatter where applicable
-- **Length:** Each file should stay well under 20K chars (current total: ~25K of 150K budget)
+- **Length:** Each file should stay well under 20K chars (current total: ~50K of 150K budget)
 - **Structure:** Use headings, bullet points, tables. Avoid walls of text.
 
 ### 4.2 Prompt Engineering Principles
@@ -222,7 +224,7 @@ Before editing any bootstrap file:
 ### 5.7 TOOLS.md
 
 **What to change:** API descriptions, tool usage tips, new tool entries
-**What NOT to change:** Tool names (must match config.tools.alsoAllow)
+**What NOT to change:** Tool names (must match config.tools.alsoAllow — currently 31 RC tools + 9 RP tools)
 **Coupling:** Tool names from 00-reference-map SS3.3
 
 ### 5.8 MEMORY.md
@@ -248,7 +250,7 @@ Before editing any bootstrap file:
 - [2026-03-12] [Claude] Phase 2C: SOUL.md updated (v2.0) -- added mock data exception to Red Line #4
 - [2026-03-12] [Claude] Phase 2C: USER.md updated (v2.0) -- added Group Meeting section
 - [2026-03-12] [Claude] Phase 2C: IDENTITY.md and MEMORY.md verified (no changes needed)
-- [2026-03-12] [Claude] Phase 2C: Total 38.3K chars across 8 files (budget: 150K)
+- [2026-03-12] [Claude] Phase 2C: Total 38.3K chars across 8 files (budget: 150K) — later grew to ~50K with subsequent updates
 
 ### 6.2 Always-Loaded Skill
 

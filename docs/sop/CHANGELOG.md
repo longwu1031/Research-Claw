@@ -255,6 +255,28 @@ Code-to-documentation sync after comprehensive audit session.
 - [2026-03-12] [Modules] [Claude] **L4: BibTeX title validation** added to `library_add_paper` tool input
 - [2026-03-12] [Infra] [Claude] **M8: CHANGELOG ws count corrected** (was showing incorrect RPC count)
 
+### 2026-03-15 — v0.4.1 Release
+
+- [2026-03-15] [Infra] [Claude] **v0.4.1**: Docker cold start crash fix (`rc_cron_state` missing from schema DDL) + radar UX for new users
+- [2026-03-15] [Modules] [Claude] Added `rc_cron_state` to `CREATE_TABLES_SQL` array in `schema.ts` (was only created by migration, not initial DDL)
+
+### 2026-03-14 — v0.4.0 Release
+
+- [2026-03-14] [Infra] [Claude] **v0.4.0**: Provider sync with OC 2026.3.12, workspace drag-and-drop file move, cron recovery on reconnect, upload auth fix
+- [2026-03-14] [Dashboard] [Claude] Workspace drag-and-drop file move via `workspace_move` tool
+- [2026-03-14] [Modules] [Claude] Provider presets reordered (`zai-coding` before `zai` for urlPattern priority)
+- [2026-03-14] [Dashboard] [Claude] Cron presets reconciled on gateway reconnect — recovers lost jobs
+- [2026-03-14] [Dashboard] [Claude] Workspace upload auth fix
+- [2026-03-14] [Modules] [Claude] Provider presets aligned with OC 2026.3.12 (Google/Volcengine 500/503 fix)
+- [2026-03-14] [Dashboard] [Claude] Dashboard streaming & config loss fix — aligned with OC chat protocol
+
+### 2026-03-13 — v0.3.2 Release
+
+- [2026-03-13] [Infra] [Claude] **v0.3.2**: Session token usage tracking, channel crash-loop prevention, Docker docs overhaul
+- [2026-03-13] [Dashboard] [Claude] Session token tracking in StatusBar
+- [2026-03-13] [Infra] [Claude] Channel crash-loop prevention — install.sh cleanup + Bootstrap channel setup
+- [2026-03-13] [Infra] [Claude] Auto-fix `channels.commands.native` on every startup via `sync-global-config`
+
 ---
 
 ## Completed Work
@@ -277,7 +299,7 @@ Code-to-documentation sync after comprehensive audit session.
 - [x] ChatView, MessageBubble (+ CodeBlock integration), MessageInput (all complete)
 - [x] SetupWizard (217 lines, 1-step flow)
 - [x] App.tsx with responsive grid layout
-- [x] 7 Zustand stores (all fully implemented: gateway, chat, config, ui, library, tasks, sessions)
+- [x] 9 Zustand stores (gateway, chat, config, ui, library, tasks, sessions, cron, radar)
 - [x] Theme system (dark + light, HashMind aligned)
 - [x] i18n: en.json + zh-CN.json (244 keys each)
 - [x] global.css (188 lines)
@@ -309,22 +331,22 @@ Code-to-documentation sync after comprehensive audit session.
 - [x] i18n audit passed: 244 keys synchronized in both locales
 - [x] 318 total tests across 28 test files — all passing
 
-### Module Builder (P1-S2) — 97%
+### Module Builder (P1-S2) — 100%
 
-- [x] db/schema.ts (12 tables + FTS5 + rc_radar_config)
+- [x] db/schema.ts (15 tables + FTS5, SCHEMA_VERSION 6)
 - [x] db/connection.ts (better-sqlite3 manager, WAL mode)
-- [x] db/migrations.ts (v1 + v2 radar)
-- [x] LiteratureService (27 methods -- originally planned 26, 1 added)
-- [x] TaskService (13 methods including cron -- originally planned 10, 3 added)
+- [x] db/migrations.ts (v1-v6)
+- [x] LiteratureService (27 methods)
+- [x] TaskService (13 methods including cron + notifications)
 - [x] WorkspaceService (6+ methods + init/destroy)
 - [x] GitTracker
 - [x] Cards protocol (6 custom types; code_block handled by markdown renderer) + serializer
 - [x] Literature tools (12) + RPC (26)
-- [x] Task tools (6) + RPC (10 + 3 cron)
-- [x] Workspace tools (6) + RPC (7) + HTTP upload
-- [x] Radar tools (3) + RPC (3) — `radar_configure`, `radar_get_config`, `radar_scan` (arXiv + Semantic Scholar)
-- [x] Plugin entry index.ts (all registrations, 27 tools)
-- [x] 7 hooks registered (added `before_tool_call` exec guard)
+- [x] Task tools (9) + RPC (11 + 7 cron + 2 notifications)
+- [x] Workspace tools (7) + RPC (11) + HTTP upload
+- [x] Radar tools (3) + RPC (4) — `radar_configure`, `radar_get_config`, `radar_scan` (arXiv + Semantic Scholar)
+- [x] Plugin entry index.ts (31 tools, 61 WS RPC + 1 HTTP = 62 interfaces)
+- [x] 7 hooks registered (before_prompt_build, session_start, session_end, before_tool_call, agent_end, after_tool_call, gateway_start)
 
 ---
 
@@ -882,4 +904,4 @@ Code review revealed three additional bugs from the Unified Config Flow work.
 
 ---
 
-*Document: CHANGELOG | Created: 2026-03-11 | Last updated: 2026-03-13 (unified config flow + runtime bugfixes + layout/abort fixes)*
+*Document: CHANGELOG | Created: 2026-03-11 | Last updated: 2026-03-16 (v0.4.1 release, SOP factual corrections)*

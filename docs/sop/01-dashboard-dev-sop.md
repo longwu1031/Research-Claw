@@ -157,9 +157,11 @@ App.tsx (shell)
 | chat | `stores/chat.ts` | Message history, sessions |
 | library | `stores/library.ts` | Paper cache, search results |
 | tasks | `stores/tasks.ts` | Task list, filters |
-| config | `stores/config.ts` | User settings, citation style |
+| config | `stores/config.ts` | User settings, bootState |
 | sessions | `stores/sessions.ts` | Active session metadata |
-| ui | `stores/ui.ts` | Theme, layout state, panel visibility |
+| ui | `stores/ui.ts` | Theme, layout state, panel visibility, notifications |
+| cron | `stores/cron.ts` | Cron preset orchestration (plugin DB + gateway bridge) |
+| radar | `stores/radar.ts` | Radar tracking config cache |
 
 ---
 
@@ -194,7 +196,7 @@ App.tsx (shell)
 
 ### 5.3 Custom RPC Methods (from research-claw-core plugin)
 
-All `rc.*` namespace — see `docs/00-reference-map.md` SS3.2 for full list (46 methods).
+All `rc.*` namespace — see `docs/00-reference-map.md` SS3.2 for full list (61 WS methods).
 
 ### 5.4 Handshake Flow
 
@@ -217,7 +219,15 @@ All `rc.*` namespace — see `docs/00-reference-map.md` SS3.2 for full list (46 
 - Styles: `dashboard/src/styles/`
 - Tests: co-located `*.test.tsx` files
 
-### 6.2 Coding Standards
+### 6.2 Test Directory
+
+Tests live in two locations:
+- **Co-located store tests:** `stores/*.test.ts` (3 files: chat, config, cron)
+- **Centralized test suite:** `__tests__/` (25 files), including:
+  - `__tests__/parity/` — 13 gateway protocol parity tests (verify dashboard behavior matches OpenClaw internals)
+  - Integration tests, store edge-case tests, theme tests, bootstrap consistency tests
+
+### 6.3 Coding Standards
 
 - Strict TypeScript (`strict: true`, no `any`)
 - All UI strings via i18n (both en.json and zh-CN.json)
@@ -228,7 +238,7 @@ All `rc.*` namespace — see `docs/00-reference-map.md` SS3.2 for full list (46 
 - Component props: explicit TypeScript interfaces
 - State: Zustand stores only (no React Context for shared state)
 
-### 6.3 Testing Requirements
+### 6.4 Testing Requirements
 
 - Unit tests: vitest + happy-dom
 - Each component must have corresponding `.test.tsx`
@@ -236,7 +246,7 @@ All `rc.*` namespace — see `docs/00-reference-map.md` SS3.2 for full list (46 
 - Test i18n: use `i18n.changeLanguage('cimode')` for deterministic strings
 - Coverage target: 80%+ for gateway client, stores, card rendering
 
-### 6.4 Build & Preview
+### 6.5 Build & Preview
 
 ```bash
 cd dashboard
@@ -245,7 +255,7 @@ pnpm build        # Production build to dist/
 pnpm typecheck    # tsc --noEmit
 ```
 
-### 6.5 PR Checklist
+### 6.6 PR Checklist
 
 - [ ] TypeScript strict-check passes (`pnpm typecheck`)
 - [ ] Both en.json and zh-CN.json updated for new strings

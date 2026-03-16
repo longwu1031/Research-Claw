@@ -125,11 +125,22 @@ Browser                              Gateway
   │                                     │
   │──── req: connect ──────────────────→│
   │     {                               │
-  │       protocol: 3,                  │
-  │       clientName: "research-claw-dashboard",
-  │       clientVersion: "0.1.0",       │
-  │       platform: "browser",          │
-  │       mode: "local"                 │
+  │       minProtocol: 3,               │
+  │       maxProtocol: 3,               │
+  │       client: {                     │
+  │         id: "openclaw-control-ui",  │
+  │         version: "0.4.1",           │
+  │         platform: "browser",        │
+  │         mode: "ui",                 │
+  │         displayName: "Research-Claw Dashboard"
+  │       },                            │
+  │       role: "operator",             │
+  │       scopes: ["operator.read",     │
+  │         "operator.write",           │
+  │         "operator.admin"],          │
+  │       auth: { token: "..." },       │
+  │       device: { id, publicKey,      │
+  │         signature, signedAt, nonce }│
   │     }                               │
   │                                     │
   │◄─── hello-ok ──────────────────────│
@@ -288,9 +299,10 @@ interface GatewayState {
   state: ConnectionState;
   serverVersion: string | null;
   assistantName: string;
+  connId: string | null;
 
   // Actions
-  connect: (url: string) => void;
+  connect: (url: string, token?: string) => void;
   disconnect: () => void;
   setServerInfo: (hello: HelloOk) => void;
 }
@@ -422,25 +434,25 @@ interface TasksState {
 ### 4.6 Config Store
 
 ```typescript
+type BootState = 'pending' | 'ready' | 'needs_setup' | 'gateway_unreachable' | 'needs_token';
+
 interface ConfigState {
   theme: 'dark' | 'light';
   locale: 'en' | 'zh-CN';
-  model: string | null;
-  provider: string | null;
-  endpoint: string;
-  apiKey: string;
-  proxyUrl: string | null;               // Single URL string (e.g. "http://host:port")
-  notificationSound: boolean;
-  autoScroll: boolean;
-  fileOpenBehavior: 'system' | 'internal';
   systemPromptAppend: string;
-  setupComplete: boolean;
+  bootState: BootState;
+
+  /** Live config from gateway (via config.get RPC) */
+  gatewayConfig: GatewayConfig | null;
+  gatewayConfigLoading: boolean;
 
   setTheme: (t: 'dark' | 'light') => void;
   setLocale: (l: 'en' | 'zh-CN') => void;
-  loadConfig: () => Promise<void>;
-  saveConfig: (patch: Partial<ConfigState>) => Promise<void>;
-  completeSetup: (apiKey: string, provider: string) => Promise<void>;
+  setSystemPromptAppend: (v: string) => void;
+  loadConfig: () => void;
+  loadGatewayConfig: () => Promise<void>;
+  evaluateConfig: () => void;
+  setBootState: (s: BootState) => void;
 }
 ```
 
@@ -481,6 +493,35 @@ interface Notification {
   timestamp: string;
   read: boolean;
   chatMessageId?: string;  // Link to chat message
+}
+```
+
+### 4.8 Cron Store
+
+```typescript
+interface CronState {
+  presets: CronPreset[];
+  loading: boolean;
+
+  loadPresets: () => Promise<void>;
+  activatePreset: (presetId: string) => Promise<void>;
+  deactivatePreset: (presetId: string) => Promise<void>;
+}
+```
+
+### 4.9 Radar Store
+
+```typescript
+interface RadarState {
+  config: RadarConfig | null;
+  lastScan: { results: unknown[]; scanned_at: string | null } | null;
+  scanning: boolean;
+  loading: boolean;
+
+  loadConfig: () => Promise<void>;
+  saveConfig: (patch: Partial<RadarConfig>) => Promise<void>;
+  scan: (options?: { keywords?: string[]; sources?: string[] }) => Promise<void>;
+  loadLastScan: () => Promise<void>;
 }
 ```
 
@@ -871,7 +912,7 @@ i18n.use(initReactI18next).init({
     en: { translation: en },
     'zh-CN': { translation: zhCN },
   },
-  lng: localStorage.getItem('rc-locale') || 'en',
+  lng: localStorage.getItem('rc-locale') || 'zh-CN',
   fallbackLng: 'en',
   interpolation: { escapeValue: false },
 });

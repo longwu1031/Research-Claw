@@ -9,7 +9,7 @@
 | Version     | 1.0                                       |
 | Depends on  | `02` (engineering architecture), `03a` (literature library) |
 | Depended by | `03d` (task_card type), `03f` (plugin aggregation), `04` (HEARTBEAT.md) |
-| Defines     | `rc_tasks`, `rc_activity_log` tables; 6 agent tools; 10 `rc.task.*` RPC; 3 `rc.cron.presets.*` RPC |
+| Defines     | `rc_tasks`, `rc_activity_log` tables; 9 agent tools; 11 `rc.task.*` RPC; 7 `rc.cron.presets.*` RPC; 2 `rc.notifications.*` RPC |
 
 ---
 
@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS rc_tasks (
     updated_at      TEXT NOT NULL,                           -- ISO 8601
     parent_task_id  TEXT REFERENCES rc_tasks(id) ON DELETE SET NULL,
     related_paper_id TEXT REFERENCES rc_papers(id) ON DELETE SET NULL,
+    related_file_path TEXT,                                   -- Workspace-relative file path
     agent_session_id TEXT,                                   -- OpenClaw session ID
     tags            TEXT,                                    -- JSON array: '["writing","icml"]'
     notes           TEXT                                     -- Markdown notes
@@ -141,7 +142,7 @@ export interface Task {
   deadline: string | null; completed_at: string | null;
   created_at: string; updated_at: string;
   parent_task_id: string | null; related_paper_id: string | null;
-  agent_session_id: string | null;
+  related_file_path: string | null; agent_session_id: string | null;
   tags: string[]; notes: string | null;
 }
 
@@ -155,14 +156,15 @@ export interface TaskInput {
   title: string; description?: string; task_type: TaskType;
   priority?: TaskPriority; deadline?: string;
   parent_task_id?: string; related_paper_id?: string;
-  tags?: string[]; notes?: string;
+  related_file_path?: string; tags?: string[]; notes?: string;
 }
 
 export interface TaskPatch {
   title?: string; description?: string | null; task_type?: TaskType;
   status?: TaskStatus; priority?: TaskPriority; deadline?: string | null;
   parent_task_id?: string | null; related_paper_id?: string | null;
-  agent_session_id?: string | null; tags?: string[]; notes?: string | null;
+  related_file_path?: string | null; agent_session_id?: string | null;
+  tags?: string[]; notes?: string | null;
 }
 
 export interface TaskListParams {
@@ -183,7 +185,7 @@ export const PRIORITY_WEIGHT: Record<TaskPriority, number> = {
 
 ## 4. Agent Tools
 
-Six tools registered via `openclaw.plugin.json`. All follow the OpenClaw tool contract.
+Nine tools registered via `openclaw.plugin.json`. All follow the OpenClaw tool contract.
 
 ### 4.1 `task_create`
 
@@ -329,22 +331,80 @@ export const TOOL_TASK_NOTE = {
 
 **Behavior:** Appends with separator `\n\n---\n[{timestamp} | {actor}]\n{note}`. Logs `'note_added'`.
 
-### 4.7 Tool Summary
+### 4.7 `task_link_file`
 
-| Tool             | Required Params | Returns          | Activity Events             |
-|------------------|----------------|------------------|-----------------------------|
-| `task_create`    | title, task_type | `Task`          | `created`                   |
-| `task_list`      | (none)         | `{ items, total }` | (none)                   |
-| `task_complete`  | id             | `Task`           | `completed`                 |
-| `task_update`    | id             | `Task`           | One per changed field       |
-| `task_link`      | task_id, paper_id | `Task`        | `paper_linked`              |
-| `task_note`      | task_id, note  | `Task`           | `note_added`                |
+```typescript
+export const TaskLinkFileParams = Type.Object({
+  task_id:   Type.String({ format: 'uuid' }),
+  file_path: Type.String({ description: 'Workspace-relative path (e.g. "outputs/drafts/review.md")' }),
+});
+
+export const TOOL_TASK_LINK_FILE = {
+  name: 'task_link_file',
+  description: 'Link a task to a workspace file.',
+  parameters: TaskLinkFileParams,
+};
+```
+
+**Behavior:** Sets `related_file_path` on the task. Logs `'file_linked'` event.
+
+### 4.8 `cron_update_schedule`
+
+```typescript
+export const CronUpdateScheduleParams = Type.Object({
+  preset_id: Type.String({ description: 'Cron preset ID (e.g. "weekly_report", "arxiv_daily_scan")' }),
+  schedule:  Type.String({ description: 'Cron expression: "minute hour day-of-month month day-of-week"' }),
+});
+
+export const TOOL_CRON_UPDATE_SCHEDULE = {
+  name: 'cron_update_schedule',
+  description: 'Update the schedule of a cron preset.',
+  parameters: CronUpdateScheduleParams,
+};
+```
+
+**Behavior:** Validates the preset exists. Updates the schedule in `rc_cron_state`. Dashboard reflects the change on refresh.
+
+### 4.9 `send_notification`
+
+```typescript
+export const SendNotificationParams = Type.Object({
+  type:  Type.Union([
+    Type.Literal('deadline'), Type.Literal('heartbeat'),
+    Type.Literal('system'), Type.Literal('error'),
+  ], { description: 'Notification type' }),
+  title: Type.String({ description: 'Short notification title' }),
+  body:  Type.Optional(Type.String({ description: 'Detail text' })),
+});
+
+export const TOOL_SEND_NOTIFICATION = {
+  name: 'send_notification',
+  description: 'Push a notification to the dashboard bell icon.',
+  parameters: SendNotificationParams,
+};
+```
+
+**Behavior:** Creates a row in `rc_agent_notifications`. Appears in the dashboard bell dropdown.
+
+### 4.10 Tool Summary
+
+| Tool                  | Required Params        | Returns          | Activity Events             |
+|-----------------------|------------------------|------------------|-----------------------------|
+| `task_create`         | title, task_type       | `Task`           | `created`                   |
+| `task_list`           | (none)                 | `{ items, total }` | (none)                   |
+| `task_complete`       | id                     | `Task`           | `completed`                 |
+| `task_update`         | id                     | `Task`           | One per changed field       |
+| `task_link`           | task_id, paper_id      | `Task`           | `paper_linked`              |
+| `task_note`           | task_id, note          | `Task`           | `note_added`                |
+| `task_link_file`      | task_id, file_path     | `{ ok: true }`  | `file_linked`               |
+| `cron_update_schedule`| preset_id, schedule    | `CronPreset`     | (none)                      |
+| `send_notification`   | type, title            | `Notification`   | (none)                      |
 
 ---
 
 ## 5. Plugin RPC Methods
 
-Ten methods under `rc.task.*`, called via gateway WebSocket (protocol in `02`).
+Eleven methods under `rc.task.*`, called via gateway WebSocket (protocol in `02`).
 
 ### 5.1 `rc.task.list`
 
@@ -389,7 +449,7 @@ Hard delete. CASCADE removes activity log. Subtasks get `parent_task_id = NULL`.
 ### 5.7 `rc.task.upcoming`
 
 **Params:** `{ hours?: number }` (default: 48)
-**Returns:** `Task[]`
+**Returns:** `{ items: Task[], total: number, hours: number }`
 
 ```sql
 SELECT * FROM rc_tasks
@@ -403,7 +463,7 @@ ORDER BY deadline ASC;
 ### 5.8 `rc.task.overdue`
 
 **Params:** (none)
-**Returns:** `Task[]`
+**Returns:** `{ items: Task[], total: number }`
 
 ```sql
 SELECT * FROM rc_tasks
@@ -414,29 +474,35 @@ ORDER BY deadline ASC;
 
 ### 5.9 `rc.task.link`
 Link a task to a paper.
-- **Params:** `{ taskId: string, paperId: string }`
-- **Returns:** `{ linked: true }`
+- **Params:** `{ task_id: string, paper_id: string }`
+- **Returns:** `{ ok: true, linked: true, task_id: string, paper_id: string }`
 
-### 5.10 `rc.task.notes.add`
+### 5.10 `rc.task.linkFile`
+Link a task to a workspace file.
+- **Params:** `{ task_id: string, file_path: string }`
+- **Returns:** `{ ok: true, linked: true, task_id: string, file_path: string }`
+
+### 5.11 `rc.task.notes.add`
 Add a note to a task.
-- **Params:** `{ taskId: string, content: string }`
-- **Returns:** `{ id: string }`
+- **Params:** `{ task_id: string, content: string }`
+- **Returns:** `ActivityLogEntry`
 
-### 5.11 Error Codes
+### 5.12 Error Codes
 
-| Code     | Meaning                     | Used by                         |
-|----------|----------------------------|---------------------------------|
-| `-32001` | Task not found             | get, update, complete, delete   |
-| `-32002` | Invalid parent_task_id     | create, update                  |
-| `-32003` | Invalid related_paper_id   | create, update                  |
-| `-32004` | Invalid status transition  | update, complete                |
-| `-32600` | Invalid request            | All                             |
+| Code             | Meaning                     | Used by                         |
+|------------------|----------------------------|---------------------------------|
+| `INVALID_PARAMS` | Missing or invalid parameter | All (via RpcValidationError)   |
+| `SERVICE_ERROR`  | Service-layer failure       | All (via mapServiceError)       |
+
+> **Note:** Unlike `rc.lit.*` which uses numeric JSON-RPC codes (-32001 to -32012),
+> the task and cron RPC handlers use string-based error codes (`INVALID_PARAMS`,
+> `SERVICE_ERROR`) via `RpcValidationError`. This is a deliberate design divergence.
 
 ---
 
 ## 6. Cron/Heartbeat Integration
 
-Three preset cron jobs shipped with Research-Claw, plus 3 RPC methods for managing them.
+Five preset cron jobs shipped with Research-Claw, plus 7 cron RPC methods and 2 notification RPC methods for managing them.
 
 ### 6.1 Preset: arXiv Daily Scan
 
@@ -487,7 +553,27 @@ When deadline reminder runs, present the summary concisely. For overdue items,
 suggest next steps. For upcoming items, estimate feasibility given progress.
 ```
 
-### 6.4 Cron Preset RPC Methods
+### 6.4 Preset: Group Meeting Prep
+
+| Field     | Value                                                          |
+|-----------|----------------------------------------------------------------|
+| ID        | `group_meeting_prep`                                           |
+| Schedule  | `0 9 * * 1-5` (weekdays 09:00)                               |
+| Default   | Disabled                                                       |
+
+**When triggered:** Check USER.md for upcoming group meetings and prepare review materials, reading summaries, and discussion points.
+
+### 6.5 Preset: Weekly Report
+
+| Field     | Value                                                          |
+|-----------|----------------------------------------------------------------|
+| ID        | `weekly_report`                                                |
+| Schedule  | `0 17 * * 5` (Friday 17:00)                                  |
+| Default   | Disabled                                                       |
+
+**When triggered:** Generate a weekly research progress report: papers read, tasks completed, key findings, and next week goals. Save with `workspace_save("outputs/reports/weekly-report-YYYY-MM-DD.md")`.
+
+### 6.6 Cron Preset RPC Methods
 
 #### `rc.cron.presets.list`
 
@@ -522,9 +608,51 @@ Creates the underlying cron job via OpenClaw's `cron.create` API. Idempotent.
 
 Removes the cron job via `cron.delete`. Idempotent.
 
-Error `-32001` for unknown `preset_id` on both methods.
+Error `INVALID_PARAMS` for unknown `preset_id` on activate/deactivate.
 
-### 6.5 HEARTBEAT.md Integration
+#### `rc.cron.presets.setJobId`
+
+**Params:** `{ preset_id: string, job_id: string }`
+**Returns:** `{ ok: true, preset: CronPreset }`
+
+Store the gateway cron job ID after activation. Called internally by the gateway layer.
+
+#### `rc.cron.presets.delete`
+
+**Params:** `{ preset_id: string }`
+**Returns:** `{ ok: true }`
+
+Delete a cron preset from the database.
+
+#### `rc.cron.presets.restore`
+
+**Params:** `{ preset_id: string }`
+**Returns:** `{ ok: true, preset: CronPreset }`
+
+Restore a deleted preset from `PRESET_DEFINITIONS` back to the database.
+
+#### `rc.cron.presets.updateSchedule`
+
+**Params:** `{ preset_id: string, schedule: string }`
+**Returns:** `{ ok: true, preset: CronPreset }`
+
+Update the cron expression schedule of a preset. Persisted to `rc_cron_state`.
+
+#### `rc.notifications.pending`
+
+**Params:** `{ hours?: number }` (default: 48)
+**Returns:** `{ overdue: TaskSummary[], upcoming: TaskSummary[], custom: NotificationSummary[], timestamp: string }`
+
+Dashboard polls this on connect, after chat turns, and on a 60s timer for the bell icon.
+
+#### `rc.notifications.markRead`
+
+**Params:** `{ id: string }`
+**Returns:** `{ ok: true }`
+
+Mark a custom notification as read.
+
+### 6.7 HEARTBEAT.md Integration
 
 The task system injects a block into HEARTBEAT.md (see `04`) on each evaluation cycle:
 
@@ -591,8 +719,8 @@ Populated by calling `rc.task.overdue` and `rc.task.upcoming` during heartbeat e
 | `blocked`      | `in_progress`  | Yes     | **Back-transition**: blocker resolved |
 | `blocked`      | `done`         | Yes     | Resolved directly from blocked       |
 | `blocked`      | `cancelled`    | Yes     | Abandoned while blocked              |
-| `done`         | *any*          | **No**  | Terminal — create a new task instead  |
-| `cancelled`    | *any*          | **No**  | Terminal — create a new task instead  |
+| `done`         | `todo`         | Yes     | **Reopen**: send back to backlog      |
+| `cancelled`    | `todo`         | Yes     | **Reopen**: send back to backlog      |
 | `todo`         | `done`         | **No**  | Must pass through `in_progress`      |
 | `todo`         | `blocked`      | **No**  | Cannot block what hasn't started     |
 
@@ -605,8 +733,8 @@ const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   todo:        ['in_progress', 'cancelled'],
   in_progress: ['done', 'blocked', 'todo', 'cancelled'],
   blocked:     ['in_progress', 'done', 'cancelled'],
-  done:        [],
-  cancelled:   [],
+  done:        ['todo'],
+  cancelled:   ['todo'],
 };
 
 export function isValidTransition(from: TaskStatus, to: TaskStatus): boolean {
@@ -657,11 +785,12 @@ export function validateTransition(from: TaskStatus, to: TaskStatus): void {
 ### 8.3 This Document Is Source of Truth For
 
 - `rc_tasks` and `rc_activity_log` table schemas
-- 6 agent tools: `task_create`, `task_list`, `task_complete`, `task_update`, `task_link`, `task_note`
-- 10 RPC methods: `rc.task.{list,get,create,update,complete,delete,upcoming,overdue,link,notes.add}`
-- 3 RPC methods: `rc.cron.presets.{list,activate,deactivate}`
+- 9 agent tools: `task_create`, `task_list`, `task_complete`, `task_update`, `task_link`, `task_note`, `task_link_file`, `cron_update_schedule`, `send_notification`
+- 11 RPC methods: `rc.task.{list,get,create,update,complete,delete,upcoming,overdue,link,linkFile,notes.add}`
+- 7 RPC methods: `rc.cron.presets.{list,activate,deactivate,setJobId,delete,restore,updateSchedule}`
+- 2 RPC methods: `rc.notifications.{pending,markRead}`
 - Status state machine (transitions + side effects)
-- 3 cron presets: `arxiv_daily_scan`, `citation_tracking_weekly`, `deadline_reminders_daily`
+- 5 cron presets: `arxiv_daily_scan`, `citation_tracking_weekly`, `deadline_reminders_daily`, `group_meeting_prep`, `weekly_report`
 
 ---
 

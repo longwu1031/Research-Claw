@@ -9,8 +9,8 @@
 | **Status** | Draft |
 | **Depends on** | `02` (Engineering Architecture — HTTP route registration, RPC protocol) |
 | **Consumed by** | `03b` (task-file linking), `03e` (WorkspacePanel component), `03f` (plugin aggregation) |
-| **Namespace** | `rc.ws.*` (6 WS RPC methods + 1 HTTP route) |
-| **Agent tools** | 6 (`workspace_save`, `workspace_read`, `workspace_list`, `workspace_diff`, `workspace_history`, `workspace_restore`) |
+| **Namespace** | `rc.ws.*` (11 WS RPC methods + 1 HTTP route) |
+| **Agent tools** | 7 (`workspace_save`, `workspace_read`, `workspace_list`, `workspace_diff`, `workspace_history`, `workspace_restore`, `workspace_move`) |
 | **HTTP routes** | 1 (`POST /rc/upload`) |
 
 ---
@@ -386,6 +386,40 @@ type WorkspaceRestoreResult = Static<typeof WorkspaceRestoreResult>;
 4. Auto-commit: `Restore: <filename> to version <short_hash>`.
 5. Return the new commit hash.
 
+### 3.7 `workspace_move`
+
+Move or rename a file or directory within the workspace. Automatically commits the change.
+
+```typescript
+const WorkspaceMoveParams = Type.Object({
+  from: Type.String({
+    description: 'Source path relative to workspace root (e.g. "outputs/drafts/old-name.md")',
+    minLength: 1,
+    maxLength: 512,
+  }),
+  to: Type.String({
+    description: 'Destination path relative to workspace root (e.g. "outputs/drafts/new-name.md")',
+    minLength: 1,
+    maxLength: 512,
+  }),
+});
+type WorkspaceMoveParams = Static<typeof WorkspaceMoveParams>;
+
+const WorkspaceMoveResult = Type.Object({
+  from: Type.String(),
+  to: Type.String(),
+  committed: Type.Boolean(),
+});
+type WorkspaceMoveResult = Static<typeof WorkspaceMoveResult>;
+```
+
+**Behavior:**
+
+1. Validate both paths (no traversal).
+2. Move the file or directory from `from` to `to`.
+3. Auto-commit with git.
+4. Return the paths and commit status.
+
 ---
 
 ## 4. Plugin RPC Methods
@@ -526,44 +560,56 @@ interface RcWsRestoreResult {
 - Returns error `WS_COMMIT_NOT_FOUND` if hash is invalid.
 - Returns error `WS_FILE_NOT_IN_COMMIT` if file does not exist at that commit.
 
-### 4.6 `rc.ws.upload`
-
-> Note: rc.ws.upload is an HTTP POST endpoint (see §5), not a WS RPC method.
-
-Handle a file uploaded via the HTTP endpoint. Called internally after the HTTP
-handler receives and validates the multipart upload.
-
-```typescript
-// --- Request ---
-interface RcWsUploadParams {
-  filename: string;      // Original filename from the upload
-  destination: string;   // Relative path in workspace (e.g. "sources/papers/")
-}
-
-// --- Response ---
-interface RcWsUploadResult {
-  ok: true;
-  file: FileEntry;
-  committed: boolean;
-  commit_hash?: string;
-}
-```
-
-**Implementation notes:**
-
-- The HTTP handler writes the file to a temporary location first.
-- `rc.ws.upload` moves it to `<workspace_root>/<destination>/<filename>`.
-- If `destination` does not exist, create it.
-- If a file with the same name already exists, append a numeric suffix:
-  `smith2024.pdf` -> `smith2024_1.pdf`.
-- Auto-commit with message: `Upload: <filename> to <destination>`.
-
-### 4.7 `rc.ws.save`
+### 4.6 `rc.ws.save`
 
 Write content to a workspace file with optional auto-commit.
 
 - **Params:** `{ path: string, content: string, message?: string }`
 - **Returns:** `{ path: string, size: number, committed: boolean }`
+
+### 4.7 `rc.ws.delete`
+
+Delete a file from the workspace.
+
+- **Params:** `{ path: string }`
+- **Returns:** `{ ok: true }`
+
+### 4.8 `rc.ws.saveImage`
+
+Save a base64-encoded image to the workspace. Used by the dashboard to persist
+chat image uploads so the agent's image tool can access them by file path.
+
+- **Params:** `{ path: string, base64: string, mimeType?: string }`
+- **Returns:** `{ path: string, size: number }`
+
+### 4.9 `rc.ws.openExternal`
+
+Open a file with the system default application (macOS `open`, Windows `start`,
+Linux `xdg-open`).
+
+- **Params:** `{ path: string }`
+- **Returns:** `{ ok: true }`
+
+Path is validated to stay within the workspace root.
+
+### 4.10 `rc.ws.openFolder`
+
+Open the containing folder of a file in the system file manager.
+
+- **Params:** `{ path: string }`
+- **Returns:** `{ ok: true }`
+
+### 4.11 `rc.ws.move`
+
+Move or rename a file or directory within the workspace.
+
+- **Params:** `{ from: string, to: string }`
+- **Returns:** `{ from: string, to: string, committed: boolean }`
+
+### 4.12 `rc.ws.upload` (HTTP-only)
+
+> **Note:** `rc.ws.upload` is an HTTP POST endpoint (`POST /rc/upload`), NOT a WS
+> RPC method. See [Section 5](#5-http-endpoint) for details.
 
 ---
 
@@ -750,22 +796,25 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
-interface GitTrackerOptions {
+interface GitTrackerConfig {
   workspaceRoot: string;
-  authorName?: string;   // Default: "Research-Claw"
-  authorEmail?: string;  // Default: "research-claw@wentor.ai"
-  debounceMs?: number;   // Default: 5000
+  authorName: string;        // Default: "Research-Claw"
+  authorEmail: string;       // Default: "research-claw@wentor.ai"
+  commitDebounceMs: number;  // Default: 5000
+  maxFileSize: number;       // bytes — files larger than this are .gitignored
+  enabled: boolean;
 }
 
 class GitTracker {
   private root: string;
   private authorName: string;
   private authorEmail: string;
-  private debounceMs: number;
+  private commitDebounceMs: number;
+  private maxFileSize: number;
   private pendingPaths: Set<string>;
   private debounceTimer: ReturnType<typeof setTimeout> | null;
 
-  constructor(options: GitTrackerOptions);
+  constructor(config: GitTrackerConfig);
 
   /** Initialize git repo if not already initialized */
   async init(): Promise<void>;
@@ -865,7 +914,7 @@ private scheduleDebouncedCommit(filePath: string, message: string): void {
 
   this.debounceTimer = setTimeout(async () => {
     await this.flushDebouncedCommit();
-  }, this.debounceMs);
+  }, this.commitDebounceMs);
 }
 
 private async flushDebouncedCommit(): Promise<void> {
@@ -1173,7 +1222,7 @@ All errors follow the JSON-RPC error object format. Codes in the -32000 to
 | `03b` — Task System | Tasks can link to workspace files via `task_link` tool. The `resource_type: 'file'` + `resource_id: <workspace_path>` pattern connects tasks to outputs. |
 | `03e` — Dashboard UI | `WorkspacePanel` component consumes `rc.ws.tree`, `rc.ws.read`, `rc.ws.history`. Timeline component defined in section 6 of this document is rendered inside `WorkspacePanel`. |
 | `03d` — Message Card Protocol | The `file_card` message card type renders a workspace file preview in the chat. It uses `FileEntry` fields for display. |
-| `03f` — Plugin Aggregation | All 6 agent tools and 7 RPC methods are registered in the `research-claw-core` plugin's `activate()` function. |
+| `03f` — Plugin Aggregation | All 7 agent tools and 11 WS RPC methods (+1 HTTP route) are registered in the `research-claw-core` plugin's `activate()` function. |
 | `04` — Prompt Design | `AGENTS.md` instructs the agent to use `workspace_save` for all file outputs and to prefer the `outputs/` subtree for generated content. |
 
 ---

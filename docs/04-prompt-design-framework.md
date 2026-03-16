@@ -69,9 +69,10 @@ research-claw/
     TOOLS.md
     MEMORY.md
   skills/
-    _always/
-      research-sop/
-        SKILL.md              # always:true skill, loaded every session
+    research-sop/
+      SKILL.md                # always:true skill, loaded every session
+    wentor-api/
+      SKILL.md                # Platform API documentation skill
   config/
     openclaw.json             # Points gateway.workspace to ./workspace
 ```
@@ -1107,7 +1108,7 @@ This is not a bootstrap file but an `always: true` skill that is loaded in every
 session via the skills system. It lives at:
 
 ```
-skills/_always/research-sop/SKILL.md
+skills/research-sop/SKILL.md
 ```
 
 ### Complete File Content

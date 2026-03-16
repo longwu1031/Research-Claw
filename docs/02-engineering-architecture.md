@@ -48,9 +48,9 @@ Cross-references: [`05` Plugin SDK details](./modules/05-plugin-sdk.md) | [`03e`
  │                  │  │  research-claw-core   │    │    wentor-connect       │  │   │
  │                  │  │  (L1 plugin)          │    │    (L1 plugin, future)  │  │   │
  │                  │  │                       │    │                         │  │   │
- │                  │  │  - 18 agent tools     │    │  - account sync         │  │   │
- │                  │  │  - 12 RPC methods     │    │  - skills sync          │  │   │
- │                  │  │  - 6 hooks            │    │  - telemetry            │  │   │
+ │                  │  │  - 31 agent tools     │    │  - account sync         │  │   │
+ │                  │  │  - 61 WS RPC methods  │    │  - skills sync          │  │   │
+ │                  │  │  - 7 hooks            │    │  - telemetry            │  │   │
  │                  │  │  - 1 HTTP route       │    │                         │  │   │
  │                  │  │  - 1 service (SQLite) │    │  (deferred post-MVP)    │  │   │
  │                  │  └───────┬──────────────┘    └──────────────────────────┘  │   │
@@ -153,7 +153,7 @@ The plugin tier uses OpenClaw's documented Plugin SDK. Plugins are TypeScript pa
 
 | Plugin | Status | Description |
 |--------|--------|-------------|
-| `research-claw-core` | MVP (P0) | Literature library, task management, workspace tracking, 24 tools, 46 RPC methods |
+| `research-claw-core` | MVP (P0) | Literature library, task management, workspace tracking, 31 tools, 61 WS RPC + 1 HTTP = 62 interface methods |
 | `wentor-connect` | Placeholder | Wentor platform sync (deferred post-MVP) |
 
 **Upgrade risk: LOW.** Plugin SDK is semver-stable. Breaking changes only on OpenClaw major versions. TypeScript compilation catches interface drift at build time.
@@ -171,7 +171,7 @@ The dashboard communicates with the gateway exclusively through the WebSocket RP
 **Coupling surface:**
 - Frame format: `req` / `res` / `event` JSON frames (see [Section 4](#4-ws-rpc-protocol-v3))
 - Handshake: `connect.challenge` → `connect` → `hello-ok`
-- Method set: ~50 built-in + 12 custom `rc.*` methods (see [Section 5](#5-rpc-method-inventory))
+- Method set: ~50 built-in + 61 custom `rc.*` WS methods + 1 HTTP route (see [Section 5](#5-rpc-method-inventory))
 
 **Upgrade risk: MEDIUM.** Protocol version bumps (v3 → v4) require dashboard updates. However, OpenClaw maintains backward compatibility for at least one protocol version and announces changes in release notes.
 
@@ -254,7 +254,7 @@ The switch is clean because OpenClaw's `gateway.controlUi.root` simply serves st
 |-----------|-----------|---------|
 | **Node.js** | Node.js LTS | 22.12+ |
 | **Package Manager** | pnpm | 9.15+ |
-| **Entry** | OpenClaw gateway | `node ./node_modules/openclaw/dist/entry.js gateway run` |
+| **Entry** | OpenClaw gateway | `node ./node_modules/openclaw/dist/entry.js gateway run --allow-unconfigured --auth token --port 28789 --force` (via `scripts/run.sh` auto-restart wrapper) |
 
 ### Repository Structure
 
@@ -722,34 +722,98 @@ Methods the dashboard calls from OpenClaw's standard gateway. Grouped by domain.
 
 ### 5.2 Custom Research-Claw Methods (rc.*)
 
-Registered by the `research-claw-core` plugin via `api.registerGatewayMethod()`. These extend the RPC surface for dashboard-specific functionality.
+Registered by the `research-claw-core` plugin via `api.registerGatewayMethod()`. These extend the RPC surface for dashboard-specific functionality. **61 WS methods + 1 HTTP route = 62 total.**
 
-#### rc.lit.* — Literature Library
-
-| Method | Params | Returns | Description |
-|--------|--------|---------|-------------|
-| `rc.lit.list` | `{ q?, tags?, sort?, offset?, limit? }` | `{ papers: Paper[], total: number }` | List/search papers |
-| `rc.lit.get` | `{ id: string }` | `Paper` | Get paper by ID |
-| `rc.lit.stats` | `{}` | `{ total, readingHours, tagsDistribution }` | Library statistics |
-| `rc.lit.tags` | `{}` | `string[]` | All unique tags |
-| `rc.lit.recent` | `{ limit? }` | `Paper[]` | Recently added papers |
-| `rc.lit.export` | `{ ids: string[], format: string }` | `{ bibtex: string }` | Export citations |
-
-#### rc.task.* — Task System
+#### rc.lit.* — Literature Library (26 methods)
 
 | Method | Params | Returns | Description |
 |--------|--------|---------|-------------|
-| `rc.task.list` | `{ status?, type?, sort?, offset?, limit? }` | `{ tasks: Task[], total: number }` | List/filter tasks |
-| `rc.task.get` | `{ id: string }` | `Task` | Get task by ID |
-| `rc.task.overdue` | `{}` | `Task[]` | All overdue tasks |
-| `rc.task.upcoming` | `{ withinHours? }` | `Task[]` | Tasks due within window |
+| `rc.lit.list` | `{ read_status?, year?, source?, tags?, collection_id?, has_pdf?, offset?, limit?, sort? }` | `{ items: Paper[], total, offset, limit }` | List/filter papers |
+| `rc.lit.get` | `{ id }` | `Paper` (enriched with reading_sessions, citing_count, cited_by_count) | Get paper by ID |
+| `rc.lit.add` | `{ paper: PaperInput }` or flat params | `Paper` | Add paper to library |
+| `rc.lit.update` | `{ id, patch: PaperPatch }` | `Paper` | Update paper fields |
+| `rc.lit.delete` | `{ id }` | `{ ok: true }` | Delete paper |
+| `rc.lit.status` | `{ id, status }` | `Paper` | Set read status |
+| `rc.lit.rate` | `{ id, rating }` | `Paper` | Rate paper (1-5, 0 to clear) |
+| `rc.lit.tags` | `{}` | `Tag[]` | All tags |
+| `rc.lit.tag` | `{ paper_id, tag_name, color? }` | `{ paper_id, tags }` | Add tag to paper |
+| `rc.lit.untag` | `{ paper_id, tag_name }` | `{ paper_id, tags }` | Remove tag from paper |
+| `rc.lit.reading.start` | `{ paper_id }` | `ReadingSession` | Start reading session |
+| `rc.lit.reading.end` | `{ session_id, notes?, pages_read? }` | `ReadingSession` | End reading session |
+| `rc.lit.reading.list` | `{ paper_id }` | `ReadingSession[]` | List reading sessions for paper |
+| `rc.lit.cite` | `{ citing_id, cited_id, context?, section? }` | `Citation` | Record citation relationship |
+| `rc.lit.citations` | `{ paper_id, direction? }` | `{ citing, cited_by }` | Get citations |
+| `rc.lit.search` | `{ query, limit?, offset? }` | `{ items, total }` | Full-text search (FTS5) |
+| `rc.lit.duplicate_check` | `{ doi?, title?, arxiv_id? }` | `DuplicateResult` | Check for duplicate paper |
+| `rc.lit.stats` | `{}` | `LibraryStats` | Library statistics |
+| `rc.lit.batch_add` | `{ papers: PaperInput[] }` | `BatchResult` | Batch import papers |
+| `rc.lit.import_bibtex` | `{ bibtex }` | `ImportResult` | Import from BibTeX |
+| `rc.lit.export_bibtex` | `{ paper_ids?, tag?, collection?, all? }` | `{ bibtex, count }` | Export as BibTeX |
+| `rc.lit.collections.list` | `{}` | `Collection[]` | List collections |
+| `rc.lit.collections.manage` | `{ action, id?, name?, description?, color?, paper_ids? }` | `CollectionResult` | CRUD collections |
+| `rc.lit.notes.list` | `{ paper_id }` | `Note[]` | List notes on paper |
+| `rc.lit.notes.add` | `{ paper_id, content, page?, highlight? }` | `Note` | Add note to paper |
+| `rc.lit.notes.delete` | `{ note_id }` | `{ ok: true }` | Delete note |
 
-#### rc.ws.* — Workspace
+#### rc.task.* — Task System (11 methods)
 
 | Method | Params | Returns | Description |
 |--------|--------|---------|-------------|
-| `rc.ws.list` | `{ path? }` | `WorkspaceEntry[]` | List workspace files |
-| `rc.ws.history` | `{ path: string, limit? }` | `WorkspaceVersion[]` | File version history |
+| `rc.task.list` | `{ status?, priority?, task_type?, sort?, direction?, offset?, limit?, include_completed? }` | `{ items, total }` | List/filter tasks |
+| `rc.task.get` | `{ id }` | `Task` (with activity_log, subtasks) | Get task by ID |
+| `rc.task.create` | `{ task: TaskInput }` | `Task` | Create task |
+| `rc.task.update` | `{ id, patch: TaskPatch }` | `Task` | Update task fields |
+| `rc.task.complete` | `{ id, notes? }` | `Task` | Mark task as done |
+| `rc.task.delete` | `{ id }` | `{ ok, deleted, id }` | Delete task |
+| `rc.task.upcoming` | `{ hours? }` | `{ items, total, hours }` | Tasks due within N hours |
+| `rc.task.overdue` | `{}` | `{ items, total }` | All overdue tasks |
+| `rc.task.link` | `{ task_id, paper_id }` | `{ ok, linked, task_id, paper_id }` | Link task to paper |
+| `rc.task.linkFile` | `{ task_id, file_path }` | `{ ok, linked, task_id, file_path }` | Link task to workspace file |
+| `rc.task.notes.add` | `{ task_id, content }` | `ActivityLogEntry` | Append note to task |
+
+#### rc.cron.presets.* — Cron Presets (7 methods)
+
+| Method | Params | Returns | Description |
+|--------|--------|---------|-------------|
+| `rc.cron.presets.list` | `{}` | `{ presets }` | List all cron presets with state |
+| `rc.cron.presets.activate` | `{ preset_id, config? }` | `Preset` | Activate a cron preset |
+| `rc.cron.presets.deactivate` | `{ preset_id }` | `Preset` | Deactivate a cron preset |
+| `rc.cron.presets.setJobId` | `{ preset_id, job_id }` | `Preset` | Store gateway cron job ID |
+| `rc.cron.presets.delete` | `{ preset_id }` | `{ ok }` | Delete a cron preset from DB |
+| `rc.cron.presets.restore` | `{ preset_id }` | `Preset` | Restore a deleted preset from PRESET_DEFINITIONS |
+| `rc.cron.presets.updateSchedule` | `{ preset_id, schedule }` | `{ preset }` | Update cron schedule expression |
+
+#### rc.ws.* — Workspace (11 methods)
+
+| Method | Params | Returns | Description |
+|--------|--------|---------|-------------|
+| `rc.ws.tree` | `{ root?, depth? }` | `{ tree: TreeNode[] }` | Directory tree listing |
+| `rc.ws.read` | `{ path }` | `FileContent` | Read a single file |
+| `rc.ws.save` | `{ path, content, message? }` | `{ path, size, committed }` | Write file with optional auto-commit |
+| `rc.ws.history` | `{ path?, limit?, offset? }` | `{ commits, total, has_more }` | Paginated git log |
+| `rc.ws.diff` | `{ path?, from?, to? }` | `{ diff, files_changed, insertions, deletions }` | Git diff |
+| `rc.ws.restore` | `{ path, commit }` | `{ path, restored_from, new_commit }` | Restore file to historical version |
+| `rc.ws.delete` | `{ path }` | `{ ok }` | Delete a file from workspace |
+| `rc.ws.saveImage` | `{ path, base64, mimeType? }` | `{ path, size }` | Save base64-encoded image |
+| `rc.ws.openExternal` | `{ path }` | `{ ok }` | Open file with system default app |
+| `rc.ws.openFolder` | `{ path }` | `{ ok }` | Open containing folder in file manager |
+| `rc.ws.move` | `{ from, to }` | `{ from, to, committed }` | Move or rename file/directory |
+
+#### rc.radar.* — Radar Tracking (4 methods)
+
+| Method | Params | Returns | Description |
+|--------|--------|---------|-------------|
+| `rc.radar.config.get` | `{}` | `RadarConfig` | Get radar tracking config |
+| `rc.radar.config.set` | `{ keywords?, authors?, journals?, sources? }` | `RadarConfig` | Set radar tracking config |
+| `rc.radar.scan` | `{ keywords?, sources?, max_results? }` | `{ results }` | Scan sources for new papers |
+| `rc.radar.lastScan` | `{}` | `{ results, scanned_at }` | Get cached last scan results |
+
+#### rc.notifications.* — Notifications (2 methods)
+
+| Method | Params | Returns | Description |
+|--------|--------|---------|-------------|
+| `rc.notifications.pending` | `{ hours? }` | `{ overdue, upcoming, custom, timestamp }` | Pending notifications for dashboard bell |
+| `rc.notifications.markRead` | `{ id }` | `{ ok }` | Mark a notification as read |
 
 ---
 
@@ -766,7 +830,7 @@ const plugin: OpenClawPluginDefinition = {
   id: 'research-claw-core',
   name: 'Research-Claw Core',
   description: 'Literature library, task management, workspace tracking',
-  version: '0.1.0',
+  version: '0.4.1',
 
   async register(api: OpenClawPluginApi) {
     // All registrations happen here
@@ -1079,7 +1143,7 @@ function openDatabase(dbPath: string): Database.Database {
 ### 7.3 Table Schema (all prefixed `rc_`)
 
 > **Source of truth:** `extensions/research-claw-core/src/db/schema.ts`
-> **12 regular tables + 1 FTS5 virtual table, 3 triggers, 23 indexes.**
+> **15 regular tables + 1 FTS5 virtual table, 3 triggers, 23 indexes. (SCHEMA_VERSION 6)**
 >
 > **Obsolete tables from this section's earlier version** (removed):
 > - ~~`rc_meta`~~ — replaced by `rc_schema_version`

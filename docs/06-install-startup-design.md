@@ -34,6 +34,8 @@ patch (~20 lines across 7 files).
 **Target platforms**: macOS (darwin arm64/x64), Windows (x64/arm64).
 **Runtime**: Node.js >= 22.12, pnpm >= 9.15.
 
+> **Note:** `install.sh` and the daemon scripts also accept Linux for OpenClaw compatibility, but Linux is not an officially supported product platform. The product targets macOS and Windows only.
+
 ### File Map
 
 ```
@@ -808,16 +810,28 @@ echo ""
 
 ### Primary Command
 
+The gateway is started via `scripts/run.sh`, an auto-restart wrapper that detects the correct Node binary (conda `openclaw` env preferred), sets the config path via `OPENCLAW_CONFIG_PATH`, and relaunches the gateway on exit (SIGUSR1 self-restart for config changes).
+
 ```bash
-node ./node_modules/openclaw/dist/entry.js gateway run --config ./config/openclaw.json
+# Actual gateway invocation inside scripts/run.sh:
+"$GW_NODE" ./node_modules/openclaw/dist/entry.js \
+  gateway run --allow-unconfigured --auth token --port 28789 --force
 ```
 
-This is registered as `pnpm start` in `package.json`:
+Flags:
+- `--allow-unconfigured` — starts even if no API key is set (setup wizard handles it)
+- `--auth token` — uses `OPENCLAW_GATEWAY_TOKEN` for dashboard auth (default: `research-claw`)
+- `--port 28789` — explicit port (matches config)
+- `--force` — starts even if another gateway is running
+
+This is registered as `pnpm start` / `pnpm serve` in `package.json`:
 
 ```json
 {
   "scripts": {
-    "start": "node ./node_modules/openclaw/dist/entry.js gateway run --config ./config/openclaw.json"
+    "start": "bash scripts/run.sh",
+    "serve": "bash scripts/run.sh",
+    "dev": "concurrently \"pnpm --filter dashboard dev\" \"bash scripts/run.sh\""
   }
 }
 ```
@@ -825,7 +839,7 @@ This is registered as `pnpm start` in `package.json`:
 ### What Happens at Startup
 
 ```
-node entry.js gateway run --config ./config/openclaw.json
+scripts/run.sh → node entry.js gateway run --allow-unconfigured --auth token --port 28789 --force
   │
   ├─ Load config/openclaw.json
   │    ├─ gateway.mode = "local"       → bind to 127.0.0.1 only
@@ -861,7 +875,7 @@ node entry.js gateway run --config ./config/openclaw.json
   │
   └─ Gateway ready
        ├─ HTTP:  http://127.0.0.1:28789
-       ├─ WS:    ws://127.0.0.1:28789/socket.io/
+       ├─ WS:    ws://127.0.0.1:28789
        └─ Dashboard: http://127.0.0.1:28789 (serves dashboard/dist/)
 ```
 
@@ -923,8 +937,12 @@ File: `ai.wentor.research-claw.plist`
     <string>./node_modules/openclaw/dist/entry.js</string>
     <string>gateway</string>
     <string>run</string>
-    <string>--config</string>
-    <string>./config/openclaw.json</string>
+    <string>--allow-unconfigured</string>
+    <string>--auth</string>
+    <string>token</string>
+    <string>--port</string>
+    <string>28789</string>
+    <string>--force</string>
   </array>
 
   <key>WorkingDirectory</key>
@@ -935,6 +953,12 @@ File: `ai.wentor.research-claw.plist`
     <!-- Set PATH so node can find pnpm, git, etc. -->
     <key>PATH</key>
     <string>/usr/local/bin:/usr/bin:/bin</string>
+    <!-- Project config (run.sh sets this; daemon needs it explicitly) -->
+    <key>OPENCLAW_CONFIG_PATH</key>
+    <string>./config/openclaw.json</string>
+    <!-- Token auth — matches Dashboard's DEFAULT_TOKEN -->
+    <key>OPENCLAW_GATEWAY_TOKEN</key>
+    <string>research-claw</string>
   </dict>
 
   <key>KeepAlive</key>
@@ -1022,7 +1046,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/home/USERNAME/research-claw
-ExecStart=/usr/bin/node ./node_modules/openclaw/dist/entry.js gateway run --config ./config/openclaw.json
+ExecStart=/usr/bin/node ./node_modules/openclaw/dist/entry.js gateway run --allow-unconfigured --auth token --port 28789 --force
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -1039,6 +1063,8 @@ PrivateTmp=yes
 
 # Environment
 EnvironmentFile=/home/USERNAME/research-claw/.env
+Environment=OPENCLAW_CONFIG_PATH=./config/openclaw.json
+Environment=OPENCLAW_GATEWAY_TOKEN=research-claw
 
 [Install]
 WantedBy=default.target

@@ -309,7 +309,8 @@ api.registerTool({
   (e.g., `rc_literature_search`) to avoid collisions.
 - `parameters` uses TypeBox schemas (a JSON Schema builder). The schema is sent
   to the LLM as the tool's parameter specification.
-- `execute` receives the raw `toolCallId` (string) and parsed `params` object.
+- `execute` receives `(toolCallId: string, params: Record<string, unknown>)`.
+  The first arg is the unique tool call ID; the second is the parsed parameters object.
 - Return value must follow the `ToolResult` shape: `{ content: ContentPart[] }`.
   Each `ContentPart` is `{ type: "text", text: string }` or
   `{ type: "image", data: string, mimeType: string }`.
@@ -414,86 +415,76 @@ Gateway methods expose WebSocket RPC endpoints. The Dashboard (or any WS
 client) calls them via the gateway protocol:
 
 ```
-→  { "type": "request", "id": 1, "method": "rc.lit.search", "params": { "query": "attention" } }
-←  { "type": "response", "id": 1, "result": { "papers": [...] } }
+→  { "type": "req", "id": "uuid", "method": "rc.lit.search", "params": { "query": "attention" } }
+←  { "type": "res", "id": "uuid", "ok": true, "payload": { "papers": [...] } }
 ```
 
 #### Handler Signature
 
+The gateway passes an `opts` object to each handler:
+
 ```typescript
-type GatewayRequestHandler = (
-  params: unknown,
-  respond: (payload: unknown) => void,
-  context: {
-    sessionKey?: string;
-    authenticated: boolean;
-    config: OpenClawConfig;
-  }
-) => void | Promise<void>;
+type GatewayRequestHandler = (opts: {
+  params: Record<string, unknown>;
+  respond: (ok: boolean, payload?: unknown, error?: { code: string; message: string }) => void;
+}) => void | Promise<void>;
 ```
+
+> **Note:** Research-Claw wraps this with a bridge function in `index.ts` that
+> extracts `opts.params`, awaits the result, and calls `opts.respond()`. RPC
+> handlers are written as simple `(params) => result` functions; the bridge
+> handles the opts pattern transparently.
 
 #### Example: Paper Search RPC
 
 ```typescript
-api.registerGatewayMethod(
-  "rc.lit.search",
-  async (params, respond, context) => {
-    const { query, tags, limit } = params as {
-      query: string;
-      tags?: string[];
-      limit?: number;
-    };
+// Handler uses simple (params) => result signature (bridge in index.ts wraps it)
+const searchHandler = async (params: Record<string, unknown>) => {
+  const { query, tags, limit } = params as {
+    query: string;
+    tags?: string[];
+    limit?: number;
+  };
+  return db.searchPapers(query, { tags, limit });
+};
 
-    try {
-      const results = await db.searchPapers(query, { tags, limit });
-      respond({ ok: true, papers: results });
-    } catch (err) {
-      respond({ ok: false, error: String(err) });
-    }
+// Bridge wraps handler for gateway's opts pattern:
+api.registerGatewayMethod("rc.lit.search", async (opts) => {
+  try {
+    const result = await searchHandler(opts.params);
+    opts.respond(true, result);
+  } catch (err) {
+    opts.respond(false, undefined, { code: "PLUGIN_ERROR", message: String(err) });
   }
-);
+});
 ```
 
 #### Example: Stateful Data Fetch
 
 ```typescript
-api.registerGatewayMethod(
-  "rc.lit.get",
-  async (params, respond, context) => {
-    const { id } = params as { id: string };
+api.registerGatewayMethod("rc.lit.get", async (opts) => {
+  try {
+    const { id } = opts.params as { id: string };
     const paper = await db.getPaper(id);
-    if (!paper) {
-      respond({ ok: false, error: "not_found" });
-      return;
-    }
-    respond({ ok: true, paper });
+    if (!paper) throw new Error("Paper not found");
+    opts.respond(true, paper);
+  } catch (err) {
+    opts.respond(false, undefined, { code: "PLUGIN_ERROR", message: String(err) });
   }
-);
-
-api.registerGatewayMethod(
-  "rc.lit.stats",
-  async (_params, respond) => {
-    const stats = await db.getLibraryStats();
-    respond({
-      ok: true,
-      totalPapers: stats.total,
-      tagCounts: stats.byTag,
-      recentlyAdded: stats.recent,
-    });
-  }
-);
+});
 ```
 
 **Namespace convention:** All Research-Claw methods use the `rc.` prefix,
 followed by the module namespace:
 
-| Prefix        | Module              |
-|---------------|---------------------|
-| `rc.lit.*`    | Literature library  |
-| `rc.task.*`   | Task system         |
-| `rc.ws.*`     | Workspace tracking  |
-| `rc.cron.*`   | Scheduled tasks     |
-| `rc.dash.*`   | Dashboard utilities |
+| Prefix                | Module              | Method Count |
+|-----------------------|---------------------|-------------|
+| `rc.lit.*`            | Literature library  | 26 |
+| `rc.task.*`           | Task system         | 11 |
+| `rc.cron.presets.*`   | Cron presets        | 7 |
+| `rc.notifications.*`  | Notifications       | 2 |
+| `rc.ws.*`             | Workspace tracking  | 11 |
+| `rc.radar.*`          | Radar tracking      | 4 |
 
 ### 3.3 registerHttpRoute()
 
@@ -1800,51 +1791,28 @@ import type { OpenClawPluginApi } from "openclaw";
 import { getDb } from "../db/connection.js";
 
 export function registerLiteratureRpc(api: OpenClawPluginApi): void {
-  api.registerGatewayMethod("rc.lit.search", async (params, respond) => {
-    const { query, tags, limit = 20 } = params as {
-      query: string;
-      tags?: string[];
-      limit?: number;
-    };
+  // RPC handlers use simple (params) => result signature.
+  // The bridge in index.ts wraps them for the gateway's opts pattern.
+  const registerMethod = (method: string, handler: (params: Record<string, unknown>) => unknown) => {
+    api.registerGatewayMethod(method, async (opts: { params: Record<string, unknown>; respond: Function }) => {
+      try {
+        const result = await handler(opts.params);
+        opts.respond(true, result);
+      } catch (err) {
+        opts.respond(false, undefined, { code: 'PLUGIN_ERROR', message: String(err) });
+      }
+    });
+  };
 
-    try {
-      const db = getDb();
-      const stmt = db.prepare(`
-        SELECT p.id, p.title, p.authors, p.year, p.tags
-        FROM rc_papers_fts AS fts
-        JOIN rc_papers AS p ON p.rowid = fts.rowid
-        WHERE rc_papers_fts MATCH ?
-        LIMIT ?
-      `);
-      const rows = stmt.all(query, limit);
-
-      const papers = rows.map((r: any) => ({
-        ...r,
-        authors: JSON.parse(r.authors),
-        tags: JSON.parse(r.tags),
-      }));
-
-      respond({ ok: true, papers, total: papers.length });
-    } catch (err) {
-      api.logger.error("rc.lit.search failed", { error: String(err) });
-      respond({ ok: false, error: "search_failed" });
-    }
+  registerMethod("rc.lit.search", async (params) => {
+    const { query, limit = 20 } = params as { query: string; limit?: number };
+    const db = getDb();
+    const result = service.search(query, limit);
+    return result;
   });
 
-  api.registerGatewayMethod("rc.lit.tags", async (_params, respond) => {
-    try {
-      const db = getDb();
-      const rows = db
-        .prepare(
-          `SELECT DISTINCT value AS tag
-           FROM rc_papers, json_each(rc_papers.tags)
-           ORDER BY tag`
-        )
-        .all();
-      respond({ ok: true, tags: rows.map((r: any) => r.tag) });
-    } catch (err) {
-      respond({ ok: false, error: "tags_failed" });
-    }
+  registerMethod("rc.lit.tags", async () => {
+    return service.getTags();
   });
 }
 ```
