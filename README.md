@@ -241,9 +241,8 @@ curl -fsSL https://wentor.ai/install.sh | bash
 
 | 平台 | 方案 | 依赖 |
 |:--|:--|:--|
-| macOS / Linux | 一键安装脚本 | Git（自动安装）· Node.js 22（自动安装）|
-| Windows | Docker Desktop | [Docker Desktop](https://www.docker.com/products/docker-desktop/) |
-| Windows | WSL2 手动安装 | WSL2 Ubuntu · Git · Node.js 22 |
+| macOS / Linux | 一键安装脚本（推荐） | Git · Node.js 22（均自动安装） |
+| macOS / Linux / Windows | Docker 一键安装 | [Docker Desktop](https://www.docker.com/products/docker-desktop/) |
 
 所有平台均需 LLM API Key（推荐 Anthropic Claude / OpenAI，支持国内中转 API）。
 
@@ -251,11 +250,37 @@ curl -fsSL https://wentor.ai/install.sh | bash
 
 ### 安装
 
-```bash
-# 方式一：一键安装（推荐）
-curl -fsSL https://wentor.ai/install.sh | bash
+**macOS / Linux — 源码一键安装（推荐）：**
 
-# 方式二：手动安装
+```bash
+curl -fsSL https://wentor.ai/install.sh | bash
+```
+
+**Docker 一键安装（macOS / Linux / Windows 通用）：**
+
+先安装 [Docker Desktop](https://docs.docker.com/desktop/)，确保启动后托盘显示 Running，然后：
+
+```bash
+# macOS / Linux
+curl -fsSL https://wentor.ai/docker-install.sh | bash
+```
+
+```powershell
+# Windows PowerShell
+irm https://wentor.ai/docker-install.ps1 | iex
+```
+
+> 脚本自动完成：检测 Docker → 停止/删除旧容器 → 拉取最新镜像 → 启动 → 打开浏览器。
+> 重复运行即可更新到最新版本，数据不丢失（持久化在 Docker named volumes 中）。
+
+安装完成后浏览器自动打开 `http://127.0.0.1:28789`，在 **Setup Wizard** 中配置 API Key，无需编辑任何配置文件。
+
+<details>
+<summary><b>手动安装 / 大陆网络 / 故障排查</b></summary>
+
+#### 手动安装（源码）
+
+```bash
 git clone https://github.com/wentorai/Research-Claw.git
 cd Research-Claw
 pnpm install && pnpm build
@@ -263,43 +288,9 @@ cp config/openclaw.example.json config/openclaw.json
 pnpm serve
 ```
 
-安装完成后浏览器自动打开 `http://127.0.0.1:28789`，在 **Setup Wizard** 中配置 API Key，无需编辑任何配置文件。修改配置后网关自动重启，无需手动操作。
+#### 本地构建 Docker（大陆用户备选）
 
-### Docker 一键部署（Windows 推荐）
-
-Windows 用户推荐用 Docker Desktop，无需安装 WSL2 或 Node.js。macOS / Linux 同样适用。
-
-#### 0. 安装 Docker Desktop
-
-前往 [Docker Desktop 官方下载页](https://docs.docker.com/desktop/setup/install/windows-install/) 下载并安装。安装完成后启动 Docker Desktop，确保系统托盘出现鲸鱼图标且显示 **Running**。
-
-> **Windows 用户**：如果 Docker Desktop 提示「WSL needs updating」，先在 PowerShell 中运行 `wsl --update`，重启 Docker Desktop 后再继续。
->
-> macOS / Linux 用户同样需要安装 Docker Desktop 或 Docker Engine。详见 [Docker 官方文档](https://docs.docker.com/engine/install/)。
-
-#### 1. 直接拉取预构建镜像（推荐）
-
-打开 **PowerShell**（Windows）或**终端**（macOS / Linux），运行以下命令：
-
-```bash
-docker pull ghcr.io/wentorai/research-claw:latest
-```
-
-**macOS / Linux：**
-
-```bash
-docker run -d --name research-claw -p 127.0.0.1:28789:28789 -v rc-config:/app/config -v rc-data:/root/.research-claw -v rc-workspace:/app/workspace ghcr.io/wentorai/research-claw:latest
-```
-
-**Windows（PowerShell）：**
-
-```powershell
-docker run -d --name research-claw -p 127.0.0.1:28789:28789 -v rc-config:/app/config -v rc-data:/root/.research-claw -v rc-workspace:/app/workspace ghcr.io/wentorai/research-claw:latest
-```
-
-> 大陆用户如果拉取超时，请先配置 Docker 镜像加速（见下方），或使用方式 2 本地构建。
-
-#### 2. 本地构建并启动（大陆用户备选）
+GHCR（`ghcr.io`）在大陆无法直接访问。可以从源码本地构建，Dockerfile 已内置清华 apt 源 + npmmirror：
 
 ```bash
 git clone https://github.com/wentorai/Research-Claw.git
@@ -307,70 +298,24 @@ cd Research-Claw
 docker compose up -d --build
 ```
 
-> Dockerfile 已内置清华 apt 源 + npmmirror，构建过程无需翻墙。
-> 如果 `git clone` 也超时，可在 `docker-compose.yml` 中取消注释 `HTTP_PROXY` 行并填入你的代理地址。
+或者在 Docker Desktop → Settings → Resources → Proxies 中配置代理后使用一键脚本。
 
-#### 3. 配置 Docker 镜像加速（大陆必做）
+#### Docker 连接不上？
 
-GHCR（`ghcr.io`）在大陆无法直接访问。有两种方案：
+1. **验证端口**：`curl http://127.0.0.1:28789/healthz` — 返回 `{"ok":true}` 说明正常
+2. **用 `127.0.0.1`**：Windows 上 `localhost` 可能解析到 IPv6，导致连接失败
+3. **检查 Docker**：确认 Docker Desktop 状态为 Running，容器状态为绿色
+4. **重启**：`docker restart research-claw`
 
-**方案 A：使用代理**（推荐）
+#### Docker 详细说明
 
-在 Docker Desktop → Settings → Resources → Proxies 中配置 HTTP/HTTPS 代理。
-
-**方案 B：使用方式 2 本地构建**
-
-完全绕过 GHCR，从源码在本地构建镜像。Dockerfile 已内置清华 apt 源 + npmmirror。
-
-> `registry-mirrors` 仅对 Docker Hub 生效，无法加速 GHCR。
-
-#### 4. 配置 & 使用
-
-启动后直接打开 Dashboard：
-
-```
-http://127.0.0.1:28789/?token=research-claw
-```
-
-进入 **Setup Wizard** → 填入 API Key → 开始使用。
-
-> **Token 认证**：Docker 模式使用 token 认证（`--auth token`），因为容器内无法完成本地安装默认的浏览器设备认证流程。
-> - **默认 token**：`research-claw`。docker run 和 docker compose 均使用此默认值，直接访问 `http://127.0.0.1:28789/?token=research-claw`。
-> - **自定义 token**：设置环境变量 `OPENCLAW_GATEWAY_TOKEN=your-token`（docker run 用 `-e`，compose 在 `environment` 中修改）。
+> **Token 认证**：Docker 模式使用 token 认证。默认 token 为 `research-claw`，直接访问 `http://127.0.0.1:28789/?token=research-claw`。自定义：`docker run -e OPENCLAW_GATEWAY_TOKEN=your-token ...`
 >
-> **安全说明**：配置文件中的 `dangerouslyDisableDeviceAuth: true` 是 Docker 部署的必要设置——容器网络桥接非 loopback，无法通过设备配对认证。`allowedOrigins` 限制仅允许 `127.0.0.1` 和 `localhost` 访问 Dashboard，端口默认仅映射到 `127.0.0.1:28789`（不对外暴露）。
-
-> **数据持久化**：数据库、配置、工作区均挂载在具名 volume（`rc-config`、`rc-data`、`rc-workspace`），容器删除后数据不丢失。
+> **数据持久化**：配置、数据库、工作区挂载在具名 volume（`rc-config`、`rc-data`、`rc-workspace`），容器删除后数据不丢失。
 >
-> **代理设置**：如果你的 LLM API（如 OpenAI）需要代理访问，取消 `docker-compose.yml` 中 `environment` 下 `HTTP_PROXY` / `HTTPS_PROXY` 行的注释，填入 `http://host.docker.internal:7890`（Docker 容器访问宿主机代理的标准地址）。
+> **代理设置**：LLM API 需要代理时，在 `docker-compose.yml` 中取消 `HTTP_PROXY` / `HTTPS_PROXY` 注释，填入 `http://host.docker.internal:7890`。
 
-#### 5. 连接不上？
-
-如果浏览器打开后页面空白或提示无法连接：
-
-**① 验证端口是否可达**（在宿主机终端执行，Windows 用 PowerShell）：
-
-```bash
-curl http://127.0.0.1:28789/healthz
-```
-
-返回 `{"ok":true,"status":"live"}` 说明 gateway 正常运行且端口可达，跳到步骤 ②。
-如果报错（连接被拒绝 / 超时），说明 Docker 端口转发异常——重启 Docker Desktop 后重试。
-
-**② 使用 `127.0.0.1`，不要用 `localhost`**
-
-```
-http://127.0.0.1:28789/?token=research-claw
-```
-
-> Windows 上 `localhost` 可能解析到 IPv6 (`::1`)，而 Docker 容器仅绑定 IPv4 (`0.0.0.0`)，导致连接失败。`127.0.0.1` 强制使用 IPv4，避免此问题。
-
-**③ 仍然不行？**
-
-- 检查 Windows Defender 防火墙是否阻断了 28789 端口
-- 确认 Docker Desktop 状态栏显示 **Running**（非 Paused / Stopping）
-- 在 Docker Desktop → Containers 中确认容器状态为绿色
-- 尝试 `docker restart research-claw` 后再访问
+</details>
 
 ### 常用命令
 

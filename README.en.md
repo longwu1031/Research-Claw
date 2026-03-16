@@ -241,9 +241,8 @@ Four layers of defense-in-depth. The first three are hard constraints enforced i
 
 | Platform | Method | Prerequisites |
 |:--|:--|:--|
-| macOS / Linux | One-click script | Git · Node.js 22 (auto-installed) |
-| Windows | Docker Desktop | [Docker Desktop](https://www.docker.com/products/docker-desktop/) |
-| Windows | WSL2 manual | WSL2 Ubuntu · Git · Node.js 22 |
+| macOS / Linux | One-click script (recommended) | Git · Node.js 22 (auto-installed) |
+| macOS / Linux / Windows | Docker one-click | [Docker Desktop](https://www.docker.com/products/docker-desktop/) |
 
 All platforms require an LLM API key (Anthropic Claude / OpenAI recommended).
 
@@ -251,11 +250,37 @@ All platforms require an LLM API key (Anthropic Claude / OpenAI recommended).
 
 ### Install
 
-```bash
-# Option 1: One-click (macOS / Linux, recommended)
-curl -fsSL https://wentor.ai/install.sh | bash
+**macOS / Linux — source one-click (recommended):**
 
-# Option 2: Manual
+```bash
+curl -fsSL https://wentor.ai/install.sh | bash
+```
+
+**Docker one-click (macOS / Linux / Windows):**
+
+Install [Docker Desktop](https://docs.docker.com/desktop/) first, make sure it shows Running, then:
+
+```bash
+# macOS / Linux
+curl -fsSL https://wentor.ai/docker-install.sh | bash
+```
+
+```powershell
+# Windows PowerShell
+irm https://wentor.ai/docker-install.ps1 | iex
+```
+
+> The script automatically: checks Docker → stops/removes old container → pulls latest image → starts → opens browser.
+> Re-run anytime to update. Data persists in Docker named volumes.
+
+After install, your browser opens `http://127.0.0.1:28789`. Follow the **Setup Wizard** to configure your API key — no config file editing needed.
+
+<details>
+<summary><b>Manual install / China network / Troubleshooting</b></summary>
+
+#### Manual install (source)
+
+```bash
 git clone https://github.com/wentorai/Research-Claw.git
 cd Research-Claw
 pnpm install && pnpm build
@@ -263,43 +288,9 @@ cp config/openclaw.example.json config/openclaw.json
 pnpm serve
 ```
 
-After install, your browser opens `http://127.0.0.1:28789`. Follow the **Setup Wizard** to configure your LLM provider and API key — no config file editing needed. Config changes auto-restart the gateway.
+#### Local Docker build (China mainland alternative)
 
-### Docker One-Click Deploy (Windows recommended)
-
-No WSL2 or Node.js required — just [Docker Desktop](https://www.docker.com/products/docker-desktop/). Also works on macOS / Linux.
-
-#### 0. Install Docker Desktop
-
-Download and install from the [Docker Desktop official page](https://docs.docker.com/desktop/setup/install/windows-install/). After installation, launch Docker Desktop and make sure the whale icon in the system tray shows **Running**.
-
-> **Windows users**: If Docker Desktop shows "WSL needs updating", run `wsl --update` in PowerShell first, then restart Docker Desktop.
->
-> macOS / Linux users also need Docker Desktop or Docker Engine. See [Docker official docs](https://docs.docker.com/engine/install/).
-
-#### 1. Pull pre-built image (recommended)
-
-Open **PowerShell** (Windows) or **Terminal** (macOS / Linux) and run:
-
-```bash
-docker pull ghcr.io/wentorai/research-claw:latest
-```
-
-**macOS / Linux:**
-
-```bash
-docker run -d --name research-claw -p 127.0.0.1:28789:28789 -v rc-config:/app/config -v rc-data:/root/.research-claw -v rc-workspace:/app/workspace ghcr.io/wentorai/research-claw:latest
-```
-
-**Windows (PowerShell):**
-
-```powershell
-docker run -d --name research-claw -p 127.0.0.1:28789:28789 -v rc-config:/app/config -v rc-data:/root/.research-claw -v rc-workspace:/app/workspace ghcr.io/wentorai/research-claw:latest
-```
-
-> China mainland users: if the pull times out, configure a Docker mirror accelerator (see step 3) or use the local build method below.
-
-#### 2. Build locally (alternative for China mainland)
+GHCR (`ghcr.io`) is blocked in mainland China. Build from source instead — the Dockerfile uses Chinese mirrors (TUNA apt + npmmirror):
 
 ```bash
 git clone https://github.com/wentorai/Research-Claw.git
@@ -307,69 +298,24 @@ cd Research-Claw
 docker compose up -d --build
 ```
 
-> The Dockerfile uses Chinese mirrors (TUNA apt + npmmirror) by default. If you need a proxy for GitHub, uncomment the `HTTP_PROXY` lines in `docker-compose.yml`.
+Or configure a proxy in Docker Desktop → Settings → Resources → Proxies, then use the one-click script.
 
-#### 3. Configure Docker mirror accelerator (required for China mainland)
+#### Can't connect?
 
-GHCR (`ghcr.io`) is blocked in mainland China. Two options:
+1. **Verify port**: `curl http://127.0.0.1:28789/healthz` — returns `{"ok":true}` if working
+2. **Use `127.0.0.1`**: On Windows, `localhost` may resolve to IPv6, causing failures
+3. **Check Docker**: Confirm Docker Desktop shows Running, container is green
+4. **Restart**: `docker restart research-claw`
 
-**Option A: Use a proxy** (recommended)
+#### Docker details
 
-In Docker Desktop → Settings → Resources → Proxies, configure your HTTP/HTTPS proxy.
-
-**Option B: Build locally (Option 2 above)**
-
-Bypasses GHCR entirely — builds from source. The Dockerfile uses Chinese mirrors (TUNA apt + npmmirror) by default.
-
-> `registry-mirrors` only accelerates Docker Hub, not GHCR.
-
-#### 4. Configure & Use
-
-After starting, open the Dashboard:
-
-```
-http://127.0.0.1:28789/?token=research-claw
-```
-
-Go to **Setup Wizard** → enter your API key → start using.
-
-> **Token auth**: Docker mode uses token auth (`--auth token`) because the container cannot complete the browser device-pairing flow used by local installs.
-> - **Default token**: `research-claw`. Both `docker run` and `docker compose` use this default — visit `http://127.0.0.1:28789/?token=research-claw` directly.
-> - **Custom token**: set `OPENCLAW_GATEWAY_TOKEN=your-token` (use `-e` for `docker run`, or modify `environment` in `docker-compose.yml`).
+> **Token auth**: Docker uses token auth. Default: `research-claw` — visit `http://127.0.0.1:28789/?token=research-claw`. Custom: `docker run -e OPENCLAW_GATEWAY_TOKEN=your-token ...`
 >
-> **Security**: `dangerouslyDisableDeviceAuth: true` in the config is required for Docker — the container's bridged network is not loopback, so device-pairing auth cannot work. `allowedOrigins` restricts access to `127.0.0.1` and `localhost` only, and the port is mapped to `127.0.0.1:28789` by default (not exposed externally).
-
-> **Persistence**: database, config, and workspace are stored in named volumes (`rc-config`, `rc-data`, `rc-workspace`) — data survives container restarts and removal.
+> **Persistence**: Config, database, workspace in named volumes (`rc-config`, `rc-data`, `rc-workspace`) — survives container removal.
 >
-> **Proxy**: If your LLM API (e.g. OpenAI) requires a proxy, uncomment the `HTTP_PROXY` / `HTTPS_PROXY` lines under `environment` in `docker-compose.yml` and set to `http://host.docker.internal:7890` (standard Docker-to-host address).
+> **Proxy for LLM API**: Uncomment `HTTP_PROXY` / `HTTPS_PROXY` in `docker-compose.yml`, set to `http://host.docker.internal:7890`.
 
-#### 5. Can't connect?
-
-If the page is blank or shows a connection error:
-
-**① Verify the port is reachable** (run on the host machine, use PowerShell on Windows):
-
-```bash
-curl http://127.0.0.1:28789/healthz
-```
-
-If it returns `{"ok":true,"status":"live"}`, the gateway is running — go to step ②.
-If it fails (connection refused / timeout), Docker port forwarding is broken — restart Docker Desktop and retry.
-
-**② Use `127.0.0.1`, not `localhost`**
-
-```
-http://127.0.0.1:28789/?token=research-claw
-```
-
-> On Windows, `localhost` may resolve to IPv6 (`::1`) while Docker only binds IPv4 (`0.0.0.0`). Using `127.0.0.1` forces IPv4 and avoids this issue.
-
-**③ Still not working?**
-
-- Check if Windows Defender Firewall is blocking port 28789
-- Confirm Docker Desktop shows **Running** (not Paused / Stopping)
-- Verify the container is green in Docker Desktop → Containers
-- Try `docker restart research-claw` then reload the page
+</details>
 
 ### Commands
 
