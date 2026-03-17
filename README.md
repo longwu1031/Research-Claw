@@ -367,6 +367,58 @@ research-claw/
 
 ---
 
+## 卸载
+
+### macOS / Linux（源码安装）
+
+```bash
+# 1. 停止运行中的进程
+cd ~/Research-Claw && pnpm stop 2>/dev/null
+
+# 2. 删除项目目录
+rm -rf ~/Research-Claw
+
+# 3. 删除本地数据（数据库、配置、记忆）
+rm -rf ~/.research-claw
+
+# 4.（可选）删除 OpenClaw 全局配置
+rm -rf ~/.openclaw
+
+# 5.（可选）清除 pnpm 全局缓存
+pnpm store prune
+```
+
+### Docker（macOS / Linux / Windows）
+
+```bash
+# 1. 停止并删除容器
+docker stop research-claw && docker rm research-claw
+
+# 2. 删除镜像
+docker rmi ghcr.io/wentorai/research-claw:latest
+
+# 3.（可选）删除持久化数据（配置、数据库、工作区）
+docker volume rm rc-config rc-data rc-workspace
+```
+
+Windows PowerShell 命令相同，在 PowerShell 中逐行执行即可。
+
+> **注意**：执行第 3 步将永久删除所有数据（论文库、任务、工作区文件、雷达配置）。如需保留数据，跳过此步。
+
+### WSL2（Windows 手动安装）
+
+```powershell
+# 1. 在 WSL2 中停止并删除（同 Linux 步骤）
+wsl -e bash -c "cd ~/Research-Claw && pnpm stop 2>/dev/null; rm -rf ~/Research-Claw ~/.research-claw ~/.openclaw"
+
+# 2.（可选）如果 WSL2 仅用于科研龙虾，可以完全卸载 WSL 发行版
+wsl --unregister Ubuntu
+```
+
+> 卸载 WSL 发行版会删除该发行版内的**所有数据**，请确认无其他用途后再操作。
+
+---
+
 ## 许可证
 
 [BSL 1.1](LICENSE) — 个人及学术研究免费使用。商业用途需单独授权，联系 [help@wentor.ai](mailto:help@wentor.ai)。2030-03-12 自动转为 Apache 2.0 开源。

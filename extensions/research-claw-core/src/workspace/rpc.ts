@@ -231,6 +231,9 @@ export function registerWorkspaceRpc(
   // -----------------------------------------------------------------------
   // 9. rc.ws.openExternal — Open a file with the system default application
   //    params: { path: string }
+  //    On macOS, falls back to `open -t` (default text editor) if the
+  //    default `open` fails — handles .tex, .bib, .r, etc. that may not
+  //    have an associated app.
   // -----------------------------------------------------------------------
   registerMethod('rc.ws.openExternal', async (params: Record<string, unknown>) => {
     const filePath = requireString(params, 'path');
@@ -242,18 +245,36 @@ export function registerWorkspaceRpc(
       throw Object.assign(new Error('Path escapes workspace root'), { code: -32001 });
     }
 
-    const cmd = process.platform === 'darwin'
-      ? `open ${JSON.stringify(resolved)}`
-      : process.platform === 'win32'
-        ? `start "" ${JSON.stringify(resolved)}`
-        : `xdg-open ${JSON.stringify(resolved)}`;
+    const quoted = JSON.stringify(resolved);
+    const run = (cmd: string) =>
+      new Promise<void>((res, rej) => exec(cmd, (err) => (err ? rej(err) : res())));
 
-    return new Promise<{ ok: boolean }>((resolve, reject) => {
-      exec(cmd, (err) => {
-        if (err) reject(new Error(`Failed to open file: ${err.message}`));
-        else resolve({ ok: true });
+    if (process.platform === 'darwin') {
+      try {
+        await run(`open ${quoted}`);
+      } catch (firstErr) {
+        // Fallback: open with default text editor (handles .tex, .bib, .r, etc.)
+        // Only for files — `open -t` doesn't work on directories.
+        const ext = path.extname(resolved);
+        if (ext) {
+          await run(`open -t ${quoted}`).catch(() => {
+            throw new Error(`Failed to open file: ${(firstErr as Error).message}`);
+          });
+        } else {
+          throw new Error(`Failed to open file: ${(firstErr as Error).message}`);
+        }
+      }
+    } else if (process.platform === 'win32') {
+      await run(`start "" ${quoted}`).catch((err) => {
+        throw new Error(`Failed to open file: ${err.message}`);
       });
-    });
+    } else {
+      await run(`xdg-open ${quoted}`).catch((err) => {
+        throw new Error(`Failed to open file: ${err.message}`);
+      });
+    }
+
+    return { ok: true };
   });
 
   // -----------------------------------------------------------------------

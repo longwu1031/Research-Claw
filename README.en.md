@@ -367,6 +367,58 @@ research-claw/
 
 ---
 
+## Uninstall
+
+### macOS / Linux (Source Install)
+
+```bash
+# 1. Stop the running process
+cd ~/Research-Claw && pnpm stop 2>/dev/null
+
+# 2. Remove the project directory
+rm -rf ~/Research-Claw
+
+# 3. Remove local data (database, config, memory)
+rm -rf ~/.research-claw
+
+# 4. (Optional) Remove OpenClaw global config
+rm -rf ~/.openclaw
+
+# 5. (Optional) Clean pnpm global cache
+pnpm store prune
+```
+
+### Docker (macOS / Linux / Windows)
+
+```bash
+# 1. Stop and remove the container
+docker stop research-claw && docker rm research-claw
+
+# 2. Remove the image
+docker rmi ghcr.io/wentorai/research-claw:latest
+
+# 3. (Optional) Remove persistent data (config, database, workspace)
+docker volume rm rc-config rc-data rc-workspace
+```
+
+On Windows, run the same commands in PowerShell.
+
+> **Warning**: Step 3 permanently deletes all data (paper library, tasks, workspace files, radar config). Skip this step if you want to keep your data.
+
+### WSL2 (Windows Manual Install)
+
+```powershell
+# 1. Stop and remove inside WSL2 (same as Linux steps)
+wsl -e bash -c "cd ~/Research-Claw && pnpm stop 2>/dev/null; rm -rf ~/Research-Claw ~/.research-claw ~/.openclaw"
+
+# 2. (Optional) If WSL2 was only used for Research-Claw, unregister the distro entirely
+wsl --unregister Ubuntu
+```
+
+> Unregistering a WSL distro deletes **all data** within it. Make sure you have no other use for it before proceeding.
+
+---
+
 ## License
 
 [BSL 1.1](LICENSE) — Free for personal and academic research use. Commercial use requires a separate license from [Wentor AI](https://wentor.ai) (help@wentor.ai). Converts to Apache 2.0 on 2030-03-12.
