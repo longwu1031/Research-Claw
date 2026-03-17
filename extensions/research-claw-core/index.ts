@@ -6,8 +6,8 @@
  *
  * Registration totals:
  *   - 41 agent tools (17 literature + 10 task + 7 workspace + 3 radar + 4 monitor)
- *   - 80 WS RPC methods + 1 HTTP route = 81 interface methods
- *     (33 rc.lit.* + 11 rc.task.* + 7 rc.cron.* + 2 rc.notifications.* + 2 rc.heartbeat.* + 11 rc.ws.* + 4 rc.radar.* + 10 rc.monitor.* = 80 WS; POST /rc/upload = 1 HTTP)
+ *   - 82 WS RPC methods + 1 HTTP route = 83 interface methods
+ *     (34 rc.lit.* + 11 rc.task.* + 7 rc.cron.* + 2 rc.notifications.* + 2 rc.heartbeat.* + 12 rc.ws.* + 4 rc.radar.* + 10 rc.monitor.* = 82 WS; POST /rc/upload = 1 HTTP)
  *   - 8 hooks (before_prompt_build, session_start, session_end, before_tool_call, agent_end, after_tool_call ×2, gateway_start, agent:bootstrap)
  *   - 1 service (research-claw-db lifecycle)
  */
@@ -725,7 +725,7 @@ const plugin: PluginDefinition = {
       api.logger.warn('registerHook not available — system files will remain at workspace root');
     }
 
-    api.logger.info('Research-Claw Core registered (41 tools, 80 WS RPC + 1 HTTP = 81 interfaces, 8 hooks)');
+    api.logger.info('Research-Claw Core registered (41 tools, 82 WS RPC + 1 HTTP = 83 interfaces, 8 hooks)');
   },
 };
 
