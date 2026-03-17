@@ -613,7 +613,6 @@ const plugin: PluginDefinition = {
             const content = fs.readFileSync(rcPath, 'utf-8');
             return { ...file, path: rcPath, content, missing: false };
           } catch {
-            // .ResearchClaw/ version not found — fall back to root (or missing)
             return file;
           }
         });
