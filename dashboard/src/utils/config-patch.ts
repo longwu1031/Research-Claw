@@ -119,11 +119,76 @@ function resolveExistingApiKey(
  * (which may be __OPENCLAW_REDACTED__) is preserved. The gateway's
  * restoreRedactedValues() restores sentinels to real values on write.
  */
+/**
+ * RC-specific config fields that must survive a config.apply round-trip.
+ * When currentConfig is null (e.g. config.get returned valid:false due to CWD drift),
+ * these defaults prevent RC functionality (plugins, skills, tools, dashboard) from
+ * being erased. Values here use relative paths — run.sh resolves them to absolute
+ * before gateway startup.
+ */
+const RC_CONFIG_DEFAULTS: Record<string, unknown> = {
+  ui: { assistant: { name: 'Research-Claw' } },
+  gateway: {
+    port: 28789,
+    mode: 'local',
+    bind: 'loopback',
+    controlUi: {
+      root: './dashboard/dist',
+      allowedOrigins: [
+        'http://127.0.0.1:28789', 'http://localhost:28789',
+        'http://127.0.0.1:5175', 'http://localhost:5175',
+      ],
+    },
+    auth: { mode: 'none' },
+  },
+  skills: { load: { extraDirs: ['./skills'] } },
+  plugins: {
+    enabled: true,
+    load: { paths: ['./extensions/research-claw-core'] },
+    entries: {
+      'research-claw-core': {
+        enabled: true,
+        config: {
+          dbPath: '.research-claw/library.db',
+          autoTrackGit: true,
+          defaultCitationStyle: 'apa',
+          heartbeatDeadlineWarningHours: 48,
+        },
+      },
+    },
+  },
+  tools: {
+    profile: 'full',
+    alsoAllow: [
+      'library_add_paper', 'library_search', 'library_update_paper', 'library_get_paper',
+      'library_export_bibtex', 'library_reading_stats', 'library_batch_add',
+      'library_manage_collection', 'library_tag_paper', 'library_add_note',
+      'library_import_bibtex', 'library_citation_graph',
+      'task_create', 'task_list', 'task_complete', 'task_update',
+      'task_link', 'task_note', 'task_link_file', 'cron_update_schedule', 'send_notification',
+      'workspace_save', 'workspace_read', 'workspace_list', 'workspace_diff',
+      'workspace_history', 'workspace_restore', 'workspace_move',
+      'radar_configure', 'radar_get_config', 'radar_scan',
+      'search_papers', 'get_paper', 'get_citations',
+      'search_openalex', 'get_work', 'get_author_openalex',
+      'resolve_doi', 'search_crossref', 'search_arxiv', 'get_arxiv_paper',
+      'search_pubmed', 'get_article', 'find_oa_version',
+    ],
+    sessions: { visibility: 'all' },
+  },
+  commands: { native: 'auto', nativeSkills: 'auto', restart: true, ownerDisplay: 'raw' },
+  cron: { enabled: true },
+};
+
 export function buildSaveConfig(
   currentConfig: Record<string, unknown> | null,
   input: ConfigPatchInput,
 ): Record<string, unknown> {
-  const base = currentConfig ? structuredClone(currentConfig) : {};
+  // When currentConfig is null (config.get returned valid:false), use RC defaults
+  // to prevent plugins/skills/tools/gateway fields from being erased.
+  const base = currentConfig
+    ? structuredClone(currentConfig)
+    : structuredClone(RC_CONFIG_DEFAULTS);
 
   const providerKey = input.provider;
   const baseUrl = cleanUrl(input.baseUrl);

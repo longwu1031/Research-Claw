@@ -86,6 +86,10 @@ export default function PaperCard(props: PaperCardType) {
 
   const pdfUrl = props.url ?? (props.arxiv_id ? `https://arxiv.org/pdf/${props.arxiv_id}` : null);
 
+  // Defense: papers without any verifiable identifier (doi, arxiv_id, url) are likely
+  // LLM hallucinations — disable "Add to Library" to prevent garbage entering the library.
+  const hasVerifiableId = !!(props.doi || props.arxiv_id || props.url);
+
   return (
     <CardContainer borderColor={borderColor}>
       {/* Header: status badge + title */}
@@ -202,12 +206,13 @@ export default function PaperCard(props: PaperCardType) {
         <Button
           size="small"
           icon={<BookOutlined />}
-          disabled={added}
+          disabled={added || !hasVerifiableId}
           onClick={handleAddToLibrary}
           aria-label={added ? t('card.paper.inLibrary') : t('card.paper.addToLibrary')}
+          title={!hasVerifiableId ? t('card.paper.noIdentifier', { defaultValue: 'Paper has no DOI, arXiv ID, or URL' }) : undefined}
           style={{
             borderColor: tokens.accent.blue,
-            color: added ? tokens.text.muted : tokens.accent.blue,
+            color: (added || !hasVerifiableId) ? tokens.text.muted : tokens.accent.blue,
           }}
         >
           {added ? t('card.paper.inLibrary') : t('card.paper.addToLibrary')}

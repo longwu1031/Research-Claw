@@ -80,12 +80,21 @@ try {
 const abs = (p) => path.resolve(PROJECT_ROOT, p);
 
 // --- Deep merge helper (source wins, but preserves target-only keys) ---
-function merge(target, source) {
+// Special case: gateway.controlUi.allowedOrigins uses union-dedup so that
+// user-added custom origins in ~/.openclaw/openclaw.json survive the sync.
+// All other arrays use source-wins (project config is authoritative).
+function merge(target, source, _path) {
+  const currentPath = _path || '';
   const result = { ...target };
   for (const [key, val] of Object.entries(source)) {
+    const fieldPath = currentPath ? `${currentPath}.${key}` : key;
     if (val && typeof val === 'object' && !Array.isArray(val) &&
         result[key] && typeof result[key] === 'object' && !Array.isArray(result[key])) {
-      result[key] = merge(result[key], val);
+      result[key] = merge(result[key], val, fieldPath);
+    } else if (Array.isArray(val) && Array.isArray(result[key]) &&
+               fieldPath === 'gateway.controlUi.allowedOrigins') {
+      // Union-dedup: project defaults first (canonical order), user additions appended
+      result[key] = [...new Set([...val, ...result[key]])];
     } else {
       result[key] = val;
     }

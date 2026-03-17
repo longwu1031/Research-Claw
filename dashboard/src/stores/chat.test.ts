@@ -313,12 +313,17 @@ describe('Chat store', () => {
       expect(mockGatewayClient.request).toHaveBeenCalledWith('chat.abort', { runId: 'run-1', sessionKey: 'main' });
     });
 
-    it('does nothing when runId is null', () => {
-      useChatStore.setState({ runId: null });
+    it('sends session-level abort and clears orphan state when runId is null', () => {
+      // When runId is null (orphan streaming state), abort sends session-level RPC
+      // and immediately clears streaming state. Matches OC: chat.ts:250-253
+      useChatStore.setState({ runId: null, streaming: true, streamText: 'orphan' });
+      mockGatewayClient.request.mockResolvedValueOnce({});
 
       useChatStore.getState().abort();
 
-      expect(mockGatewayClient.request).not.toHaveBeenCalled();
+      expect(mockGatewayClient.request).toHaveBeenCalledWith('chat.abort', { sessionKey: 'main' });
+      expect(useChatStore.getState().streaming).toBe(false);
+      expect(useChatStore.getState().streamText).toBeNull();
     });
 
     it('skips RPC when disconnected but still schedules timeout', () => {

@@ -133,21 +133,52 @@ describe('PaperCard edge cases', () => {
     expect(screen.queryByText('card.paper.tags')).not.toBeInTheDocument();
   });
 
-  it('handles null-ish gateway client gracefully on Add to Library', () => {
-    // Re-mock gateway with null client
-    vi.mocked(mockRequest).mockClear();
+  it('disables Add to Library for papers without verifiable identifiers', () => {
+    // Papers without doi, arxiv_id, or url should have disabled Add to Library
+    // to prevent LLM-hallucinated content from entering the library
     const paper: PaperCardType = {
       type: 'paper_card',
-      title: 'No Client Paper',
+      title: 'No Identifier Paper',
       authors: ['Author'],
     };
     render(<PaperCard {...paper} />);
     const addBtn = screen.getByText('card.paper.addToLibrary');
-    // Should not throw when clicked
-    fireEvent.click(addBtn);
-    // The mock was registered but the handler has a null guard
-    // mockRequest should still be called since our mock provides a non-null client
-    expect(mockRequest).toHaveBeenCalled();
+    expect(addBtn.closest('button')).toBeDisabled();
+  });
+
+  it('enables Add to Library when paper has a DOI', () => {
+    vi.mocked(mockRequest).mockClear();
+    const paper: PaperCardType = {
+      type: 'paper_card',
+      title: 'With DOI Paper',
+      authors: ['Author'],
+      doi: '10.1234/test',
+    };
+    render(<PaperCard {...paper} />);
+    const addBtn = screen.getByText('card.paper.addToLibrary');
+    expect(addBtn.closest('button')).not.toBeDisabled();
+  });
+
+  it('enables Add to Library when paper has arxiv_id only', () => {
+    const paper: PaperCardType = {
+      type: 'paper_card',
+      title: 'ArXiv Paper',
+      authors: ['Author'],
+      arxiv_id: '2301.00001',
+    };
+    render(<PaperCard {...paper} />);
+    expect(screen.getByText('card.paper.addToLibrary').closest('button')).not.toBeDisabled();
+  });
+
+  it('enables Add to Library when paper has url only', () => {
+    const paper: PaperCardType = {
+      type: 'paper_card',
+      title: 'URL Paper',
+      authors: ['Author'],
+      url: 'https://example.com/paper.pdf',
+    };
+    render(<PaperCard {...paper} />);
+    expect(screen.getByText('card.paper.addToLibrary').closest('button')).not.toBeDisabled();
   });
 
   it('generates bibtex with special characters in title', () => {

@@ -23,7 +23,35 @@ fi
 
 # Always point OpenClaw to the project config.
 # Without this, it reads ~/.openclaw/openclaw.json which has no RC settings.
-export OPENCLAW_CONFIG_PATH=./config/openclaw.json
+export OPENCLAW_CONFIG_PATH="$(pwd)/config/openclaw.json"
+
+# --- Resolve relative paths in config to absolute ---
+# OpenClaw's agent runner calls process.chdir(workspace/) during runs (attempt.ts:774).
+# config.get re-reads config from disk and validates paths relative to CWD.
+# If CWD has drifted, relative paths like ./extensions/... resolve wrong → valid:false
+# → security gate wipes config → dashboard can't boot.
+# Fix: resolve all RC-specific relative paths to absolute at startup (CWD is correct here).
+node -e "
+const fs = require('fs'), path = require('path');
+const f = process.env.OPENCLAW_CONFIG_PATH;
+const cfg = JSON.parse(fs.readFileSync(f, 'utf8'));
+const root = process.cwd();
+const abs = p => path.isAbsolute(p) ? p : path.resolve(root, p);
+let changed = false;
+if (cfg.plugins?.load?.paths?.some(p => !path.isAbsolute(p))) {
+  cfg.plugins.load.paths = cfg.plugins.load.paths.map(abs); changed = true;
+}
+if (cfg.skills?.load?.extraDirs?.some(p => !path.isAbsolute(p))) {
+  cfg.skills.load.extraDirs = cfg.skills.load.extraDirs.map(abs); changed = true;
+}
+if (cfg.gateway?.controlUi?.root && !path.isAbsolute(cfg.gateway.controlUi.root)) {
+  cfg.gateway.controlUi.root = abs(cfg.gateway.controlUi.root); changed = true;
+}
+if (cfg.agents?.defaults?.workspace && !path.isAbsolute(cfg.agents.defaults.workspace)) {
+  cfg.agents.defaults.workspace = abs(cfg.agents.defaults.workspace); changed = true;
+}
+if (changed) { fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n'); console.log('[run] Config paths resolved to absolute'); }
+"
 
 # --- Detect the correct Node for the gateway ---
 # Priority: conda openclaw env (has matching ABI for better-sqlite3) → system node

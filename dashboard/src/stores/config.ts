@@ -127,8 +127,12 @@ export const useConfigStore = create<ConfigState>()((set, get) => {
           hash?: string | null;
         }>('config.get', {});
         // Gateway returns `hash` (not `baseHash`). We store it as `baseHash` for our interface.
-        // Use `resolved` (merged config) if available, fall back to `config`.
-        const configObj = (snapshot.resolved ?? snapshot.config ?? {}) as Record<string, unknown>;
+        // Prefer `config` (fully processed with runtime defaults: agents, models, etc.)
+        // over `resolved` (raw after include/env — empty `{}` when config file doesn't exist).
+        // The `??` operator doesn't help here because `resolved` can be `{}` (truthy but empty).
+        const resolved = snapshot.resolved as Record<string, unknown> | undefined;
+        const hasResolved = resolved && Object.keys(resolved).length > 0;
+        const configObj = (hasResolved ? resolved : snapshot.config ?? {}) as Record<string, unknown>;
         const gc: GatewayConfig = {
           agents: configObj.agents as GatewayConfig['agents'],
           models: configObj.models as GatewayConfig['models'],

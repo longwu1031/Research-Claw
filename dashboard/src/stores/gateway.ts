@@ -35,13 +35,23 @@ export const useGatewayStore = create<GatewayState>()((set, get) => ({
       url,
       token,
       clientName: 'research-claw-dashboard',
-      clientVersion: '0.4.2',
+      clientVersion: '0.4.3',
       platform: 'browser',
       onStateChange: (state: ConnectionState) => {
         set({ state, ...(state === 'connected' ? { connectError: null } : {}) });
       },
       onHello: (hello: HelloOk) => {
         get().setServerInfo(hello);
+        // Reset orphaned chat streaming state from before disconnect/refresh.
+        // Any in-flight run's final event was lost during the disconnect window.
+        // Matches OC: app-gateway.ts:218-221
+        void import('./chat').then(({ useChatStore }) => {
+          useChatStore.setState({
+            streaming: false,
+            streamText: null,
+            runId: null,
+          });
+        });
         // Reset retry counter for fresh evaluation on (re)connection
         useConfigStore.setState({ _configRetryCount: 0 });
         // Auto-fetch config on every (re)connection

@@ -401,15 +401,28 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
   abort: () => {
     const client = useGatewayStore.getState().client;
-    const { runId } = get();
-    if (!runId) return;
+    const { runId, sessionKey } = get();
+
+    // Send abort RPC — with runId if available, session-level fallback if not.
+    // Matches OC abortChatRun (chat.ts:250-253):
+    //   runId ? { sessionKey, runId } : { sessionKey }
     if (client && client.isConnected) {
-      client.request('chat.abort', { runId, sessionKey: get().sessionKey }).catch((err) => {
+      const params = runId ? { runId, sessionKey } : { sessionKey };
+      client.request('chat.abort', params).catch((err) => {
         console.warn('[Chat] Abort failed:', err);
       });
     }
+
+    // If no runId, this is an orphan streaming state (e.g. after session switch
+    // or reconnect). Clean up immediately — no server event will come.
+    if (!runId) {
+      set({ streaming: false, streamText: null, runId: null });
+      return;
+    }
+
     // Safety: if server doesn't send 'aborted' event within 3s, force-clear streaming state.
     // Normal case: server responds → handleChatEvent clears state → runId is null → timeout is a no-op.
+    // OC also does NOT clear state optimistically — it waits for the server's 'aborted' event.
     const abortedRunId = runId;
     setTimeout(() => {
       if (get().runId === abortedRunId) {
@@ -486,8 +499,9 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
   handleChatEvent: (event: ChatStreamEvent) => {
     // Session isolation: drop events for non-active sessions.
-    // Matches OC: openclaw/ui/src/ui/controllers/chat.ts:266
-    if (event.sessionKey && event.sessionKey !== get().sessionKey) {
+    // Strict match with OC: openclaw/ui/src/ui/controllers/chat.ts:266
+    //   if (payload.sessionKey !== state.sessionKey) return null;
+    if (event.sessionKey !== get().sessionKey) {
       return;
     }
 
@@ -627,7 +641,21 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   setSessionKey: (key: string) => {
-    set({ sessionKey: key, messages: [], streamText: null, runId: null, tokensIn: 0, tokensOut: 0 });
+    // Clear all chat state for session switch.
+    // Matches OC resetChatStateForSessionSwitch: clears chatStream, chatStreamStartedAt,
+    // chatRunId, chatMessage, resets tool stream + scroll.
+    set({
+      sessionKey: key,
+      messages: [],
+      streaming: false,
+      streamText: null,
+      runId: null,
+      sending: false,
+      lastError: null,
+      tokensIn: 0,
+      tokensOut: 0,
+      _pendingGapReload: false,
+    });
   },
 
   clearError: () => {

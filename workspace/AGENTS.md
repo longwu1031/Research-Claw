@@ -324,6 +324,12 @@ valid JSON — the dashboard parser uses `JSON.parse()`.
 
 ### paper_card — Paper Reference
 
+**ONLY for real academic publications** — papers returned by `search_papers`,
+`search_arxiv`, `library_search`, `radar_scan`, or papers the user explicitly
+identifies by title/DOI. NEVER use paper_card to describe software features,
+tool capabilities, concepts, or any content that is not a verifiable scholarly
+work. When in doubt, use plain text.
+
 12 fields. Required: `type`, `title`, `authors` (string[]).
 Optional: `venue`, `year`, `doi`, `url`, `arxiv_id`, `abstract_preview`,
 `read_status`, `library_id`, `tags`.

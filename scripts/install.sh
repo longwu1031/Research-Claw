@@ -657,7 +657,30 @@ cd "$INSTALL_DIR"
 
 # Always use project config — contains RC plugin paths, tool whitelist, dashboard root.
 # install.sh already created config/openclaw.json from template at step [6/8].
-export OPENCLAW_CONFIG_PATH=./config/openclaw.json
+export OPENCLAW_CONFIG_PATH="$(pwd)/config/openclaw.json"
+
+# Resolve relative paths in config to absolute (prevents CWD drift during agent runs).
+"$GW_NODE" -e "
+const fs = require('fs'), path = require('path');
+const f = process.env.OPENCLAW_CONFIG_PATH;
+const cfg = JSON.parse(fs.readFileSync(f, 'utf8'));
+const root = process.cwd();
+const abs = p => path.isAbsolute(p) ? p : path.resolve(root, p);
+let changed = false;
+if (cfg.plugins?.load?.paths?.some(p => !path.isAbsolute(p))) {
+  cfg.plugins.load.paths = cfg.plugins.load.paths.map(abs); changed = true;
+}
+if (cfg.skills?.load?.extraDirs?.some(p => !path.isAbsolute(p))) {
+  cfg.skills.load.extraDirs = cfg.skills.load.extraDirs.map(abs); changed = true;
+}
+if (cfg.gateway?.controlUi?.root && !path.isAbsolute(cfg.gateway.controlUi.root)) {
+  cfg.gateway.controlUi.root = abs(cfg.gateway.controlUi.root); changed = true;
+}
+if (cfg.agents?.defaults?.workspace && !path.isAbsolute(cfg.agents.defaults.workspace)) {
+  cfg.agents.defaults.workspace = abs(cfg.agents.defaults.workspace); changed = true;
+}
+if (changed) fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
+"
 
 # Token auth — matches Dashboard's DEFAULT_TOKEN ('research-claw').
 # Using --auth token instead of --auth none: some environments with pre-existing

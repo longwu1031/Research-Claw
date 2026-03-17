@@ -184,8 +184,12 @@ export default function ChatView() {
             />
           )}
 
-          {/* Sending indicator */}
-          {sending && (
+          {/* Sending / waiting-for-first-delta indicator.
+            * Covers: (1) RPC in flight (sending), (2) RPC resolved but first delta
+            * hasn't arrived yet (streaming=true, streamText=null).
+            * OC uses chatStream="" (empty string, truthy) at send time so its streaming
+            * bubble shows immediately. We bridge the gap with this extended condition. */}
+          {(sending || (streaming && !streamText)) && (
             <div style={{ padding: '8px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Spin size="small" />
               <Text type="secondary" style={{ fontSize: 13 }}>

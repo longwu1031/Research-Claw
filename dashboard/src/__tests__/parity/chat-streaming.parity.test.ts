@@ -353,6 +353,15 @@ describe('Chat streaming parity with OpenClaw native UI', () => {
       useChatStore.getState().handleChatEvent(DELTA_FIRST); // sessionKey: 'main'
       expect(useChatStore.getState().streamText).toBe('Hello');
     });
+
+    it('drops events with undefined sessionKey (strict !== like OC)', () => {
+      // OC: payload.sessionKey !== state.sessionKey → undefined !== 'main' → true → drop
+      useChatStore.setState({ sessionKey: 'main', runId: null });
+
+      const eventNoKey = { ...DELTA_FIRST, sessionKey: undefined as unknown as string };
+      useChatStore.getState().handleChatEvent(eventNoKey);
+      expect(useChatStore.getState().streamText).toBeNull();
+    });
   });
 
   describe('Full streaming sequence (realistic)', () => {
