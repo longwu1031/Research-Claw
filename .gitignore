@@ -34,6 +34,9 @@ Thumbs.db
 # Claude Code worktrees
 .claude/worktrees/
 
+# Claude Code local settings
+.claude/settings.local.json
+
 # IDE
 .idea/
 .vscode/
