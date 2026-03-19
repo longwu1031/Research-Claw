@@ -80,6 +80,7 @@ export default function DockerFileModal({
       open={open}
       onCancel={onClose}
       title={titleNode}
+      zIndex={1100}
       footer={
         <Button type="primary" icon={<DownloadOutlined />} onClick={handleDownload}>
           {t(mode === 'file' ? 'docker.downloadFile' : 'docker.downloadFolder')}
