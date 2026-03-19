@@ -60,6 +60,12 @@ RUN echo '{}' > /tmp/oc-install.json && \
     plugins install @wentorai/research-plugins && \
     rm /tmp/oc-install.json
 
+# Save baked plugin version for entrypoint to sync on upgrade.
+# Must run AFTER plugins install and BEFORE /defaults/ copy block.
+RUN mkdir -p /defaults && \
+    node -e "process.stdout.write(require('/root/.openclaw/extensions/research-plugins/package.json').version)" \
+    > /defaults/rp-version.txt 2>/dev/null || echo "unknown" > /defaults/rp-version.txt
+
 # 烘焙配置模板 + 系统提示词到 /defaults/，entrypoint 会同步到 volume
 RUN mkdir -p /defaults/bootstrap-prompts && \
     cp config/openclaw.example.json /defaults/openclaw.example.json && \
@@ -72,6 +78,11 @@ RUN mkdir -p /defaults/bootstrap-prompts && \
     cp workspace/USER.md.example /defaults/bootstrap-prompts/ws-USER.md.example
 
 # ── 运行时 ───────────────────────────────────────────────────────────
+# CLI wrapper: 让 `openclaw` 命令在容器内直接可用
+# (openclaw 是 local dependency，不在 PATH；用户 docker exec 时需要)
+RUN printf '#!/bin/sh\nexec node /app/node_modules/openclaw/dist/entry.js "$@"\n' > /usr/local/bin/openclaw \
+    && chmod +x /usr/local/bin/openclaw
+
 COPY scripts/docker-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

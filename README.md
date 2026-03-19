@@ -314,7 +314,7 @@ docker compose up -d --build
 > docker stop research-claw && docker rm research-claw
 > docker run -d --name research-claw -p 127.0.0.1:28789:28789 \
 >   -e OPENCLAW_GATEWAY_TOKEN=your-token \
->   -v rc-config:/app/config -v rc-data:/app/.research-claw -v rc-workspace:/app/workspace \
+>   -v rc-config:/app/config -v rc-data:/app/.research-claw -v rc-workspace:/app/workspace -v rc-state:/root/.openclaw \
 >   ghcr.io/wentorai/research-claw:latest
 > ```
 >

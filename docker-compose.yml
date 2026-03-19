@@ -17,10 +17,15 @@ services:
       # 运行时代理（如果你的 LLM API 需要代理，取消注释下面两行）
       # - HTTP_PROXY=http://host.docker.internal:7890
       # - HTTPS_PROXY=http://host.docker.internal:7890
+    # ── Volumes (CRITICAL: all 4 required for data persistence) ──────
+    # The docker-install script does `docker rm` on every update.
+    # Any path NOT on a named volume is DESTROYED on container recreation.
+    # v0.5.2 bug: rc-state was missing → chat history lost on every update.
     volumes:
-      - rc-config:/app/config            # API key + gateway config
-      - rc-data:/app/.research-claw      # SQLite database
-      - rc-workspace:/app/workspace      # User workspace files
+      - rc-config:/app/config            # API key, gateway config, .config-version
+      - rc-data:/app/.research-claw      # RC plugin SQLite (library, tasks, monitors)
+      - rc-workspace:/app/workspace      # Agent workspace (MEMORY.md, USER.md, files)
+      - rc-state:/root/.openclaw         # OC state: sessions (chat history!), logs, plugins, credentials
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://127.0.0.1:28789/healthz || exit 1"]
@@ -29,7 +34,17 @@ services:
       retries: 3
       start_period: 20s
 
+# ── Volume names MUST match docker-install.sh / docker-install.ps1 ──────
+# Without explicit `name:`, Compose prefixes with project name
+# (e.g. "research-claw_rc-config") which creates ISOLATED volumes
+# from the bare "rc-config" used by docker-install scripts.
+# This caused silent data loss when switching between compose and scripts.
 volumes:
   rc-config:
+    name: rc-config
   rc-data:
+    name: rc-data
   rc-workspace:
+    name: rc-workspace
+  rc-state:
+    name: rc-state

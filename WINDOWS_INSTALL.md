@@ -27,7 +27,7 @@
 
 ```powershell
 docker pull ghcr.io/wentorai/research-claw:latest
-docker run -d --name research-claw -p 127.0.0.1:28789:28789 -v rc-config:/app/config -v rc-data:/app/.research-claw -v rc-workspace:/app/workspace ghcr.io/wentorai/research-claw:latest
+docker run -d --name research-claw -p 127.0.0.1:28789:28789 -v rc-config:/app/config -v rc-data:/app/.research-claw -v rc-workspace:/app/workspace -v rc-state:/root/.openclaw ghcr.io/wentorai/research-claw:latest
 ```
 
 > 大陆用户如果拉取超时，需要在 Docker Desktop → Settings → Resources → Proxies 中配置代理，或使用方式 B。
