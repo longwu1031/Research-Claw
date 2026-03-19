@@ -422,94 +422,113 @@ if [ ! -f config/openclaw.json ]; then
     cp config/openclaw.example.json config/openclaw.json
     ok "Config created from template"
   fi
+fi
 
-  # --- Migrate user settings from existing global OpenClaw config ---
-  # Existing OC users have model/channel/proxy in ~/.openclaw/openclaw.json.
-  # RC uses its own project config via OPENCLAW_CONFIG_PATH, so those settings
-  # would be lost without this one-time migration.
-  #
-  # Safety design:
-  #   - Whitelist-only: only known-safe fields are migrated
-  #   - Backup: global config is never modified (read-only)
-  #   - Schema guard: migrated channels get commands.native=false (529 cmd limit)
-  #   - Validation: result is JSON-parsed back to catch corruption
-  #   - Failure-safe: any error → keep template as-is (2>/dev/null || true)
-  node -e "
-    const fs = require('fs'), path = require('path');
-    const globalPath = path.join(process.env.HOME || '', '.openclaw', 'openclaw.json');
-    const projectPath = 'config/openclaw.json';
-    if (!fs.existsSync(globalPath)) process.exit(0);
+# --- Migrate user settings from existing global OpenClaw config ---
+# Runs on BOTH first install AND upgrade (catches v0.5.1–v0.5.3 users
+# who already have a project config but lost their global settings).
+#
+# Heuristic: only migrates if project config has NO model configured
+# but global config DOES. This prevents overwriting user's intentional
+# changes while catching the "template without settings" case.
+#
+# Safety design:
+#   - Whitelist-only: only known-safe fields are migrated
+#   - Heuristic guard: only when project has no model but global does
+#   - Backup: global config is never modified (read-only)
+#   - Schema guard: migrated channels get commands.native=false (529 cmd limit)
+#   - Validation: result is JSON-parsed back to catch corruption
+#   - Failure-safe: any error → keep config as-is (2>/dev/null || true)
+node -e "
+  const fs = require('fs'), path = require('path');
+  const globalPath = path.join(process.env.HOME || '', '.openclaw', 'openclaw.json');
+  const projectPath = 'config/openclaw.json';
+  if (!fs.existsSync(globalPath) || !fs.existsSync(projectPath)) process.exit(0);
 
-    let g, p;
-    try { g = JSON.parse(fs.readFileSync(globalPath, 'utf8')); } catch { process.exit(0); }
-    try { p = JSON.parse(fs.readFileSync(projectPath, 'utf8')); } catch { process.exit(0); }
+  let g, p;
+  try { g = JSON.parse(fs.readFileSync(globalPath, 'utf8')); } catch { process.exit(0); }
+  try { p = JSON.parse(fs.readFileSync(projectPath, 'utf8')); } catch { process.exit(0); }
 
-    let migrated = false;
+  // Heuristic: project config already has a model → user configured it, skip
+  const pModel = p.agents?.defaults?.model;
+  const hasProjectModel = pModel && (typeof pModel === 'string' ? pModel.trim() : pModel.primary?.trim());
+  if (hasProjectModel) process.exit(0);
 
-    // 1. models.providers — API keys, baseUrl, model definitions
-    if (g.models?.providers && Object.keys(g.models.providers).length > 0) {
-      if (!p.models) p.models = {};
-      p.models.providers = g.models.providers;
-      migrated = true;
+  // Global config has no model either → nothing to migrate
+  const gModel = g.agents?.defaults?.model;
+  const hasGlobalModel = gModel && (typeof gModel === 'string' ? gModel.trim() : gModel.primary?.trim());
+  const hasGlobalProviders = g.models?.providers && Object.keys(g.models.providers).length > 0;
+  const hasGlobalChannels = g.channels && Object.keys(g.channels).length > 0;
+  const hasGlobalProxy = g.env && (g.env.HTTP_PROXY || g.env.HTTPS_PROXY);
+  if (!hasGlobalModel && !hasGlobalProviders && !hasGlobalChannels && !hasGlobalProxy) process.exit(0);
+
+  let migrated = false;
+
+  // 1. models.providers — API keys, baseUrl, model definitions
+  if (hasGlobalProviders) {
+    if (!p.models) p.models = {};
+    p.models.providers = g.models.providers;
+    migrated = true;
+  }
+
+  // 2. agents.defaults.model + imageModel — current selected models
+  const gDefaults = g.agents?.defaults;
+  if (hasGlobalModel) {
+    if (!p.agents) p.agents = {};
+    if (!p.agents.defaults) p.agents.defaults = {};
+    p.agents.defaults.model = gDefaults.model;
+    if (gDefaults.imageModel) p.agents.defaults.imageModel = gDefaults.imageModel;
+    migrated = true;
+  }
+
+  // 3. channels — feishu, telegram, etc. (with safety fix)
+  if (hasGlobalChannels) {
+    // Start from global channels, overlay any RC-template channel settings
+    const merged = { ...g.channels };
+    if (p.channels) {
+      for (const [k, v] of Object.entries(p.channels)) merged[k] = v;
     }
-
-    // 2. agents.defaults.model + imageModel — current selected models
-    const gDefaults = g.agents?.defaults;
-    if (gDefaults?.model) {
-      if (!p.agents) p.agents = {};
-      if (!p.agents.defaults) p.agents.defaults = {};
-      p.agents.defaults.model = gDefaults.model;
-      if (gDefaults.imageModel) p.agents.defaults.imageModel = gDefaults.imageModel;
-      migrated = true;
+    // Safety: force commands.native=false on ALL channels
+    // RC registers 529 commands, exceeding every IM platform's menu limit.
+    // Without this, Telegram enters BOT_COMMANDS_TOO_MUCH retry loop (15+ min block).
+    for (const [name, ch] of Object.entries(merged)) {
+      if (name === 'defaults' || typeof ch !== 'object' || ch === null) continue;
+      if (!ch.commands) ch.commands = {};
+      ch.commands.native = false;
     }
+    p.channels = merged;
+    migrated = true;
+  }
 
-    // 3. channels — feishu, telegram, etc. (with safety fix)
-    if (g.channels && Object.keys(g.channels).length > 0) {
-      // Start from global channels, overlay any RC-template channel settings
-      const merged = { ...g.channels };
-      if (p.channels) {
-        for (const [k, v] of Object.entries(p.channels)) merged[k] = v;
-      }
-      // Safety: force commands.native=false on ALL channels
-      // RC registers 529 commands, exceeding every IM platform's menu limit.
-      // Without this, Telegram enters BOT_COMMANDS_TOO_MUCH retry loop (15+ min block).
-      for (const [name, ch] of Object.entries(merged)) {
-        if (name === 'defaults' || typeof ch !== 'object' || ch === null) continue;
-        if (!ch.commands) ch.commands = {};
-        ch.commands.native = false;
-      }
-      p.channels = merged;
-      migrated = true;
+  // 4. env — HTTP_PROXY, HTTPS_PROXY, custom vars
+  if (hasGlobalProxy || (g.env?.vars && Object.keys(g.env.vars).length > 0)) {
+    if (!p.env) p.env = {};
+    if (g.env.HTTP_PROXY) p.env.HTTP_PROXY = g.env.HTTP_PROXY;
+    if (g.env.HTTPS_PROXY) p.env.HTTPS_PROXY = g.env.HTTPS_PROXY;
+    if (g.env.vars && Object.keys(g.env.vars).length > 0) {
+      p.env.vars = { ...(p.env.vars || {}), ...g.env.vars };
     }
+    migrated = true;
+  }
 
-    // 4. env — HTTP_PROXY, HTTPS_PROXY, custom vars
-    if (g.env && (g.env.HTTP_PROXY || g.env.HTTPS_PROXY || g.env.vars)) {
-      if (!p.env) p.env = {};
-      if (g.env.HTTP_PROXY) p.env.HTTP_PROXY = g.env.HTTP_PROXY;
-      if (g.env.HTTPS_PROXY) p.env.HTTPS_PROXY = g.env.HTTPS_PROXY;
-      if (g.env.vars && Object.keys(g.env.vars).length > 0) {
-        p.env.vars = { ...(p.env.vars || {}), ...g.env.vars };
-      }
-      migrated = true;
-    }
+  if (!migrated) process.exit(0);
 
-    if (!migrated) process.exit(0);
+  // Validation: re-parse to catch any corruption before writing
+  const output = JSON.stringify(p, null, 2) + '\n';
+  try { JSON.parse(output); } catch { process.exit(1); }
 
-    // Validation: re-parse to catch any corruption before writing
-    const output = JSON.stringify(p, null, 2) + '\n';
-    try { JSON.parse(output); } catch { process.exit(1); }
+  fs.writeFileSync(projectPath, output);
 
-    fs.writeFileSync(projectPath, output);
+  // Report what was migrated
+  const parts = [];
+  if (hasGlobalProviders) parts.push('models');
+  if (hasGlobalModel) parts.push('model');
+  if (hasGlobalChannels) parts.push('channels');
+  if (hasGlobalProxy) parts.push('proxy');
+  console.log('  [config] Migrated from global: ' + parts.join(', '));
+" 2>/dev/null || true
 
-    // Report what was migrated
-    const parts = [];
-    if (g.models?.providers) parts.push('models');
-    if (gDefaults?.model) parts.push('model');
-    if (g.channels) parts.push('channels');
-    if (g.env?.HTTP_PROXY || g.env?.HTTPS_PROXY) parts.push('proxy');
-    console.log('  [config] Migrated from global: ' + parts.join(', '));
-  " 2>/dev/null || true
-else
+if [ -f config/openclaw.json ]; then
   # Clean stale references from older config versions (preserves user's API keys/model)
   # Cleans BOTH project config AND global config
   node -e "

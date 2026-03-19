@@ -39,6 +39,70 @@ elif [ "$CURRENT_VERSION" != "$IMAGE_VERSION" ]; then
   echo "[research-claw] Upgraded to v$IMAGE_VERSION (config preserved)"
 fi
 
+# --- Migrate user settings from existing global OpenClaw config ---
+# Docker mounts rc-state:/root/.openclaw which may contain a global
+# openclaw.json from a previous vanilla OC Docker deployment.
+# Same heuristic as native install.sh: only migrates if project config
+# has NO model configured but global config DOES.
+GLOBAL_CONFIG=/root/.openclaw/openclaw.json
+if [ -f "$GLOBAL_CONFIG" ] && [ -f "$CONFIG_FILE" ]; then
+  node -e "
+    const fs = require('fs');
+    const globalPath = '$GLOBAL_CONFIG';
+    const projectPath = '$CONFIG_FILE';
+    let g, p;
+    try { g = JSON.parse(fs.readFileSync(globalPath, 'utf8')); } catch { process.exit(0); }
+    try { p = JSON.parse(fs.readFileSync(projectPath, 'utf8')); } catch { process.exit(0); }
+
+    const pModel = p.agents?.defaults?.model;
+    const hasProjectModel = pModel && (typeof pModel === 'string' ? pModel.trim() : pModel.primary?.trim());
+    if (hasProjectModel) process.exit(0);
+
+    const gModel = g.agents?.defaults?.model;
+    const hasGlobalModel = gModel && (typeof gModel === 'string' ? gModel.trim() : gModel.primary?.trim());
+    const hasGlobalProviders = g.models?.providers && Object.keys(g.models.providers).length > 0;
+    const hasGlobalChannels = g.channels && Object.keys(g.channels).length > 0;
+    const hasGlobalProxy = g.env && (g.env.HTTP_PROXY || g.env.HTTPS_PROXY);
+    if (!hasGlobalModel && !hasGlobalProviders && !hasGlobalChannels && !hasGlobalProxy) process.exit(0);
+
+    let migrated = false;
+    if (hasGlobalProviders) { if (!p.models) p.models = {}; p.models.providers = g.models.providers; migrated = true; }
+    const gDefaults = g.agents?.defaults;
+    if (hasGlobalModel) {
+      if (!p.agents) p.agents = {}; if (!p.agents.defaults) p.agents.defaults = {};
+      p.agents.defaults.model = gDefaults.model;
+      if (gDefaults.imageModel) p.agents.defaults.imageModel = gDefaults.imageModel;
+      migrated = true;
+    }
+    if (hasGlobalChannels) {
+      const merged = { ...g.channels };
+      if (p.channels) { for (const [k, v] of Object.entries(p.channels)) merged[k] = v; }
+      for (const [name, ch] of Object.entries(merged)) {
+        if (name === 'defaults' || typeof ch !== 'object' || ch === null) continue;
+        if (!ch.commands) ch.commands = {}; ch.commands.native = false;
+      }
+      p.channels = merged; migrated = true;
+    }
+    if (hasGlobalProxy || (g.env?.vars && Object.keys(g.env.vars).length > 0)) {
+      if (!p.env) p.env = {};
+      if (g.env.HTTP_PROXY) p.env.HTTP_PROXY = g.env.HTTP_PROXY;
+      if (g.env.HTTPS_PROXY) p.env.HTTPS_PROXY = g.env.HTTPS_PROXY;
+      if (g.env.vars && Object.keys(g.env.vars).length > 0) p.env.vars = { ...(p.env.vars || {}), ...g.env.vars };
+      migrated = true;
+    }
+    if (!migrated) process.exit(0);
+    const output = JSON.stringify(p, null, 2) + '\n';
+    try { JSON.parse(output); } catch { process.exit(1); }
+    fs.writeFileSync(projectPath, output);
+    const parts = [];
+    if (hasGlobalProviders) parts.push('models');
+    if (hasGlobalModel) parts.push('model');
+    if (hasGlobalChannels) parts.push('channels');
+    if (hasGlobalProxy) parts.push('proxy');
+    console.log('[research-claw] Migrated from global: ' + parts.join(', '));
+  " 2>/dev/null || true
+fi
+
 # --- Docker-specific config overrides ---
 # The config template is designed for native (loopback) use. Docker requires:
 #   - bind: "lan" (container must be reachable from host via port mapping)
@@ -112,6 +176,20 @@ node -e "
   }
   if (changed) fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
 " 2>/dev/null || true
+
+# --- Sync research-plugins from image → volume if version differs ---
+# rc-state volume persists /root/.openclaw/ across container recreation.
+# On image upgrade, the baked-in plugin version may be newer than the volume's.
+IMAGE_RP_VER=$(cat /defaults/rp-version.txt 2>/dev/null || true)
+VOL_RP_VER=$(node -e "console.log(require('/root/.openclaw/extensions/research-plugins/package.json').version)" 2>/dev/null || true)
+if [ -n "$IMAGE_RP_VER" ] && [ "$IMAGE_RP_VER" != "$VOL_RP_VER" ]; then
+  echo "[research-claw] Updating research-plugins: ${VOL_RP_VER:-none} → $IMAGE_RP_VER"
+  echo '{}' > /tmp/rp-update.json
+  OPENCLAW_CONFIG_PATH=/tmp/rp-update.json \
+    node /app/node_modules/openclaw/dist/entry.js \
+    plugins install @wentorai/research-plugins >/dev/null 2>&1 || true
+  rm -f /tmp/rp-update.json
+fi
 
 # --- Sync bootstrap prompt files from image → volume ---
 # L1 system prompts: always force-update from image (safe — no user data).
