@@ -66,6 +66,11 @@ fi
 echo "[run] Using Node: $GW_NODE ($("$GW_NODE" -v))"
 echo "[run] Config: $OPENCLAW_CONFIG_PATH"
 
+# Sync RC settings → ~/.openclaw/openclaw.json so `openclaw gateway --force` also works.
+# Direction: RC project config → global config (preserves user-only keys in global).
+# Also fixes channels.*.commands.native=false (529 cmd limit).
+"$GW_NODE" "$(dirname "$0")/sync-global-config.cjs" 2>/dev/null || true
+
 # --- Initialize L2/L3 bootstrap runtime files from .example templates ---
 # L1 (AGENTS, SOUL, TOOLS, IDENTITY, HEARTBEAT) are git-tracked and always up-to-date.
 # L2 (BOOTSTRAP.md) and L3 (USER.md, MEMORY.md) are gitignored — only copy if missing.
